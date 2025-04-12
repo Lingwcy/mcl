@@ -1,5 +1,7 @@
 @import "tailwindcss";
-
+@plugin "daisyui" {
+  themes: all;
+}
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -18,6 +20,8 @@
     --foreground: #ededed;
   }
 }
+
+
 
 body {
   background: var(--background);
