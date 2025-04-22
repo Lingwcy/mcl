@@ -1,4 +1,4 @@
-> **⚠️ 注意：** 本项目目前处于最初的UI制作阶段，还没有实现任何实际业务功能。界面展示仅为设计预览。
+> **⚠️ 注意：** 本项目目前处于初期制作阶段，任何功能不稳定且不可用。
 
 # 🐱 Meow Craft Launcher
 
@@ -11,16 +11,10 @@
   ![License](https://img.shields.io/badge/license-MIT-green)
 </div>
 
-## ✨ 特色功能
 
 Meow Craft Launcher (MCL) 是一款基于 Tauri 开发的现代化 Minecraft 启动器，专注于提供流畅、高效且美观的游戏启动体验。
 
-- 🎮 **多版本支持** - 轻松管理不同版本的 Minecraft
-- 🧩 **模组加载器集成** - 原生支持 Fabric、Forge 等多种模组加载器
-- 🔄 **实例管理** - 创建、编辑和管理您的游戏实例
-- 👤 **账户系统** - 支持 Microsoft 账户和离线模式
-- 🌙 **多主题切换** - 多种精美主题，满足不同用户的审美需求
-- ⚡ **高性能** - 基于 Tauri 构建，轻量级且启动迅速
+
 
 ## 🖼️ 界面预览
 
@@ -48,34 +42,6 @@ Meow Craft Launcher (MCL) 是一款基于 Tauri 开发的现代化 Minecraft 启
 - **UI**: TailwindCSS + DaisyUI
 - **语言**: TypeScript, Rust
 
-## 🚀 安装与使用
-
-### 从源码构建
-
-1. 克隆仓库
-```bash
-git clone https://github.com/your-username/mcl.git
-cd mcl
-```
-
-2. 安装依赖
-```bash
-npm install
-```
-
-3. 开发模式运行
-```bash
-npm run tauri dev
-```
-
-4. 构建发布版本
-```bash
-npm run tauri build
-```
-
-## 📜 开源协议
-
-本项目采用 [MIT 许可证](LICENSE)。
 
 ## 🙏 鸣谢
 
@@ -83,3 +49,28 @@ npm run tauri build
 - [Mojang](https://www.minecraft.net/) - 感谢创造了 Minecraft 这款伟大的游戏
 - [NextJS](https://nextjs.org/) - 提供现代化的 React 框架
 - [PCL2](https://github.com/Hex-Dragon/PCL2) - 从 Plain Craft LauncherL 启动器 得到 UI 设计思路
+- [TRMCL](https://github.com/teaching-rust-minecraft-client-launcher) - rust minecraft launcher untils support
+
+
+
+## 📜 MIT License
+
+Copyright (c) 2024 Enaium
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
