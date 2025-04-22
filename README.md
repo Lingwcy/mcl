@@ -22,19 +22,19 @@ Meow Craft Launcher (MCL) 是一款基于 Tauri 开发的现代化 Minecraft 启
 
 在这里管理您的账户和选择游戏实例，一键启动 Minecraft。
 
-![启动中心](public/image/main.png)
+![启动中心](src-next/public/image/main.png)
 
 ### 实例管理
 
 轻松管理多个 Minecraft 服务器和客户端实例。
 
-![实例管理](public/image/entity.png)
+![实例管理](src-next/public/image/entity.png)
 
 ### 关于页面
 
 关于 Meow Craft Launcher 的详细信息。
 
-![关于](public/image/about.png)
+![关于](src-next/public/image/about.png)
 
 ## 💻 技术栈
 
@@ -55,7 +55,7 @@ Meow Craft Launcher (MCL) 是一款基于 Tauri 开发的现代化 Minecraft 启
 
 ## 📜 MIT License
 
-Copyright (c) 2024 Enaium
+Copyright (c) 2025 LING
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
