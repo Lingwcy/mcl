@@ -29,6 +29,7 @@ tauri-plugin-http = "2"
 
 model = { path = "src/model" }
 parse = { path = "src/parse" }
+path = { path = "src/path"}
 download = { path = "src/download" }
 clap = { version = "4.5" }
 zip = { version = "2.1" }

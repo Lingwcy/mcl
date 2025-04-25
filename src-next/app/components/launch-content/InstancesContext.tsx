@@ -1,5 +1,10 @@
 import { useState } from 'react';
 import { FiFolder, FiSettings } from "react-icons/fi";
+import { useContext } from 'react';
+import { PathContext } from 'app/context/PathContext';
+import { MdOutlineSelectAll } from "react-icons/md";
+import SelectGame from '../other/SelectGame';
+
 
 interface MinecraftInstance {
     id: string;
@@ -19,19 +24,33 @@ interface FolderItem {
 }
 
 export default function InstanceContext({ folderId = 'default' }: InstanceContextProps) {
-    // Available folders
+    const {
+        roots,
+    } = useContext(PathContext);
+    const [isOpen, setIsOpen] = useState(false);
+    const OpenSelectGame = () => setIsOpen(true);
+    
+    if (roots?.length == 0) {
+        return (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold mb-2">你还没有选择任何Minecraft游戏文件夹</h2>
+                <button className='btn btn-soft w-50' onClick={OpenSelectGame}>
+                    <MdOutlineSelectAll />
+                    选择游戏
+                </button>
+              </div>
+              <SelectGame isOpen={isOpen} setIsOpen={setIsOpen} />
+            </div>
+          );
+    }
     const folders: FolderItem[] = [
-        { id: 'default', name: '默认文件夹' },
+        { id: 'default', name: '/home/ling/桌面/mc' },
         { id: 'modded', name: '官方文件夹' },
         { id: 'server', name: 'MiaoClient' },
     ];
-
-    // State to track currently selected folder
     const [selectedFolder, setSelectedFolder] = useState(folderId);
-    // State to control file management modal
     const [isModalOpen, setIsModalOpen] = useState(false);
-
-    // Generate instances with folder assignments
     const [instances] = useState<MinecraftInstance[]>(() => {
         const loaders = ['Fabric'] as const;
         const versions = ['1.20.1', '1.19.4', '1.18.2', '1.21.5', '1.16.5'];
@@ -70,6 +89,7 @@ export default function InstanceContext({ folderId = 'default' }: InstanceContex
                         </a>
                     </li>
                 </ul>
+
             </div>
 
     

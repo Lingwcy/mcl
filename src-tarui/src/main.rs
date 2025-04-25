@@ -39,6 +39,10 @@ fn get_default_game_directory() -> String {
 }
 
 #[command]
+fn a_test() -> String{
+    "hello".to_string()
+}
+#[command]
 fn search_versions(version_filter: Option<String>, version_type: String) -> Vec<MinecraftVersion> {
     let versions = get_version_manifest().versions;
 
@@ -191,7 +195,8 @@ fn main() {
             download_version,
             launch_game,
             get_default_game_directory,
-            get_installed_versions
+            get_installed_versions,
+            a_test
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

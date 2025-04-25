@@ -2854,6 +2854,7 @@ dependencies = [
  "download",
  "model",
  "parse",
+ "path",
  "serde",
  "serde_json",
  "tauri",
@@ -3356,6 +3357,10 @@ dependencies = [
  "model",
  "serde_json",
 ]
+
+[[package]]
+name = "path"
+version = "0.1.0"
 
 [[package]]
 name = "pathdiff"
