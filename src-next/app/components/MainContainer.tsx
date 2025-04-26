@@ -33,14 +33,14 @@ export default function MainContainer() {
     };
 
 
-    const shouldApplyBlur = activeTab !== 'launchs'
+    const shouldApplyBlur = activeTab !== 'launch'
     
     return (
         <div className="flex-1 overflow-hidden relative">
             <div 
                 className="absolute inset-0 z-0"
                 style={{
-                    backgroundImage: `url('/background/bg2.png')`,
+                    backgroundImage: `url('/background/bg1.png')`,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
                     opacity: 1, 
