@@ -3,12 +3,16 @@
     windows_subsystem = "windows"
 )]
 use std::path::Path;
+use std::sync::Mutex;
+use std::sync::Arc;
+use std::sync::Once;
 
 use download::{get, Download, LibaryAllowed};
 use model::version::Version;
-use parse::{version, Parse};
+use parse::Parse;
 use tauri::command;
 use serde::{Serialize, Deserialize};
+use path::MinecraftPath;  
 
 #[derive(Serialize, Deserialize)]
 struct MinecraftVersion {
@@ -19,7 +23,6 @@ struct MinecraftVersion {
     release_time: String,
 }
 
-// Convert to frontend-friendly format
 impl From<model::version_manifest::Version> for MinecraftVersion {
     fn from(value: model::version_manifest::Version) -> Self {
         Self {
@@ -42,6 +45,7 @@ fn get_default_game_directory() -> String {
 fn a_test() -> String{
     "hello".to_string()
 }
+
 #[command]
 fn search_versions(version_filter: Option<String>, version_type: String) -> Vec<MinecraftVersion> {
     let versions = get_version_manifest().versions;
@@ -179,6 +183,182 @@ fn get_installed_versions(game_dir: String) -> Vec<String> {
     }
 }
 
+// Maintain multiple Minecraft paths
+static INIT: Once = Once::new();
+static mut MINECRAFT_PATHS: Option<Arc<Mutex<Vec<MinecraftPath>>>> = None;
+
+// Function to initialize and add a new MinecraftPath instance to the collection
+fn initialize_minecraft_path(root_path: &str) -> Result<String, String> {
+    unsafe {
+        // First time initialization
+        if MINECRAFT_PATHS.is_none() {
+            INIT.call_once(|| {
+                let initial_paths = vec![MinecraftPath::new(root_path)];
+                MINECRAFT_PATHS = Some(Arc::new(Mutex::new(initial_paths)));
+            });
+        } 
+        // Add to existing collection
+        else if let Some(instance) = &MINECRAFT_PATHS {
+            if let Ok(mut guard) = instance.lock() {
+                // Check if path already exists to avoid duplicates
+                if !guard.iter().any(|path| path.get_path().to_str() == Some(root_path)) {
+                    guard.push(MinecraftPath::new(root_path));
+                }
+            } else {
+                return Err("Failed to acquire lock on MinecraftPaths".to_string());
+            }
+        }
+    }
+    
+    Ok("添加新的游戏路径成功".to_string())
+}
+
+// Function to initialize a MinecraftPath with a custom name
+fn initialize_minecraft_path_with_name(root_path: &str, name: &str) -> Result<String, String> {
+    unsafe {
+        // First time initialization
+        if MINECRAFT_PATHS.is_none() {
+            INIT.call_once(|| {
+                let initial_paths = vec![MinecraftPath::new_with_name(root_path, name)];
+                MINECRAFT_PATHS = Some(Arc::new(Mutex::new(initial_paths)));
+            });
+        } 
+        // Add to existing collection
+        else if let Some(instance) = &MINECRAFT_PATHS {
+            if let Ok(mut guard) = instance.lock() {
+                // Check if path already exists to avoid duplicates
+                if !guard.iter().any(|path| path.get_path().to_str() == Some(root_path)) {
+                    guard.push(MinecraftPath::new_with_name(root_path, name));
+                }
+            } else {
+                return Err("Failed to acquire lock on MinecraftPaths".to_string());
+            }
+        }
+    }
+    
+    Ok("添加新的游戏路径成功".to_string())
+}
+
+// Function to get a reference to the initialized MinecraftPaths collection
+fn get_minecraft_paths() -> Result<Arc<Mutex<Vec<MinecraftPath>>>, String> {
+    unsafe {
+        if let Some(instance) = &MINECRAFT_PATHS {
+            Ok(instance.clone())
+        } else {
+            Err("MinecraftPaths has not been initialized yet".to_string())
+        }
+    }
+}
+
+#[command]
+fn initialize_game_path(root_path: String) -> Result<String, String> {
+    initialize_minecraft_path(&root_path)
+}
+
+#[command]
+fn initialize_game_path_with_name(root_path: String, name: String) -> Result<String, String> {
+    initialize_minecraft_path_with_name(&root_path, &name)
+}
+
+#[command]
+fn get_minecraft_path_info() -> Result<Vec<String>, String> {
+    let instance = get_minecraft_paths()?;
+    let paths = instance.lock().map_err(|_| "Failed to acquire lock on MinecraftPaths".to_string())?;
+    
+    if paths.is_empty() {
+        return Err("No Minecraft paths have been initialized".to_string());
+    }
+    
+    Ok(paths.iter().map(|p| p.get_path().to_string_lossy().to_string()).collect())
+}
+
+#[derive(Serialize)]
+struct RootPathInfo {
+    path: String,
+    display_name: String,
+}
+
+#[derive(Serialize)]
+struct VersionInfo {
+    name: String,
+    path: String,
+    mod_count: usize,
+}
+
+#[derive(Serialize)]
+struct ModInfo {
+    name: String,
+    path: String,
+    location: String,
+}
+
+#[command]
+fn get_all_minecraft_paths() -> Result<Vec<RootPathInfo>, String> {
+    let instance = get_minecraft_paths()?;
+    let paths = instance.lock().map_err(|_| "Failed to acquire lock on MinecraftPaths".to_string())?;
+    
+    Ok(paths.iter().map(|p| RootPathInfo {
+        path: p.get_path().to_string_lossy().to_string(),
+        display_name: p.get_display_name().to_string(),
+    }).collect())
+}
+
+#[command]
+fn get_minecraft_versions_for_path(path: String) -> Result<Vec<VersionInfo>, String> {
+    let instance = get_minecraft_paths()?;
+    let paths = instance.lock().map_err(|_| "Failed to acquire lock on MinecraftPaths".to_string())?;
+    
+    // Find the specified path
+    if let Some(mc_path) = paths.iter().find(|p| p.get_path().to_string_lossy() == path) {
+        match mc_path.get_versions() {
+            Ok(versions) => Ok(versions.iter().map(|v| VersionInfo {
+                name: v.name.clone(),
+                path: v.root.to_string_lossy().to_string(),
+                mod_count: v.mods.len(),
+            }).collect()),
+            Err(e) => Err(e.to_string()),
+        }
+    } else {
+        Err("Specified Minecraft path not found".to_string())
+    }
+}
+
+#[command]
+fn get_minecraft_mods_for_version(root_path: String, version_name: String) -> Result<Vec<ModInfo>, String> {
+    let instance = get_minecraft_paths()?;
+    let paths = instance.lock().map_err(|_| "Failed to acquire lock on MinecraftPaths".to_string())?;
+    
+    // Find the specified path
+    if let Some(mc_path) = paths.iter().find(|p| p.get_path().to_string_lossy() == root_path) {
+        match mc_path.get_version_mods(&version_name) {
+            Ok(mods) => Ok(mods.iter().map(|m| ModInfo {
+                name: m.name.clone(),
+                path: m.path.clone(),
+                location: m.location.clone(),
+            }).collect()),
+            Err(e) => Err(e.to_string()),
+        }
+    } else {
+        Err("Specified Minecraft path not found".to_string())
+    }
+}
+
+#[command]
+fn get_minecraft_screenshots() -> Result<Vec<String>, String> {
+    let instance = get_minecraft_paths()?;
+    let mut paths = instance.lock().map_err(|_| "Failed to acquire lock on MinecraftPaths".to_string())?;
+    
+    if paths.is_empty() {
+        return Err("No Minecraft paths have been initialized".to_string());
+    }
+    
+    // For now, just return screenshots from the first path
+    match paths[0].get_sceenshots() {
+        Ok((_, screenshots)) => Ok(screenshots),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -196,7 +376,20 @@ fn main() {
             launch_game,
             get_default_game_directory,
             get_installed_versions,
-            a_test
+            a_test,
+            // Updated MinecraftPath commands
+            initialize_game_path,
+            initialize_game_path_with_name,
+            get_minecraft_path_info,
+            get_minecraft_screenshots,
+            // Remove the undefined functions
+            // get_minecraft_versions,
+            // get_minecraft_all_mods,
+            // get_minecraft_root_mods,
+            // get_minecraft_version_mods,
+            get_all_minecraft_paths,
+            get_minecraft_versions_for_path,
+            get_minecraft_mods_for_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

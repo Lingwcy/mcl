@@ -1,3 +1,4 @@
+"use client";
 import React from 'react';
 import { IoClose, IoRemove } from "react-icons/io5";
 import { IoIosRocket } from "react-icons/io";
@@ -5,15 +6,15 @@ import { FaDownload } from "react-icons/fa6";
 import { RiSettings6Fill } from "react-icons/ri";
 import { TbAppsFilled } from "react-icons/tb";
 import ThemeSwitcher from './theme-switcher';
+import { useUI } from '../context/UIContext';
 // 导入 Tauri 窗口 API
 import { Window } from '@tauri-apps/api/window';
 const appWindow = new Window('main');
-interface TopNavBarProps {
-  activeTab: string | null;
-  onNavClick: (tab: string) => void;
-}
 
-export default function TopNavBar({ activeTab, onNavClick }: TopNavBarProps) {
+export default function TopNavBar() {
+    const { uiState, setActiveTab } = useUI();
+    const { activeTab } = uiState;
+    
     // 处理最小化窗口
     const handleMinimize = async () => {
         await appWindow.minimize();
@@ -33,28 +34,28 @@ export default function TopNavBar({ activeTab, onNavClick }: TopNavBarProps) {
                 <ul className="menu menu-horizontal px-1 text-base-content">
                     <button 
                         className={`btn btn-xs mx-1 rounded-full ${activeTab === 'launch' ? '' : 'btn-ghost'}`}
-                        onClick={() => onNavClick('launch')}
+                        onClick={() => setActiveTab('launch')}
                     >
                         <IoIosRocket className="text-xs" />
                         <span className="text-xs">启动</span>
                     </button>
                     <button 
                         className={`btn btn-xs mx-1 rounded-full ${activeTab === 'download' ? '' : 'btn-ghost'}`}
-                        onClick={() => onNavClick('download')}
+                        onClick={() => setActiveTab('download')}
                     >
                         <FaDownload className="text-xs" />
                         <span className="text-xs">下载</span>
                     </button>
                     <button 
                         className={`btn btn-xs mx-1 rounded-full ${activeTab === 'settings' ? '' : 'btn-ghost'}`}
-                        onClick={() => onNavClick('settings')}
+                        onClick={() => setActiveTab('settings')}
                     >
                         <RiSettings6Fill className="text-xs" />
                         <span className="text-xs">设置</span>
                     </button>
                     <button 
                         className={`btn btn-xs mx-1 rounded-full ${activeTab === 'more' ? '' : 'btn-ghost'}`}
-                        onClick={() => onNavClick('more')}
+                        onClick={() => setActiveTab('more')}
                     >
                         <TbAppsFilled className="text-xs" />
                         <span className="text-xs">更多</span>

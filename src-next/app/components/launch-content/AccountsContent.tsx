@@ -1,3 +1,4 @@
+"use client";
 import { useState } from 'react';
 import { IoCloudOffline } from "react-icons/io5";
 import { MdSwitchLeft, MdSwitchRight } from "react-icons/md";
@@ -37,7 +38,7 @@ export default function AccountContext() {
   return (
     <div className="flex flex-col h-full items-end justify-end">
       <div className="w-50 flex flex-col">
-        <div className="flex flex-col w-full h-30 bg-base-300 text-base-content p-2 justify-center items-center opacity-95 shadow-md">
+        <div className="flex flex-col w-full h-30 bg-base-200 text-base-content p-2 justify-center items-center opacity-95 shadow-md">
           <div className="w-14 h-14 mb-1 rounded-sm overflow-hidden flex-shrink-0 mt-3">
             <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-500"></div>
           </div>
@@ -65,8 +66,8 @@ export default function AccountContext() {
                   <div className="flex flex-col items-center">
                     {microsoftName ? (
                       <span className="text-xs">{microsoftName}</span>
-                    ):(
-                      <div className="flex items-center justify-center w-full">
+                    ):(<
+                      div className="flex items-center justify-center w-full">
                         <button className="btn btn-bl btn-xs w-20 h-5 min-h-0 px-2" onClick={() => setIsOffline(true)}>登录</button>
                       </div>
                     )}

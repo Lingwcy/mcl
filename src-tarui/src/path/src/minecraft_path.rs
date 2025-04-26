@@ -1,24 +1,30 @@
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
+use serde::{Serialize, Deserialize};
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct MinecraftPath {
     root: PathBuf,
     data_path: Option<DataPath>,
+    display_name: String, 
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DataPath {
     pub screenshots: Vec<String>,
     pub version: Vec<VersionPath>,
     pub mods: Vec<ModPath>,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct VersionPath {
     pub root: PathBuf,
     pub name: String,
     pub mods: Vec<ModPath>,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ModPath {
     pub path: String,
     pub name: String,
@@ -35,6 +41,10 @@ impl MinecraftPath {
                 version: Vec::new(),
                 mods: Vec::new(), 
             }),
+            display_name: path.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("Minecraft")
+                .to_string(),
         };
 
         if let Some(data_path) = &mut minecraft_path.data_path {
@@ -44,6 +54,38 @@ impl MinecraftPath {
         }
 
         minecraft_path
+    }
+
+    // New method to create with a custom display name
+    pub fn new_with_name(root_path: &str, name: &str) -> Self {
+        let path = PathBuf::from(root_path);
+        let mut minecraft_path = MinecraftPath {
+            root: path.clone(),
+            data_path: Some(DataPath {
+                screenshots: Vec::new(),
+                version: Vec::new(),
+                mods: Vec::new(), 
+            }),
+            display_name: name.to_string(),
+        };
+
+        if let Some(data_path) = &mut minecraft_path.data_path {
+            data_path.screenshots = Self::init_screenshots(&path);
+            data_path.mods = Self::init_root_mods(&path);
+            data_path.version = Self::init_versions(&path);
+        }
+
+        minecraft_path
+    }
+
+    // Getter for display name
+    pub fn get_display_name(&self) -> &str {
+        &self.display_name
+    }
+
+    // Setter for display name
+    pub fn set_display_name(&mut self, name: String) {
+        self.display_name = name;
     }
 
     // 初始化截图
@@ -222,6 +264,12 @@ impl MinecraftPath {
     // 获取特定版本的mods
     pub fn get_version_mods(&self, version_name: &str) -> Result<&Vec<ModPath>, &'static str> {
         if let Some(data_path) = &self.data_path {
+            // Special case for "global" - return root mods
+            if version_name == "global" {
+                return Ok(&data_path.mods);
+            }
+            
+            // Normal case - look for specific version
             for version in &data_path.version {
                 if version.name == version_name {
                     return Ok(&version.mods);

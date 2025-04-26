@@ -1,5 +1,5 @@
 "use client"
-import { createContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { PathApi, ModPath, VersionPath, RootPath } from "../rust-api/PathApi";
 
 interface PathContextType {
@@ -38,23 +38,43 @@ export const PathProvider = ({ children }: PathProviderProps) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshPaths = async () => {
+  // Use useCallback to avoid recreation of this function on each render
+  const refreshPaths = useCallback(async () => {
+    console.log("Refreshing paths...");
     setLoading(true);
     setError(null);
     try {
       const paths = await PathApi.getMinecraftPaths();
+      console.log("Fetched paths:", paths);
       setRoots(paths);
-      if (paths.length > 0 && !selectedRoot) {
+      
+      // If there's a selected root, check if it still exists in the updated paths
+      if (selectedRoot) {
+        const stillExists = paths.some(p => p.path === selectedRoot.path);
+        if (!stillExists && paths.length > 0) {
+          // If selected root no longer exists but we have other paths, select the first one
+          await selectRoot(paths[0]);
+        } else if (stillExists) {
+          // If it still exists, refresh its data
+          const updatedRoot = paths.find(p => p.path === selectedRoot.path);
+          if (updatedRoot) {
+            await selectRoot(updatedRoot);
+          }
+        }
+      } else if (paths.length > 0) {
+        // If no root was selected before but we have paths now, select the first one
         await selectRoot(paths[0]);
       }
     } catch (err) {
+      console.error("Failed to refresh paths:", err);
       setError(`Failed to load Minecraft paths: ${err}`);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedRoot]);
 
   const selectRoot = async (rootPath: RootPath) => {
+    console.log("Selecting root:", rootPath);
     setSelectedRoot(rootPath);
     setLoading(true);
     try {
@@ -62,9 +82,12 @@ export const PathProvider = ({ children }: PathProviderProps) => {
         PathApi.getVersions(rootPath.path),
         PathApi.getRootMods(rootPath.path)
       ]);
+      console.log("Fetched versions:", versionsData);
+      console.log("Fetched mods:", modsData);
       setVersions(versionsData);
       setRootMods(modsData);
     } catch (err) {
+      console.error("Failed to select root:", err);
       setError(`Failed to load data for ${rootPath.path}: ${err}`);
     } finally {
       setLoading(false);
@@ -81,6 +104,7 @@ export const PathProvider = ({ children }: PathProviderProps) => {
     }
   };
 
+  // Initial load on component mount
   useEffect(() => {
     refreshPaths();
   }, []);

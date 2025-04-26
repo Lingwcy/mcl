@@ -1,15 +1,16 @@
+"use client";
 import React, { useState } from 'react';
-
-interface DownloadContentProps {
-  activeItem: string | null;
-}
+import { useUI } from '../../context/UIContext';
 
 interface CollapseState {
   pureMinecraft: boolean;
   latestVersions: boolean;
 }
 
-export default function DownloadContent({ activeItem }: DownloadContentProps) {
+export default function DownloadContent() {
+  const { uiState } = useUI();
+  const activeItem = uiState.activeItems.download;
+  
   const [collapseState, setCollapseState] = useState<CollapseState>({
     pureMinecraft: true,
     latestVersions: true

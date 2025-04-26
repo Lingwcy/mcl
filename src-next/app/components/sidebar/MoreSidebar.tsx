@@ -1,21 +1,20 @@
+"use client";
 import React, { useEffect } from 'react';
-import { FiPackage } from 'react-icons/fi';
-import { VscOutput } from 'react-icons/vsc';
-import { HiOutlineCode } from 'react-icons/hi';
-import { FaRegHandshake } from 'react-icons/fa';
 
+import { FaRegHandshake } from 'react-icons/fa';
+import { useUI } from '../../context/UIContext';
+import { AiOutlineInfoCircle } from 'react-icons/ai';
 interface MoreSidebarProps {
-  onItemSelect: (item: string) => void;
-  activeItem: string | null;
   setSideBar: (width: string) => void;
 }
 
-export default function MoreSidebar({ onItemSelect, activeItem, setSideBar }: MoreSidebarProps) {
+export default function MoreSidebar({ setSideBar }: MoreSidebarProps) {
+  const { uiState, setActiveItem } = useUI();
+  const activeItem = uiState.activeItems.more;
+
   const menuItems = [
-    { id: 'plugins', name: '插件中心', icon: <FiPackage className="mr-2" /> },
-    { id: 'logs', name: '日志', icon: <VscOutput className="mr-2" /> },
-    { id: 'debug', name: '调试工具', icon: <HiOutlineCode className="mr-2" /> },
-    { id: 'credits', name: '鸣谢', icon: <FaRegHandshake className="mr-2" /> }
+    { id: 'credits', name: '鸣谢', icon: <FaRegHandshake className="mr-2" /> },
+    { id: 'about', name: '关于', icon: <AiOutlineInfoCircle className="mr-2" /> },
   ];
 
   useEffect(() => {
@@ -33,7 +32,7 @@ export default function MoreSidebar({ onItemSelect, activeItem, setSideBar }: Mo
                   ? 'active bg-opacity-20 text-primary font-medium border-primary' 
                   : 'border-transparent'
               }`}
-              onClick={() => onItemSelect(item.id)}
+              onClick={() => setActiveItem('more', item.id)}
             >
               <span className="flex items-center">
                 {item.icon}

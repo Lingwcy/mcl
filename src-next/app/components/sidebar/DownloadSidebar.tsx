@@ -1,9 +1,10 @@
-import React from 'react';
-import {FaCubes } from 'react-icons/fa';
+"use client";
+import React, { useEffect } from 'react';
+import { FaCubes } from 'react-icons/fa';
 import { HiCube } from "react-icons/hi";
+import { useUI } from '../../context/UIContext';
+
 interface DownloadSidebarProps {
-  onItemSelect: (item: string) => void;
-  activeItem: string | null;
   setSideBar: (width: string) => void;
 }
 
@@ -14,10 +15,12 @@ interface MenuItem {
   children?: MenuItem[];
 }
 
-export default function DownloadSidebar({ onItemSelect, activeItem, setSideBar }: DownloadSidebarProps) {
+export default function DownloadSidebar({ setSideBar }: DownloadSidebarProps) {
+  const { uiState, setActiveItem } = useUI();
+  const activeItem = uiState.activeItems.download;
   
   const menuItems: MenuItem[] = [
-    { id: 'minecraft', name: 'Minecraft', icon: <HiCube  className="mr-3" /> },
+    { id: 'minecraft', name: 'Minecraft', icon: <HiCube className="mr-3" /> },
     { 
       id: 'community-resources', 
       name: '社区资源',
@@ -29,7 +32,10 @@ export default function DownloadSidebar({ onItemSelect, activeItem, setSideBar }
     },
   ];
 
-  setSideBar("w-36");
+  useEffect(() => {
+    setSideBar("w-36");
+  }, []);
+  
   return (
     <div className="h-full w-full">
       <ul className="menu bg-base-200 h-full w-full text-base-content">
@@ -50,7 +56,7 @@ export default function DownloadSidebar({ onItemSelect, activeItem, setSideBar }
                             ? 'active bg-opacity-20 text-primary font-medium border-primary' 
                             : 'border-transparent'
                         }`}
-                        onClick={() => onItemSelect(child.id)}
+                        onClick={() => setActiveItem('download', child.id)}
                       >
                         {child.name}
                       </a>
@@ -65,7 +71,7 @@ export default function DownloadSidebar({ onItemSelect, activeItem, setSideBar }
                     ? 'active bg-opacity-20 text-primary font-medium border-primary' 
                     : 'border-transparent'
                 }`}
-                onClick={() => onItemSelect(item.id)}
+                onClick={() => setActiveItem('download', item.id)}
               >
                 <span className="flex items-center">
                   {item.icon} 

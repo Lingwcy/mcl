@@ -4,7 +4,7 @@ import AccountContext from '../launch-content/AccountsContent';
 import InstanceContext from '../launch-content/InstancesContent';  
 import { useUI } from '../../context/UIContext';
 
-export default function LaunchContent() {
+export default function InstanceContent() {
   const { uiState } = useUI();
   const { activeItems } = uiState;
   const activeItem = activeItems.launch;
@@ -39,7 +39,6 @@ export default function LaunchContent() {
   return (
     <div className="h-full">
       {renderContent()}
-      
     </div>
   );
 }

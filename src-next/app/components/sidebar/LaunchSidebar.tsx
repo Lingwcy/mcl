@@ -1,7 +1,9 @@
+"use client";
 import React, { useEffect } from 'react';
 import { VscDebugStart } from "react-icons/vsc";
 import { FiPackage } from "react-icons/fi";
 import { RiChatHistoryLine } from "react-icons/ri";
+import { useUI } from '../../context/UIContext';
 
 interface MenuItem {
   id: string;
@@ -9,26 +11,27 @@ interface MenuItem {
   icon: React.ReactElement;
   children?: MenuItem[];
 }
-  const menuItems: MenuItem[] = [
-    { id: 'accounts', name: '开始', icon: <VscDebugStart  className="mr-2" /> },
-    { id: 'instances', name: '实例', icon: <FiPackage className="mr-2" /> },
-    { id: 'history', name: '历史', icon: <RiChatHistoryLine  className="mr-2" /> }
-  ];
+
+const menuItems: MenuItem[] = [
+  { id: 'accounts', name: '开始', icon: <VscDebugStart className="mr-2" /> },
+  { id: 'instances', name: '实例', icon: <FiPackage className="mr-2" /> },
+];
 
 interface LaunchSidebarProps {
-  onItemSelect: (id: string) => void;
-  activeItem: string | null;
   setSideBar: (width: string) => void;
 }
 
-export default function LaunchSidebar({ onItemSelect, activeItem, setSideBar }: LaunchSidebarProps) {
+export default function LaunchSidebar({ setSideBar }: LaunchSidebarProps) {
+  const { uiState, setActiveItem } = useUI();
+  const activeItem = uiState.activeItems.launch;
+  
   useEffect(() => {
     setSideBar("w-28");
   }, []); 
   
   const handleItemClick = (id: string) => {
     if (id !== activeItem) {
-      onItemSelect(id);
+      setActiveItem('launch', id);
     }
   };
   
