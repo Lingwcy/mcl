@@ -18,7 +18,7 @@ export default function MoreSidebar({ setSideBar }: MoreSidebarProps) {
   ];
 
   useEffect(() => {
-    setSideBar("w-36");
+    setSideBar("w-28");
   }, []);
 
   return (

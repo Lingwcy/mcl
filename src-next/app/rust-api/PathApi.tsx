@@ -40,6 +40,13 @@ export class PathApi {
     });
   }
 
+  static async getAllMods(rootPath: string, versionName: string): Promise<ModPath[]> {
+    return invoke<ModPath[]>("get_minecraft_all_available_mods", { 
+      rootPath: rootPath, 
+      versionName: versionName 
+    });
+  }
+
   static async addMinecraftPath(rootPath: string): Promise<string> {
     return invoke("initialize_game_path", { rootPath: rootPath });
   }

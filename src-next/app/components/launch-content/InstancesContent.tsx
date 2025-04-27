@@ -20,10 +20,11 @@ export default function InstanceContext({}: InstanceContextProps) {
         loading,
         error,
         selectRoot,
+        selectVersion,
         refreshPaths
     } = useContext(PathContext);
     
-    const { uiState } = useUI();
+    const { uiState,setActiveTab } = useUI();
     
     const [isOpen, setIsOpen] = useState(false);
     const [selectedFolder, setSelectedFolder] = useState<string | undefined>(undefined);
@@ -35,6 +36,9 @@ export default function InstanceContext({}: InstanceContextProps) {
     const [textVisible, setTextVisible] = useState(!isSidebarMinimized);
     const [isContentTransitioning, setIsContentTransitioning] = useState(false);
     const [contentOpacity, setContentOpacity] = useState(1);
+
+
+    
     
     // Use a ref to track if we've already initialized
     const initializedRef = useRef(false);
@@ -93,7 +97,7 @@ export default function InstanceContext({}: InstanceContextProps) {
     };
     
     const handleManageMods = (versionName: string) => {
-        setSelectedVersion(versionName);
+        selectVersion(versionName);
         setSelectedVersionName(versionName);
         setIsModsModalOpen(true);
     };
@@ -202,11 +206,11 @@ export default function InstanceContext({}: InstanceContextProps) {
             </div>
             
             <div 
-                className="flex-1 overflow-y-auto grid grid-cols-1 bg-base-300 transition-opacity duration-300 ease-in-out"
+                className="flex-1 bg-base-300 transition-opacity duration-300 ease-in-out"
                 style={{ opacity: contentOpacity }}
             >
                 {versions && versions.length > 0 ? versions.map((version) => (
-                    <div key={version.name} className="card pl-2 card-side bg-base-300 shadow-sm min-h-[70px] rounded-none">
+                    <div key={version.name} className=" card pl-2 card-side bg-base-300 shadow-sm min-h-[70px] rounded-none">
                         <figure className="p-2 w-14 flex-shrink-0">
                             <img
                                 src="/bands/fabric.png"
@@ -221,8 +225,12 @@ export default function InstanceContext({}: InstanceContextProps) {
                             <div className="flex items-center">
                                 <button 
                                     className="btn btn-circle btn-ghost btn-sm"
-                                    onClick={() => handleManageMods(version.name)}
+                                    onClick={() => {
+                                        setActiveTab("instanceDetail");
+                                        selectVersion(version.name);
+                                    }}
                                 >
+                            
                                     <FiSettings className="text-base-content" />
                                 </button>
                             </div>
@@ -247,7 +255,6 @@ export default function InstanceContext({}: InstanceContextProps) {
                     isOpen={isModsModalOpen}
                     onClose={() => setIsModsModalOpen(false)}
                     rootPath={selectedFolder}
-                    versionName={selectedVersion}
                     versionDisplayName={selectedVersionName || undefined}
                 />
             )}

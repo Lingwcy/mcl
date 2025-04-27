@@ -1,13 +1,13 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { PathApi, ModPath } from 'app/rust-api/PathApi';
 import { FaFolderOpen, FaFileArchive } from 'react-icons/fa';
+import { PathContext } from 'app/context/PathContext';
 
 interface ModsManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
   rootPath: string;
-  versionName: string;
   versionDisplayName?: string;
 }
 
@@ -15,16 +15,16 @@ export default function ModsManagementModal({
   isOpen,
   onClose,
   rootPath,
-  versionName,
   versionDisplayName
 }: ModsManagementModalProps) {
+  const { selectedVersion: versionName } = useContext(PathContext);
   const [mods, setMods] = useState<ModPath[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchMods = async () => {
-      if (!isOpen) return;
+      if (!isOpen || !versionName) return;
       
       setLoading(true);
       setError(null);
@@ -48,7 +48,7 @@ export default function ModsManagementModal({
     fetchMods();
   }, [isOpen, rootPath, versionName]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !versionName) return null;
 
   const title = versionName === "global" 
     ? "通用模组" 

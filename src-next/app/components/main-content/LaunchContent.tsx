@@ -9,16 +9,6 @@ export default function LaunchContent() {
   const { activeItems } = uiState;
   const activeItem = activeItems.launch;
 
-  if (!activeItem) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl font-bold mb-2">启动中心</h2>
-          <p>请在侧边栏选择具体功能</p>
-        </div>
-      </div>
-    );
-  }
 
   const renderContent = () => {
     switch (activeItem) {
@@ -26,20 +16,14 @@ export default function LaunchContent() {
         return <AccountContext />;
       case 'instances':
         return <InstanceContext />;
-      case 'history':
-        return (
-          <div>
-          </div>
-        );
       default:
-        return null;
+        return <AccountContext />;
     }
   };
 
   return (
     <div className="h-full">
       {renderContent()}
-      
     </div>
   );
 }

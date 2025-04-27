@@ -344,6 +344,26 @@ fn get_minecraft_mods_for_version(root_path: String, version_name: String) -> Re
 }
 
 #[command]
+fn get_minecraft_all_available_mods(root_path: String, version_name: String) -> Result<Vec<ModInfo>, String> {
+    let instance = get_minecraft_paths()?;
+    let paths = instance.lock().map_err(|_| "Failed to acquire lock on MinecraftPaths".to_string())?;
+    
+    // Find the specified path
+    if let Some(mc_path) = paths.iter().find(|p| p.get_path().to_string_lossy() == root_path) {
+        match mc_path.get_all_available_mods(&version_name) {
+            Ok(mods) => Ok(mods.iter().map(|m| ModInfo {
+                name: m.name.clone(),
+                path: m.path.clone(),
+                location: m.location.clone(),
+            }).collect()),
+            Err(e) => Err(e.to_string()),
+        }
+    } else {
+        Err("Specified Minecraft path not found".to_string())
+    }
+}
+
+#[command]
 fn get_minecraft_screenshots() -> Result<Vec<String>, String> {
     let instance = get_minecraft_paths()?;
     let mut paths = instance.lock().map_err(|_| "Failed to acquire lock on MinecraftPaths".to_string())?;
@@ -390,6 +410,7 @@ fn main() {
             get_all_minecraft_paths,
             get_minecraft_versions_for_path,
             get_minecraft_mods_for_version,
+            get_minecraft_all_available_mods, // Add this line to register the new command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

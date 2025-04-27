@@ -45,7 +45,7 @@ export default function SettingsContent() {
           <DevLaunchContext />
         );
       default:
-        return null;
+        return <NormalContext />;
     }
   };
 

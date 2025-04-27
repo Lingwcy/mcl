@@ -35,6 +35,9 @@ export default function MoreContent() {
           <div className="flex flex-col items-center justify-center h-full">
             <h2 className="text-2xl font-bold mb-4">Meow Craft Launcher</h2>
             <p className="mb-2">v0.0.2</p>
+            <div className="badge badge-soft badge-primary">Primary</div>
+            <div className="badge badge-soft badge-secondary">Secondary</div>
+            <div className="badge badge-soft badge-accent">Accent</div>
             <p className="mb-4">精进现代化的 Minecraft 启动器</p>
             <div className="flex gap-2">
               <button className="btn bg-black text-white border-black">

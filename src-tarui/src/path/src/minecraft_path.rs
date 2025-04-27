@@ -229,23 +229,24 @@ impl MinecraftPath {
         }
     }
 
-    // 获取所有mods（包括根目录和版本特定的）
-    pub fn get_all_mods(&self) -> Result<Vec<&ModPath>, &'static str> {
+    // 获取特定版本的所有可用mods（包括根目录和版本特定的）
+    pub fn get_all_available_mods(&self, version_name: &str) -> Result<Vec<ModPath>, &'static str> {
         if let Some(data_path) = &self.data_path {
             let mut all_mods = Vec::new();
-
-            // 添加根目录mods
-            for mod_path in &data_path.mods {
-                all_mods.push(mod_path);
-            }
-
-            // 添加版本特定mods
-            for version in &data_path.version {
-                for mod_path in &version.mods {
-                    all_mods.push(mod_path);
+            
+            // Always add global mods
+            all_mods.extend(data_path.mods.clone());
+            
+            // For non-global versions, also add version-specific mods
+            if version_name != "global" {
+                for version in &data_path.version {
+                    if version.name == version_name {
+                        all_mods.extend(version.mods.clone());
+                        break;
+                    }
                 }
             }
-
+            
             Ok(all_mods)
         } else {
             Err("数据路径模块还没有被初始化")
