@@ -13,7 +13,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { id: 'instanceConifg', name: '实例信息', icon: <VscDebugStart className="mr-2" /> },
-  { id: 'modsConfig', name: 'mods配置', icon: <FiPackage className="mr-2" /> },
+  { id: 'modsConfig', name: '模组', icon: <FiPackage className="mr-2" /> },
 ];
 
 interface LaunchSidebarProps {
@@ -25,7 +25,7 @@ export default function InstanceDetailSidebar({ setSideBar }: LaunchSidebarProps
   const activeItem = uiState.activeItems.instanceDetail;
   
   useEffect(() => {
-    setSideBar("w-40");
+    setSideBar("w-32");
   }, []); 
   
   const handleItemClick = (id: string) => {
