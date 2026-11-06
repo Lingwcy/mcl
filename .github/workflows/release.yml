@@ -1,0 +1,171 @@
+name: Desktop release
+
+# Update mygo.json's version, then push the matching vX.Y.Z tag.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Validate release version
+    runs-on: ubuntu-24.04
+    outputs:
+      number: ${{ steps.version.outputs.number }}
+      revision: ${{ steps.version.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version=$(jq -er '.version | strings' mygo.json)
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::mygo.json version must have the form X.Y.Z."
+            exit 1
+          fi
+          if [[ "$REF_TYPE" == tag && "$REF_NAME" != "v$version" ]]; then
+            echo "::error::The release tag must match v$version."
+            exit 1
+          fi
+          {
+            echo "number=$version"
+            echo "revision=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+  package:
+    name: Package ${{ matrix.name }}
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS universal
+            runner: macos-15
+            platform: darwin/universal
+            directory: darwin-universal
+            installer: mcl-${{ needs.version.outputs.number }}.dmg
+          - name: Windows x64
+            runner: windows-2025
+            platform: windows/amd64
+            directory: windows-amd64
+            installer: mcl-setup-${{ needs.version.outputs.number }}-amd64.exe
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.revision }}
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build installer
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: go tool mygo build -platform "$PLATFORM" -o build/release -skip-notarize
+      - name: Verify macOS bundle
+        if: runner.os == 'macOS'
+        env:
+          INSTALLER: ${{ matrix.installer }}
+        run: |
+          bundle="build/release/darwin-universal/mcl.app"
+          arches=$(lipo -archs "$bundle/Contents/MacOS/mcl")
+          if [[ " $arches " != *" arm64 "* || " $arches " != *" x86_64 "* ]]; then
+            echo "::error::Expected arm64 and x86_64, found $arches."
+            exit 1
+          fi
+          codesign --verify --deep --strict "$bundle"
+          hdiutil verify "build/release/darwin-universal/$INSTALLER"
+      - name: Verify installer exists
+        shell: bash
+        env:
+          INSTALLER: ${{ matrix.installer }}
+          DIRECTORY: ${{ matrix.directory }}
+        run: test -s "build/release/$DIRECTORY/$INSTALLER"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mcl-${{ matrix.directory }}
+          path: build/release/${{ matrix.directory }}/${{ matrix.installer }}
+          if-no-files-found: error
+          overwrite: true
+
+  release:
+    name: Publish GitHub release
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [version, package]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: mcl-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish verified installers
+        working-directory: release-assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.version.outputs.number }}
+          RELEASE_REVISION: ${{ needs.version.outputs.revision }}
+        run: |
+          installers=("mcl-$RELEASE_VERSION.dmg" "mcl-setup-$RELEASE_VERSION-amd64.exe")
+          for installer in "${installers[@]}"; do
+            test -s "$installer"
+          done
+          sha256sum "${installers[@]}" > SHA256SUMS.txt
+
+          revision=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)
+          if [[ "$revision" != "$RELEASE_REVISION" ]]; then
+            echo "::error::The release tag no longer points to the packaged commit."
+            exit 1
+          fi
+          draft=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$RELEASE_TAG\") | .draft")
+          case "$draft" in
+            false)
+              echo "$RELEASE_TAG is already published."
+              exit 0
+              ;;
+            "")
+              gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes \
+                --title "mcl $RELEASE_TAG" \
+                --notes "macOS: universal DMG (Apple Silicon and Intel), ad-hoc signed and not notarized. Windows: unsigned x64 installer."
+              ;;
+            true) ;;
+            *)
+              echo "::error::Multiple releases found for $RELEASE_TAG."
+              exit 1
+              ;;
+          esac
+
+          files=("${installers[@]}" SHA256SUMS.txt)
+          gh release upload "$RELEASE_TAG" --clobber "${files[@]}"
+          uploaded=$(gh release view "$RELEASE_TAG" --json assets \
+            --jq '.assets[] | select(.state == "uploaded") | [.name, .digest] | @tsv')
+          for file in "${files[@]}"; do
+            digest=$(sha256sum "$file" | cut -d ' ' -f 1)
+            if ! grep -Fxq "$(printf '%s\tsha256:%s' "$file" "$digest")" <<< "$uploaded"; then
+              echo "::error::Uploaded asset checksum mismatch: $file"
+              exit 1
+            fi
+          done
+          gh release edit "$RELEASE_TAG" --draft=false

@@ -13,3 +13,14 @@ Requires Go 1.27.3 or later.
 ```sh
 go tool mygo dev
 ```
+
+## Releases
+
+Set `version` in `mygo.json`, commit the change, then push the matching tag.
+
+```sh
+git tag v0.1.0
+git push origin main v0.1.0
+```
+
+CI publishes a macOS universal DMG (Apple Silicon and Intel), a Windows x64 installer, and SHA-256 checksums. The macOS app uses ad-hoc signing. Windows installers are unsigned. Manually running **Desktop release** builds downloadable artifacts.
