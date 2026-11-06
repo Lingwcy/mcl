@@ -19,8 +19,8 @@ go tool mygo dev
 修改 `mygo.json` 中的 `version` 并提交，然后推送对应版本标签。
 
 ```sh
-git tag v0.1.0
-git push origin main v0.1.0
+git tag v0.0.1
+git push origin main v0.0.1
 ```
 
 CI 自动发布 macOS 通用 DMG（Apple Silicon 和 Intel）、Windows x64 安装包及 SHA-256 校验文件。macOS 应用采用临时签名，Windows 安装包尚未签名。手动运行 **Desktop release** 可生成供下载的构建产物。
