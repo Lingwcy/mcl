@@ -1,0 +1,87 @@
+# Reference checkouts and local toolchain
+.repo/
+.tools/
+
+# Private documentation, screenshots, and agent configuration
+docs/
+doc/
+/.agents/
+/.codex/
+*.md
+*.markdown
+*.mdx
+*.rst
+*.adoc
+
+# Public project pages
+!/README.md
+!/README.zh-CN.md
+
+# Earlier cover drafts
+/media/readme-hero.jpg
+/media/readme-hero-v2.jpg
+
+# Keep redistributed license and attribution notices.
+!LICENSE*.md
+!*-LICENSE.md
+!COPYING*.md
+!COPYRIGHT*.md
+!NOTICE*.md
+!THIRD_PARTY_NOTICES*.md
+
+# MyGo and Go build output
+.mygo/
+build/
+dist/
+/mcl
+/mcl.exe
+/grun
+/grun.exe
+*.test
+coverage.out
+
+# Local runtime data and credentials
+.env*
+.netrc
+.npmrc
+.ssh/
+.aws/
+secrets/
+credentials/
+keys/
+credentials.json
+secrets.json
+secrets.toml
+secrets.yaml
+secrets.yml
+client_secret*.json
+service-account*.json
+tokens.json
+accounts.json
+*.local.json
+*.local.toml
+*.local.yaml
+*.local.yml
+*.key
+*.pem
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.keychain
+*.keychain-db
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+data/
+.mcl/
+.grun/
+.minecraft/
+*.log
+
+# Editor and operating system files
+.DS_Store
+.idea/
+.vscode/
