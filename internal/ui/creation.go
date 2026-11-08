@@ -197,6 +197,7 @@ func (s *Shell) cacheInstanceIcons(values []instance.Instance) {
 	}
 	for _, value := range values {
 		if len(value.Icon) == 0 {
+			delete(l.icons, value.ID)
 			continue
 		}
 		if bitmap, err := ui.DecodeBitmap(value.Icon); err == nil {

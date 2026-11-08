@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"mcl/internal/app"
 	"mcl/internal/core/instance"
@@ -14,14 +13,14 @@ import (
 
 // LibraryActions starts work outside rendering. Completions run on the UI thread.
 type LibraryActions struct {
-	Load           func(bool, func(app.LibrarySnapshot, error))
-	Create         func(app.CreateInstance, func(instance.Instance, error))
-	CreateTask     func(app.CreateInstance, func(instance.Instance, error)) func()
-	Rename         func(string, string, func(instance.Instance, error))
-	SaveRuntime    func(string, app.Settings, func(instance.Instance, error))
-	LoaderReleases func(string, string, func([]loader.Release, error)) func()
-	PickIcon       func(func([]byte, error)) func()
-	PickArchive    func(app.Settings, func(app.ArchiveImportPlan, error)) func()
+	Load            func(bool, func(app.LibrarySnapshot, error))
+	Create          func(app.CreateInstance, func(instance.Instance, error))
+	CreateTask      func(app.CreateInstance, func(instance.Instance, error)) func()
+	LoadInstance    func(string, func(instance.Instance, error))
+	SavePreferences func(string, app.InstancePreferences, app.InstancePreferences, func(instance.Instance, error))
+	LoaderReleases  func(string, string, func([]loader.Release, error)) func()
+	PickIcon        func(func([]byte, error)) func()
+	PickArchive     func(app.Settings, func(app.ArchiveImportPlan, error)) func()
 }
 
 type libraryState struct {
@@ -36,12 +35,8 @@ type libraryState struct {
 	busy            bool
 	message         string
 	failed          bool
-	editing         string
-	editName        string
-	editJava        string
 	sidebarList     ui.ListState
 	versionList     ui.ListState
-	pickerList      ui.ListState
 	icons           map[string]*ui.Bitmap
 	cancelCreate    func()
 	cancelingCreate bool
@@ -121,44 +116,6 @@ func (s *Shell) pickVersion(id string) {
 	l.message, l.failed = "请选择列表中的正式版本", true
 }
 
-func (s *Shell) openInstanceSettings() {
-	value, ok := s.selectedInstance()
-	if !ok {
-		s.page = settingsPage
-		return
-	}
-	s.library.editing, s.library.editName = "", value.Name
-	s.library.editJava = value.JavaPath
-	s.page = instanceSettingsPage
-}
-
-func (s *Shell) saveInstanceRuntime() {
-	l := &s.library
-	value, ok := s.selectedInstance()
-	if !ok || l.busy || l.actions.SaveRuntime == nil {
-		return
-	}
-	settings := app.Settings{JavaPath: strings.TrimSpace(l.editJava), MaxMemoryMiB: value.MaxMemoryMiB}
-	if err := settings.Validate(); err != nil {
-		l.message, l.failed = err.Error(), true
-		return
-	}
-	l.busy, l.failed, l.message = true, false, ""
-	l.actions.SaveRuntime(value.ID, settings, func(updated instance.Instance, err error) {
-		l.busy = false
-		if err != nil {
-			l.message, l.failed = err.Error(), true
-			return
-		}
-		for index := range l.snapshot.Instances {
-			if l.snapshot.Instances[index].ID == updated.ID {
-				l.snapshot.Instances[index] = updated
-			}
-		}
-		l.message, l.failed = "实例运行设置已保存", false
-	})
-}
-
 func (s *Shell) createInstance() {
 	l := &s.library
 	if l.busy || (l.actions.Create == nil && l.actions.CreateTask == nil) {
@@ -202,26 +159,4 @@ func (s *Shell) createInstance() {
 	} else {
 		l.actions.Create(request, done)
 	}
-}
-
-func (s *Shell) renameInstance() {
-	l := &s.library
-	if l.busy || l.actions.Rename == nil || l.editing == "" {
-		return
-	}
-	id, name := l.editing, l.editName
-	l.busy, l.message, l.failed = true, "", false
-	l.actions.Rename(id, name, func(value instance.Instance, err error) {
-		l.busy = false
-		if err != nil {
-			l.message, l.failed = err.Error(), true
-			return
-		}
-		for index := range l.snapshot.Instances {
-			if l.snapshot.Instances[index].ID == value.ID {
-				l.snapshot.Instances[index] = value
-			}
-		}
-		l.editing, l.message = "", "实例名称已更新"
-	})
 }

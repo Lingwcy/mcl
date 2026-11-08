@@ -86,7 +86,7 @@ func run() error {
 	forgeInstaller := loader.NewForgeInstaller(loaderCatalog, sharedDownloads, process.RunLoaderProcessor)
 	loaders := app.NewLoaderService(loaderCatalog, storage.NewLoaderStore(paths.Root), forgeInstaller)
 	installations := app.NewInstallationService(catalog, instances, storage.NewInstallationStore(paths.Root), sharedDownloads, meta.CurrentPlatform(), sessions, loaders)
-	runtimeSettings := app.NewRuntimeSettingsService(instances, sessions)
+	instanceSettings := app.NewInstanceSettingsService(instances, sessions)
 	javaService := app.NewJavaService(storage.NewJavaStore(paths.Root), platform.JavaCandidates,
 		&java.Installer{Directory: filepath.Join(paths.Root, "java")}, java.NewCatalogClient())
 	launcher := app.NewLaunchService(installations, javaService.Ensure, platform.PhysicalMemory, func(plan launch.Plan, register func(launch.ProcessIdentity) error) (launch.Game, error) {
@@ -258,13 +258,15 @@ func run() error {
 					return library.Create(ctx, request)
 				}, done)
 			},
-			Rename: func(id, name string, done func(instance.Instance, error)) {
+			LoadInstance: func(id string, done func(instance.Instance, error)) {
 				background(ctx, &workers, window, func(ctx context.Context) (instance.Instance, error) {
-					return runtimeSettings.Rename(ctx, id, name)
+					return instanceSettings.Load(ctx, id)
 				}, done)
 			},
-			SaveRuntime: func(id string, settings app.Settings, done func(instance.Instance, error)) {
-				background(ctx, &workers, window, func(ctx context.Context) (instance.Instance, error) { return runtimeSettings.Save(ctx, id, settings) }, done)
+			SavePreferences: func(id string, expected, desired app.InstancePreferences, done func(instance.Instance, error)) {
+				background(ctx, &workers, window, func(ctx context.Context) (instance.Instance, error) {
+					return instanceSettings.Save(ctx, id, expected, desired)
+				}, done)
 			},
 		})
 		shell.ConnectInstallations(launcherui.InstallationActions{

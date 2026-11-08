@@ -21,7 +21,6 @@ const (
 	settingsPage         page = "settings"
 	gameSettingsPage     page = "game-settings"
 	newInstancePage      page = "new-instance"
-	versionsPage         page = "versions"
 	instanceSettingsPage page = "instance-settings"
 	marketPage           page = "market"
 )
@@ -47,6 +46,7 @@ type SaveSettings func(app.Settings, func(error))
 type Shell struct {
 	window           *mygo.Window
 	creation         creationState
+	instanceEditor   *instanceSettingsState
 	page             page
 	theme            *ui.Theme
 	applyAppearance  func(bool)
@@ -157,8 +157,6 @@ func (s *Shell) View(c *ui.Context) {
 							s.marketView(c)
 						case newInstancePage:
 							s.newInstanceView(c)
-						case versionsPage:
-							s.versionsView(c)
 						case instanceSettingsPage:
 							s.instanceSettingsView(c)
 						case settingsPage:
