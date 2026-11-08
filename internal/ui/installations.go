@@ -410,7 +410,7 @@ func (s *Shell) activityView(c *ui.Context) {
 							s.startInstallation()
 						}
 					})
-					ui.Button(c.Key("task-instance-settings"), "版本设置").Height(26).OnClick(func() { s.library.selectedID = i.instanceID; s.openInstanceSettings() })
+					ui.Button(c.Key("task-instance-settings"), "实例设置").Height(26).OnClick(func() { s.library.selectedID = i.instanceID; s.openInstanceSettings() })
 				})
 			}
 		})

@@ -48,6 +48,7 @@ func (s *Shell) titlebar(c *ui.Context) {
 }
 
 func (s *Shell) openHome() {
+	s.cancelInstanceSettingsIcon()
 	s.page, s.sidebarCollapsed = libraryPage, false
 	s.ensureAssets()
 }

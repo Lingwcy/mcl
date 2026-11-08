@@ -75,6 +75,7 @@ func (s *Shell) ConnectAssets(actions AssetActions) {
 }
 
 func (s *Shell) selectInstance(id string) {
+	s.cancelInstanceSettingsIcon()
 	s.assets.showUpdate = false
 	s.assets.showDiagnostic = false
 	s.assets.showRepair = false
@@ -330,7 +331,6 @@ func (s *Shell) instanceToolbar(c *ui.Context) {
 		}
 		ui.Spacer(c)
 		toolbarAction(c, "instance-directory", "打开实例目录", iconFolder, s.openInstanceDirectory)
-		toolbarAction(c, "instance-settings", "版本设置", iconSettings, s.openInstanceSettings)
 		toolbarAction(c, "instance-logs", "查看日志", iconLog, s.showInstanceLogs)
 	})
 }
@@ -340,9 +340,12 @@ func (s *Shell) instanceSummary(c *ui.Context, value instance.Instance) {
 	ui.Row(c).FillWidth().Height(62).Shrink(0).Gap(12).Children(func() {
 		s.instanceAvatar(c, value, 40)
 		ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
-			ui.ButtonBase(c.Key("switch-instance")).Label("切换版本").Height(26).FillWidth().Justify(ui.Start).Gap(6).OnClick(func() { s.page = versionsPage }).Children(func() {
-				ui.Text(c, value.Name).FontSize(20).FontWeight(600).MinWidth(0).MaxLines(1).Ellipsis("…")
-				ui.Icon(c, iconChevron).Size(10, 10).TextColor(colors(t).Icon)
+			ui.Row(c).FillWidth().Height(26).Gap(6).Children(func() {
+				ui.Text(c, value.Name).FontSize(20).FontWeight(600).MinWidth(0).Shrink(1).MaxLines(1).Ellipsis("…")
+				button := ui.ButtonBase(c.Key("instance-preferences")).Label("实例设置").Tooltip("实例设置").Size(24, 24).Shrink(0).Radius(5).Center()
+				rowMotion(c, button, ui.Transparent).OnClick(s.openInstanceSettings).Children(func() {
+					ui.Icon(c, iconSettings).Size(13, 13).TextColor(colors(t).Icon)
+				})
 			})
 			subtitle := instanceType(value)
 			if value.Name != value.Version.ID {
@@ -375,7 +378,7 @@ func (s *Shell) instanceLaunchButton(c *ui.Context) {
 	case "正在恢复整合包文件":
 		icon = iconArchive
 	case "暂不支持此加载器":
-		label += " · 查看版本设置"
+		label += " · 查看实例设置"
 		icon = iconSettings
 	}
 	fill, ink := t.Surface, t.Text

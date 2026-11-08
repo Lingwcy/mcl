@@ -26,8 +26,14 @@ func TestLibraryCreateRenameAndRefresh(t *testing.T) {
 			rows = append(rows, row)
 			done(row, nil)
 		},
-		Rename: func(id, name string, done func(instance.Instance, error)) {
-			rows[0].Name = name
+		LoadInstance: func(id string, done func(instance.Instance, error)) {
+			done(rows[0], nil)
+		},
+		SavePreferences: func(id string, expected, desired app.InstancePreferences, done func(instance.Instance, error)) {
+			if id != rows[0].ID || !equalInstancePreferences(expected, app.PreferencesForInstance(rows[0])) {
+				t.Fatal("save did not use the persisted preference snapshot")
+			}
+			rows[0].Name, rows[0].JavaPath, rows[0].IconStyle, rows[0].Icon = desired.Name, desired.JavaPath, desired.IconStyle, desired.Icon
 			done(rows[0], nil)
 		},
 	})
@@ -44,17 +50,22 @@ func TestLibraryCreateRenameAndRefresh(t *testing.T) {
 	if request.Name != "生存世界" || request.VersionID != "1.21.1" || request.Settings.MaxMemoryMiB != 0 || !tester.HasText("生存世界") {
 		t.Fatalf("create did not publish an isolated instance: %+v, %v", request, tester.Texts())
 	}
-	click(t, tester, "版本设置")
+	click(t, tester, "实例设置")
 	click(t, tester, "实例名称")
 	tester.Command("selectAll")
 	tester.Type("重命名世界")
-	click(t, tester, "保存名称")
+	if rows[0].Name != "重命名世界" || shell.instanceEditor.saveError != "" {
+		t.Fatal("valid instance edits should be saved without a separate save button")
+	}
+	click(t, tester, "返回实例")
 	click(t, tester, "账户")
-	click(t, tester, "游戏库")
-	click(t, tester, "切换版本")
-	click(t, tester, "刷新版本")
-	if !tester.HasText("重命名世界") || shell.library.editing != "" {
+	shell.refreshLibrary(false)
+	click(t, tester, "Home")
+	if !tester.HasText("重命名世界") {
 		t.Fatalf("rename lost identity across navigation and refresh: %v", tester.Texts())
+	}
+	if _, found := tester.Find("切换版本"); found {
+		t.Fatal("the obsolete instance picker should not remain beside the instance name")
 	}
 }
 
