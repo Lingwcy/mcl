@@ -7,7 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// Upstream SVGs and their license are bundled, never fetched at runtime.
+// SVG assets and applicable upstream licenses are bundled, never fetched at runtime.
 // See icons/README.md for the pinned sources and attribution.
 //
 //go:embed icons/*.svg icons/LICENSE
@@ -39,6 +39,7 @@ var (
 	iconChevron          = bundledIcon("chevron-right")
 	iconChevronDown      = bundledIcon("chevron-down")
 	iconUser             = bundledIcon("user-round")
+	iconMicrosoft        = bundledIcon("microsoft")
 	iconPlus             = bundledIcon("plus")
 	iconMinus            = bundledIcon("minus")
 	iconSquare           = bundledIcon("square")
