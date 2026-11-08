@@ -60,7 +60,14 @@ func TestInheritedLibraryGroupsRetainConditionalRules(t *testing.T) {
 }
 
 func TestHistoricalFallbackAndComposedLimits(t *testing.T) {
-	for _, id := range []string{"1.5.2", "1.12.2-forge", "1.17", "unknown"} {
+	for _, id := range []string{"1.0", "1.2.5", "1.5.2"} {
+		client, entries, _ := fixtureVersionClient(t, historicalFixture(t, id))
+		version, err := client.Version(t.Context(), entries[id])
+		if err != nil || version.Java.Major != 8 {
+			t.Fatal("explicit official early release did not retain Java8 policy", id, err)
+		}
+	}
+	for _, id := range []string{"1.5.3", "1.12.2-forge", "1.17", "unknown"} {
 		client, entries, _ := fixtureVersionClient(t, historicalFixture(t, id))
 		if _, err := client.Version(t.Context(), entries[id]); err == nil {
 			t.Fatal("unreviewed Java fallback accepted")

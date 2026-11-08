@@ -22,7 +22,7 @@ const maxProcessorClasses = 500_000
 // complete pinned JAR is hashed through this SAME descriptor before and after
 // scanning. Future multi-release entries cannot raise the baseline requirement;
 // variants selected by supported JVMs must not target a newer class version.
-func processorJarMinimum(ctx context.Context, root *os.Root, name string, fixed meta.Download, main string, classes *int) (int, error) {
+func processorJarMinimum(ctx context.Context, root *os.Root, name string, fixed meta.Download, main string, classes *int, approved ...[]string) (int, error) {
 	before, err := root.Lstat(name)
 	if err != nil {
 		return 0, err
@@ -65,7 +65,11 @@ func processorJarMinimum(ctx context.Context, root *os.Root, name string, fixed 
 		if err != nil {
 			return 0, err
 		}
-		declared, err := processorManifest(data)
+		var allowed []string
+		if len(approved) > 0 {
+			allowed = approved[0]
+		}
+		declared, err := processorManifest(data, name, allowed)
 		if err != nil {
 			return 0, err
 		}
@@ -75,13 +79,13 @@ func processorJarMinimum(ctx context.Context, root *os.Root, name string, fixed 
 	} else if main != "" {
 		return 0, errors.New("安装工具JAR缺少已固定清单")
 	}
-	minimum, mainFound := 9, main == ""
+	minimum, mainFound := 8, main == ""
 	expectedMain := strings.ReplaceAll(main, ".", "/") + ".class"
 	for _, entry := range container.Entries() {
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		if entry.Directory || !strings.HasSuffix(entry.Name, ".class") {
+		if entry.Directory || entry.Name == "module-info.class" || !strings.HasSuffix(entry.Name, ".class") {
 			continue
 		}
 		variant := 0
@@ -146,8 +150,8 @@ func processorJarMinimum(ctx context.Context, root *os.Root, name string, fixed 
 }
 
 func (s *ForgeInstaller) processorRuntime(ctx context.Context, minimum int, target meta.Platform, preferred []string, report func(java.Progress)) (java.Runtime, error) {
-	if minimum < 9 || minimum > 25 {
-		return java.Runtime{}, errors.New("安装工具Java要求超出当前9–25范围")
+	if minimum < 8 || minimum > 25 {
+		return java.Runtime{}, errors.New("安装工具Java要求超出当前8–25范围")
 	}
 	var runtime java.Runtime
 	var err error
@@ -162,8 +166,8 @@ func (s *ForgeInstaller) processorRuntime(ctx context.Context, minimum int, targ
 	if err != nil {
 		return java.Runtime{}, fmt.Errorf("准备安装工具Java（至少%d）: %w", minimum, err)
 	}
-	if runtime.Major < 9 || runtime.Major > 25 {
-		return java.Runtime{}, errors.New("安装工具Java超出当前9–25范围")
+	if runtime.Major < 8 || runtime.Major > 25 || minimum == 8 && runtime.Major != 8 {
+		return java.Runtime{}, errors.New("安装工具Java超出兼容范围；旧class工具固定Java8，不能用高版本替代")
 	}
 	if err := runtime.Check(minimum, target); err != nil {
 		return java.Runtime{}, err

@@ -135,7 +135,7 @@ func TestLegacy17RejectsCrossGenerationAndUnboundBase(t *testing.T) {
 			document["versionInfo"].(map[string]any)["minecraftArguments"] = strings.ReplaceAll(document["versionInfo"].(map[string]any)["minecraftArguments"].(string), legacyForge17Tweaker, legacyForgeTweaker)
 		},
 		func(document map[string]any) { document["versionInfo"].(map[string]any)["jar"] = "1.12.2" },
-		func(document map[string]any) { delete(document["versionInfo"].(map[string]any), "jar") },
+		func(document map[string]any) { document["versionInfo"].(map[string]any)["jar"] = nil },
 		func(document map[string]any) { delete(document["install"].(map[string]any), "minecraft") },
 		func(document map[string]any) { document["versionInfo"].(map[string]any)["inheritsFrom"] = nil },
 		func(document map[string]any) { document["versionInfo"].(map[string]any)["inheritsFrom"] = "" },
@@ -174,12 +174,12 @@ func TestLegacy17EntrypointAndConflictingRuntimeAreProtected(t *testing.T) {
 		}
 	}
 	if normalizeProcessedLegacyVersion(request, &meta.Version{ID: document["versionInfo"].(map[string]any)["id"].(string), MainClass: legacyForgeMain}) == nil {
-		t.Fatal("1.7.10 implicitly acquired spec1 legacy semantics")
+		t.Fatal("empty processed legacy game template accepted")
 	}
-	if processedLegacyCore(request, "net.minecraftforge:forge:1.7.10-"+request.Version) {
-		t.Fatal("modern-template core helper expanded to old generation")
+	if !processedLegacyCore(request, "net.minecraftforge:forge:1.7.10-"+request.Version) {
+		t.Fatal("explicit old-generation core identity was lost")
 	}
-	request.GameVersion = "1.8.9"
+	request.GameVersion = "1.5.2"
 	if _, ok := legacyForgeTweakerFor(request); ok {
 		t.Fatal("unimplemented intermediate generation inferred by range")
 	}

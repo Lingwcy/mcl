@@ -59,6 +59,12 @@ func (p Plan) classpathIndex() (int, error) {
 	return index, nil
 }
 
+// ClasspathSupportJAR is shared with short-lived Java8 installation tools. It
+// contains only standard local Class-Path URLs, never executable helper code.
+func ClasspathSupportJAR(paths []string, targetOS string) ([]byte, error) {
+	return classpathJAR(paths, targetOS)
+}
+
 func classpathJAR(paths []string, targetOS string) ([]byte, error) {
 	if len(paths) == 0 {
 		return nil, errors.New("Java 8 classpath 不能为空")

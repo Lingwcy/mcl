@@ -41,8 +41,11 @@ func (s *JavaService) EnsureProcessor(ctx context.Context, minimum int, target m
 }
 
 func processorDownloadMajor(minimum int) (int, error) {
-	if minimum < 9 || minimum > 25 {
-		return 0, errors.New("安装工具Java要求超出当前9–25支持范围")
+	if minimum < 8 || minimum > 25 {
+		return 0, errors.New("安装工具Java要求超出当前8–25支持范围")
+	}
+	if minimum == 8 {
+		return 8, nil
 	}
 	for _, major := range []int{17, 21, 25} {
 		if major >= minimum {
@@ -56,7 +59,11 @@ func matchingProcessorJava(environments []JavaEnvironment, minimum int, target m
 	var candidates []java.Runtime
 	for _, environment := range environments {
 		runtime := environment.Runtime
-		if runtime.Major >= 9 && runtime.Major <= 25 && runtime.Check(minimum, target) == nil {
+		compatible := runtime.Major >= minimum && runtime.Major <= 25
+		if minimum == 8 {
+			compatible = runtime.Major == 8
+		}
+		if compatible && runtime.Check(minimum, target) == nil {
 			candidates = append(candidates, runtime)
 		}
 	}

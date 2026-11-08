@@ -161,6 +161,9 @@ func (s *InstallationService) resolveVersion(ctx context.Context, value instance
 }
 
 func (s *InstallationService) resolveLoader(ctx context.Context, value instance.Instance, version meta.Version, fallbackJava string, report func(install.Progress)) (resolvedVersion, error) {
+	if _, err := install.Build(version, s.platform); err != nil {
+		return resolvedVersion{}, fmt.Errorf("客户端平台兼容性: %w", err)
+	}
 	if _, required := value.RequiredLoader(); !required {
 		return resolvedVersion{version: version}, nil
 	}

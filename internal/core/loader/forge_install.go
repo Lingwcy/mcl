@@ -52,6 +52,15 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err := ctx.Err(); err != nil {
 		return Profile{}, err
 	}
+	if request.TargetOS != "" && (request.TargetOS != platform.OS || request.TargetArch != meta.NormalizeArch(platform.Arch)) {
+		return Profile{}, errors.New("安装器目标平台与缓存身份不符")
+	}
+	if err := request.ValidateBase(base); err != nil {
+		return Profile{}, err
+	}
+	if err := base.ValidateVanilla(); err != nil {
+		return Profile{}, err
+	}
 	coordinate, origin, versionID, err := forgeInstaller(request)
 	if err != nil {
 		return Profile{}, err
@@ -142,6 +151,12 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err != nil {
 		return Profile{}, err
 	}
+	if _, declared := spec.Data["BINPATCH"]; !declared && z.Has("data/client.lzma") {
+		if spec.Data == nil {
+			spec.Data = make(map[string]struct{ Client string })
+		}
+		spec.Data["BINPATCH"] = struct{ Client string }{Client: "/data/client.lzma"}
+	}
 	values, resources, err := forgeData(spec)
 	if err != nil {
 		return Profile{}, err
@@ -162,7 +177,14 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err != nil {
 		return Profile{}, err
 	}
-	client := download.File{Path: path.Join("cache/versions", base.ID, base.ID+".jar"), Download: base.Downloads["client"]}
+	if err := validateProcessorPaths(libraries, processors); err != nil {
+		return Profile{}, err
+	}
+	clientID := base.ID
+	if base.ClientVersion != "" {
+		clientID = base.ClientVersion
+	}
+	client := download.File{Path: path.Join("cache/versions", clientID, clientID+".jar"), Download: base.Downloads["client"]}
 	inputs, copies, err := planForgeInputs(z, libraries, processors, base, client)
 	if err != nil {
 		return Profile{}, err
@@ -194,6 +216,15 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 			return Profile{}, err
 		}
 		known[target] = identity
+	}
+	known["work/installer.jar"] = installer
+	known["work/client.jar"] = client.Download
+	for _, resource := range resources {
+		identity, err := hashForgeFile(ctx, stage, resource.Target, "", 0)
+		if err != nil {
+			return Profile{}, err
+		}
+		known[resource.Target] = identity
 	}
 	if err := bundleFile.Close(); err != nil {
 		return Profile{}, err
@@ -290,27 +321,35 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		for _, target := range slices.Sorted(maps.Keys(p.outputs)) {
-			if _, err := stage.Lstat(target); !errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("安装处理器的输出已存在或不可写 %s", target)
-			}
-			if err := stage.MkdirAll(path.Dir(target), 0o700); err != nil {
-				return err
-			}
+		if err := verifyProcessorInputs(ctx, stage, known, p.inputs); err != nil {
+			return err
+		}
+		reused, err := prepareProcessorOutputs(ctx, stage, known, p)
+		if err != nil {
+			return err
+		}
+		if reused {
+			progress.Files++
+			report(progress)
+			continue
 		}
 		if p.copyMappings != "" {
-			if err := copyForgeInput(ctx, cache, forgeMappings(base), stage, p.copyMappings); err != nil {
+			if err := prepareForgeMappings(ctx, cache, stage, base, p); err != nil {
+				return err
+			}
+		} else if p.nativeTask != "" {
+			if err := runNativeProcessor(ctx, stage, known, p); err != nil {
 				return err
 			}
 		} else {
 			if s.run == nil {
 				return errors.New("Java 安装处理器未配置")
 			}
-			main, err := forgeJarMain(ctx, stage, p.jar)
+			main, err := forgeJarMain(ctx, stage, p.jar, p.classpath)
 			if err != nil {
 				return err
 			}
-			minimum := 9
+			minimum := 8
 			var classpath []string
 			for _, relative := range p.classpath {
 				file, ok := known[relative]
@@ -321,7 +360,7 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 				if relative == p.jar {
 					entry = main
 				}
-				required, err := processorJarMinimum(ctx, stage, relative, file, entry, &classes)
+				required, err := processorJarMinimum(ctx, stage, relative, file, entry, &classes, p.classpath)
 				if err != nil {
 					return fmt.Errorf("分析安装工具Java要求 %s: %w", relative, err)
 				}
@@ -344,6 +383,9 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 					return err
 				}
 			}
+			if err := verifyProcessorInputs(ctx, stage, known, p.inputs); err != nil {
+				return err
+			}
 			args := append([]string{"-Xmx1024m", "-Dfile.encoding=UTF-8", "-Djava.net.preferIPv4Stack=true", "-cp",
 				strings.Join(classpath, string(os.PathListSeparator)), main}, p.args...)
 			if err := s.run(ctx, runtime.Executable, filepath.Join(stagePath, "work"), args); err != nil {
@@ -356,6 +398,13 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 				return err
 			}
 			known[target] = identity
+		}
+		var generatedBytes int64
+		for _, identity := range known {
+			generatedBytes += identity.Size
+			if generatedBytes > 4<<30 {
+				return errors.New("处理器输入及生成文件累计超过4GiB")
+			}
 		}
 		progress.Files++
 		report(progress)
@@ -373,16 +422,13 @@ func completedForgeProfile(request Request, version meta.Version, known map[stri
 			return Profile{}, err
 		}
 		target := path.Join("libraries", coordinate.Path())
-		if seen[target] {
-			continue
-		}
 		seen[target] = true
 		identity, ok := known[target]
 		if !ok {
 			return Profile{}, fmt.Errorf("启动所需库缺少安装产物 %s", library.Name)
 		}
 		if expected := library.Downloads.Artifact; expected != nil && expected.SHA1 != "" &&
-			(!strings.EqualFold(expected.SHA1, identity.SHA1) || expected.Size != identity.Size) {
+			(!strings.EqualFold(expected.SHA1, identity.SHA1) || expected.Size > 0 && expected.Size != identity.Size) {
 			return Profile{}, fmt.Errorf("启动库与固定摘要不匹配 %s", library.Name)
 		}
 		identity.Path = coordinate.Path()
@@ -390,7 +436,7 @@ func completedForgeProfile(request Request, version meta.Version, known map[stri
 		profile.Libraries = append(profile.Libraries, library)
 	}
 	for _, target := range slices.Sorted(maps.Keys(known)) {
-		if !seen[target] {
+		if !seen[target] && strings.HasPrefix(target, "libraries/") {
 			identity := known[target]
 			identity.Path = strings.TrimPrefix(target, "libraries/")
 			profile.Outputs = append(profile.Outputs, identity)

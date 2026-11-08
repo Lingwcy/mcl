@@ -79,11 +79,15 @@ func SplitLegacyArguments(text string) ([]string, error) {
 
 // This table is only consulted AFTER the client's exact official package URL,
 // SHA-1 and document ID have been verified. It is not a general version-name
-// heuristic and deliberately excludes snapshots and pre-1.6 releases. These
+// heuristic and deliberately excludes snapshots and unlisted alpha/beta IDs.
+// A release still needs complete pinned client/assets/libraries and a direct
+// metadata main entry; no applet wrapper or client rewrite is introduced. These
 // older releases use stable Java 8 in mcl, not an unbounded newer-major fallback.
 func historicalJava8Release(id string) bool {
 	switch id {
-	case "1.6.1", "1.6.2", "1.6.4",
+	case "1.0", "1.1", "1.2.1", "1.2.2", "1.2.3", "1.2.4", "1.2.5",
+		"1.3.1", "1.3.2", "1.4.2", "1.4.4", "1.4.5", "1.4.6", "1.4.7", "1.5", "1.5.1", "1.5.2",
+		"1.6.1", "1.6.2", "1.6.4",
 		"1.7.2", "1.7.4", "1.7.5", "1.7.6", "1.7.7", "1.7.8", "1.7.9", "1.7.10",
 		"1.8", "1.8.1", "1.8.2", "1.8.3", "1.8.4", "1.8.5", "1.8.6", "1.8.7", "1.8.8", "1.8.9",
 		"1.9", "1.9.1", "1.9.2", "1.9.3", "1.9.4", "1.10", "1.10.1", "1.10.2",

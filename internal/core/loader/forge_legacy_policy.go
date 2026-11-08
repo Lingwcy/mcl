@@ -13,9 +13,11 @@ func legacyForgeTweakerFor(request Request) (string, bool) {
 		return "", false
 	}
 	switch request.GameVersion {
-	case "1.12.2":
+	case "1.8", "1.8.1", "1.8.2", "1.8.3", "1.8.4", "1.8.5", "1.8.6", "1.8.7", "1.8.8", "1.8.9",
+		"1.9", "1.9.1", "1.9.2", "1.9.3", "1.9.4", "1.10", "1.10.1", "1.10.2",
+		"1.11", "1.11.1", "1.11.2", "1.12", "1.12.1", "1.12.2":
 		return legacyForgeTweaker, true
-	case "1.7.10":
+	case "1.6.1", "1.6.2", "1.6.4", "1.7.2", "1.7.10":
 		return legacyForge17Tweaker, true
 	default:
 		return "", false
@@ -25,7 +27,18 @@ func legacyForgeWrapper(request Request, name string) bool {
 	if _, supported := legacyForgeTweakerFor(request); !supported {
 		return false
 	}
-	return name == "net.minecraft:launchwrapper:1.12" || request.GameVersion == "1.7.10" && name == "net.minecraft:launchwrapper:1.11"
+	if name == "net.minecraft:launchwrapper:1.12" {
+		return true
+	}
+	switch request.GameVersion {
+	case "1.6.1", "1.6.2", "1.6.4":
+		return name == "net.minecraft:launchwrapper:1.3" || name == "net.minecraft:launchwrapper:1.8"
+	case "1.7.2":
+		return name == "net.minecraft:launchwrapper:1.8" || name == "net.minecraft:launchwrapper:1.9" || name == "net.minecraft:launchwrapper:1.11"
+	case "1.7.10":
+		return name == "net.minecraft:launchwrapper:1.11"
+	}
+	return false
 }
 
 // A second, unmatched core/wrapper must not silently win the classpath. The

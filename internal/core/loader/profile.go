@@ -15,7 +15,42 @@ import (
 	"mcl/internal/core/meta"
 )
 
-type Request struct{ Type, Version, GameVersion, BaseSHA1 string }
+type Request struct {
+	Type, Version, GameVersion, BaseSHA1 string
+	BaseChainSHA256                      string `json:",omitempty"`
+	TargetOS                             string `json:",omitempty"`
+	TargetArch                           string `json:",omitempty"`
+}
+
+func (r Request) WithPlatform(target meta.Platform) (Request, error) {
+	if UsesProcessors(r.Type) {
+		r.TargetOS = target.OS
+		r.TargetArch = meta.NormalizeArch(target.Arch)
+	}
+	return r, r.Validate()
+}
+
+func (r Request) WithBase(base meta.Version) (Request, error) {
+	if base.ID != r.GameVersion {
+		return r, errors.New("加载器基底版本身份不匹配")
+	}
+	digest, err := meta.OfficialChainDigest(base, r.BaseSHA1)
+	if err != nil {
+		return r, err
+	}
+	r.BaseChainSHA256 = digest
+	return r, r.Validate()
+}
+func (r Request) ValidateBase(base meta.Version) error {
+	expected, err := r.WithBase(base)
+	if err != nil {
+		return err
+	}
+	if expected != r {
+		return errors.New("加载器缓存未绑定完整官方继承链")
+	}
+	return nil
+}
 
 func (r Request) Validate() error {
 	if !Supported(r.Type) {
@@ -23,6 +58,17 @@ func (r Request) Validate() error {
 	}
 	if !meta.ValidID(r.Version) || strings.ContainsAny(r.Version, " /\\:\r\n") || !meta.ValidID(r.GameVersion) || !meta.ValidSHA1(r.BaseSHA1) {
 		return errors.New("加载器或游戏版本身份无效")
+	}
+	if r.TargetOS != "" || r.TargetArch != "" {
+		if (r.TargetOS != "osx" && r.TargetOS != "windows" && r.TargetOS != "linux") || (r.TargetArch != "amd64" && r.TargetArch != "arm64" && r.TargetArch != "386") {
+			return errors.New("加载器目标平台身份无效")
+		}
+	}
+	if r.BaseChainSHA256 != "" {
+		decoded, err := hex.DecodeString(r.BaseChainSHA256)
+		if err != nil || len(decoded) != 32 {
+			return errors.New("加载器官方继承链摘要无效")
+		}
 	}
 	return nil
 }
@@ -93,30 +139,36 @@ func (p Profile) Validate() error {
 		if err != nil {
 			return err
 		}
-		validIdentity := p.ID == versionID && forgeMainClass(p.MainClass) && len(p.Outputs) > 0
+		validIdentity := p.ID == versionID && forgeMainClass(p.MainClass)
 		if p.Legacy {
 			validIdentity = legacyForgeID(p.Request, p.ID) && p.MainClass == legacyForgeMain
 		}
 		if p.LegacyGame {
-			validIdentity = legacyForgeID(p.Request, p.ID) && p.MainClass == legacyForgeMain && len(p.Outputs) > 0
+			validIdentity = legacyForgeID(p.Request, p.ID) && p.MainClass == legacyForgeMain
 		}
-		if !validIdentity || !validGeneration(p.Generation) || !meta.ValidSHA1(p.InstallerSHA1) || len(p.Outputs) > 256 {
+		if !validIdentity || !validGeneration(p.Generation) || !meta.ValidSHA1(p.InstallerSHA1) || len(p.Outputs) > 4096 {
 			return errors.New("Forge 系加载器运行环境信息无效")
 		}
 	} else if p.Generation != "" || p.InstallerSHA1 != "" || len(p.Outputs) != 0 || p.Legacy || p.LegacyGame {
 		return errors.New("加载器包含非预期的生成文件")
 	}
-	found := prepared
-	seen := make(map[string]bool)
+	found := p.Legacy || p.LegacyGame
+	seen := make(map[string]meta.Library)
 	for _, library := range p.Libraries {
 		coordinate, err := meta.ParseCoordinate(library.Name)
 		if err != nil {
 			return err
 		}
-		if seen[library.Name] || len(library.Natives) > 0 || len(library.Downloads.Classifiers) > 0 || coordinate.Extension != "jar" {
-			return errors.New("加载器库存在重复或不支持的本地分类")
+		if previous, duplicate := seen[library.Name]; duplicate {
+			a, b := previous.Downloads.Artifact, library.Downloads.Artifact
+			if len(previous.Rules) == 0 || len(library.Rules) == 0 || a == nil || b == nil || *a != *b {
+				return errors.New("加载器重复库未绑定同一文件或缺少条件规则")
+			}
 		}
-		seen[library.Name] = true
+		if len(library.Natives) > 0 || len(library.Downloads.Classifiers) > 0 || coordinate.Extension != "jar" {
+			return errors.New("加载器库包含不支持的本地分类")
+		}
+		seen[library.Name] = library
 		if err := meta.ValidateRules(library.Rules); err != nil {
 			return err
 		}
@@ -129,6 +181,9 @@ func (p Profile) Validate() error {
 		}
 		if artifact.Path != coordinate.Path() || (prepared && artifact.URL != "") || (!prepared && !AllowedLibraryURL(artifact.URL)) {
 			return errors.New("加载器库路径或来源无效")
+		}
+		if prepared && modernRuntimeCore(p.Request, coordinate) {
+			found = true
 		}
 		if coordinate.Artifact == p.Request.Type+"-loader" && coordinate.Version == p.Request.Version {
 			expected := "net.fabricmc"
@@ -174,8 +229,8 @@ func (p Profile) Merge(base meta.Version) (meta.Version, error) {
 	if err := p.Validate(); err != nil {
 		return meta.Version{}, err
 	}
-	if base.ID != p.Request.GameVersion {
-		return meta.Version{}, errors.New("加载器继承的游戏版本不匹配")
+	if err := p.Request.ValidateBase(base); err != nil {
+		return meta.Version{}, err
 	}
 	if err := base.ValidateVanilla(); err != nil {
 		return meta.Version{}, err
@@ -214,19 +269,19 @@ func (p Profile) Merge(base meta.Version) (meta.Version, error) {
 		coordinate, _ := meta.ParseCoordinate(name)
 		return coordinate.Group + ":" + coordinate.Artifact + ":" + coordinate.Classifier + "@" + coordinate.Extension
 	}
-	seen := make(map[string]bool)
+	seen := make(map[string]string)
 	effective.Libraries = nil
 	for _, library := range p.Libraries {
 		key := module(library.Name)
-		if seen[key] {
+		if previous, exists := seen[key]; exists && previous != library.Name {
 			return meta.Version{}, errors.New("加载器包含同一模块的多个版本")
 		}
-		seen[key] = true
+		seen[key] = library.Name
 		library.LocalRoot = effective.LibraryDirectory
 		effective.Libraries = append(effective.Libraries, library)
 	}
 	for _, library := range base.Libraries {
-		if !seen[module(library.Name)] {
+		if _, overridden := seen[module(library.Name)]; !overridden {
 			effective.Libraries = append(effective.Libraries, library)
 		}
 	}

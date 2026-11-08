@@ -73,6 +73,14 @@ func forgeInstaller(request Request) (meta.Coordinate, string, string, error) {
 	}
 }
 
+func modernRuntimeCore(request Request, coordinate meta.Coordinate) bool {
+	expected, _, _, err := forgeInstaller(request)
+	if err != nil || coordinate.Group != expected.Group || coordinate.Version != expected.Version || coordinate.Extension != "jar" {
+		return false
+	}
+	return coordinate.Artifact == expected.Artifact && (coordinate.Classifier == "" || coordinate.Classifier == "client" || coordinate.Classifier == "universal") || coordinate.Artifact == "fmlloader" && coordinate.Classifier == ""
+}
+
 func readForgeSpec(ctx context.Context, z *archive.Zip, request Request, versionID string) (forgeSpec, meta.Version, error) {
 	var spec forgeSpec
 	data, err := z.Read(ctx, "install_profile.json", 4<<20)
@@ -82,7 +90,7 @@ func readForgeSpec(ctx context.Context, z *archive.Zip, request Request, version
 	if err := json.Unmarshal(data, &spec); err != nil {
 		return spec, meta.Version{}, fmt.Errorf("读取安装配置: %w", err)
 	}
-	validID := spec.Version == versionID || request.GameVersion == "1.12.2" && legacyForgeID(request, spec.Version)
+	validID := spec.Version == versionID || legacyForgeID(request, spec.Version)
 	if spec.Spec != 1 || spec.Minecraft != request.GameVersion || !validID ||
 		len(spec.Libraries) > 256 || len(spec.Data) > 128 || len(spec.Processors) > 64 {
 		return spec, meta.Version{}, errors.New("安装配置的版本、格式或数量不受支持")

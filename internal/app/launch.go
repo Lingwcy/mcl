@@ -162,6 +162,9 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	if err != nil {
 		return nil, err
 	}
+	if _, err := install.Build(base, s.installations.platform); err != nil {
+		return nil, fmt.Errorf("客户端平台兼容性: %w", err)
+	}
 	javaProgress := func(p java.Progress) {
 		if report != nil {
 			report(install.Progress{Stage: p.Stage, Progress: download.Progress{Bytes: p.Bytes, TotalBytes: p.Total}})
@@ -175,8 +178,8 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	if err := runtime.Check(base.Java.Major, s.installations.platform); err != nil {
 		return nil, err
 	}
-	// Loader processors must receive the runtime just selected, including when
-	// a stale per-instance Java path used to override the global fallback.
+	// Pass the verified game executable only as a hint. The loader resolves its
+	// independent tool Java and must never raise the game major to run a tool.
 	loaderInstance := value
 	loaderInstance.JavaPath = runtime.Executable
 	resolved, err := s.installations.resolveLoader(ctx, loaderInstance, base, runtime.Executable, report)

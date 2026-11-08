@@ -22,6 +22,10 @@ func TestProcessorJavaPolicyDoesNotReplaceExactGameJava(t *testing.T) {
 		environment("foreign", "21.0.8", "arm64", 21, false),
 	}
 	target := meta.Platform{OS: "windows", Arch: "amd64"}
+	legacy, found := matchingProcessorJava(values, 8, target, []string{"tool21"})
+	if !found || legacy.Executable != "game8" {
+		t.Fatal("old tool was silently moved to a modern JVM")
+	}
 	tool, ok := matchingProcessorJava(values, 17, target, []string{"game8", "ea", "foreign"})
 	if !ok || tool.Executable != "tool17-new" {
 		t.Fatalf("wrong tool choice %+v", tool)
@@ -37,13 +41,13 @@ func TestProcessorJavaPolicyDoesNotReplaceExactGameJava(t *testing.T) {
 	if _, ok := matchingProcessorJava(values, 22, target, nil); ok {
 		t.Fatal("EA or foreign tool environment accepted")
 	}
-	for minimum, want := range map[int]int{9: 17, 17: 17, 18: 21, 21: 21, 22: 25, 25: 25} {
+	for minimum, want := range map[int]int{8: 8, 9: 17, 17: 17, 18: 21, 21: 21, 22: 25, 25: 25} {
 		got, err := processorDownloadMajor(minimum)
 		if err != nil || got != want {
 			t.Fatalf("download policy %d: %d %v", minimum, got, err)
 		}
 	}
-	for _, bad := range []int{8, 26, 100} {
+	for _, bad := range []int{7, 26, 100} {
 		if _, err := processorDownloadMajor(bad); err == nil {
 			t.Fatal("unknown tool requirement accepted")
 		}

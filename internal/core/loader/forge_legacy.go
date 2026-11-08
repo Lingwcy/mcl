@@ -35,10 +35,7 @@ func legacyForgeID(request Request, id string) bool {
 		return false
 	}
 	build := strings.TrimPrefix(request.Version, request.GameVersion+"-")
-	if request.GameVersion == "1.7.10" {
-		return id == request.GameVersion+"-Forge"+build || id == request.GameVersion+"-forge-"+build
-	}
-	return id == request.GameVersion+"-forge-"+build || id == request.GameVersion+"-forge"+request.GameVersion+"-"+build
+	return id == request.GameVersion+"-Forge"+build || id == request.GameVersion+"-forge-"+build || id == request.GameVersion+"-forge"+request.GameVersion+"-"+build
 }
 func legacyForgeCore(request Request, name string) bool {
 	coordinate, err := meta.ParseCoordinate(name)
@@ -72,7 +69,7 @@ func validateLegacyForgeArguments(request Request, values []string) error {
 	allowed := map[string]string{
 		"--username": "auth_player_name", "--version": "version_name", "--gameDir": "game_directory",
 		"--assetsDir": "assets_root", "--assetIndex": "assets_index_name", "--uuid": "auth_uuid",
-		"--accessToken": "auth_access_token", "--userType": "user_type", "--versionType": "version_type", "--userProperties": "user_properties",
+		"--session": "auth_session", "--accessToken": "auth_access_token", "--userType": "user_type", "--versionType": "version_type", "--userProperties": "user_properties",
 	}
 	seen := make(map[string]bool)
 	for i := 0; i < len(values); i += 2 {
@@ -88,11 +85,30 @@ func validateLegacyForgeArguments(request Request, values []string) error {
 			continue
 		}
 		key, ok := allowed[option]
+		if option == "--userProperties" && value == "{}" {
+			continue
+		}
+		if option == "--assetsDir" && value == "$"+"{game_assets}" {
+			continue
+		}
 		if !ok || value != "$"+"{"+key+"}" {
 			return errors.New("旧Forge包含不支持的游戏参数或占位符")
 		}
 	}
-	for _, required := range []string{"--username", "--version", "--gameDir", "--uuid", "--accessToken", "--tweakClass"} {
+	requiredOptions := []string{"--username", "--version", "--gameDir", "--tweakClass"}
+	switch request.GameVersion {
+	case "1.6.1", "1.6.2", "1.6.4":
+		requiredOptions = append(requiredOptions, "--session")
+		if seen["--accessToken"] || seen["--uuid"] {
+			return errors.New("旧会话参数不能混入另一套账户参数")
+		}
+	default:
+		requiredOptions = append(requiredOptions, "--uuid", "--accessToken")
+		if seen["--session"] {
+			return errors.New("现代身份参数不能混入旧会话参数")
+		}
+	}
+	for _, required := range requiredOptions {
 		if !seen[required] {
 			return errors.New("旧Forge缺少必需的身份或Tweaker参数")
 		}
@@ -150,19 +166,25 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 	if !hasVersion || !hasInstall || z.Has("version.json") {
 		return spec, true, errors.New("Forge新旧安装格式混合或不完整")
 	}
-	for _, key := range []string{"processors", "spec", "json", "data"} {
+	if raw, ok := fields["spec"]; ok {
+		var generation int
+		if err := json.Unmarshal(raw, &generation); err != nil || generation != 0 || strings.TrimSpace(string(raw)) == "null" {
+			return spec, true, errors.New("旧Forge仅接受明确的spec0")
+		}
+	}
+	for _, key := range []string{"processors", "json", "data"} {
 		if _, ok := fields[key]; ok {
 			return spec, true, errors.New("旧Forge清单混入现代处理器字段")
 		}
 	}
 	if _, supported := legacyForgeTweakerFor(request); !supported {
-		return spec, true, errors.New("已识别旧Forge安装器；当前仅支持1.7.10/1.12.2的install/versionInfo无处理器格式，其他代际待接入")
+		return spec, true, errors.New("已识别旧Forge安装器；此版本不在已列明1.6–1.12正式版兼容范围，不能执行未知组件")
 	}
-	if err := request.Validate(); err != nil {
+	if err := request.ValidateBase(base); err != nil {
 		return spec, true, err
 	}
-	if base.ID != request.GameVersion || base.Java.Major != 8 || len(base.Sources) > 1 {
-		return spec, true, errors.New("旧Forge要求单文档官方Java8客户端")
+	if base.ID != request.GameVersion || base.Java.Major != 8 {
+		return spec, true, errors.New("旧Forge要求已固定来源的官方Java8客户端")
 	}
 	if err := base.ValidateVanilla(); err != nil {
 		return spec, true, err
@@ -170,21 +192,11 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 	if err := json.Unmarshal(data, &spec); err != nil {
 		return spec, true, err
 	}
-	version, err := meta.ParseVersion(spec.VersionInfo)
+	version, err := parseLegacyForgeVersion(spec.VersionInfo, base.ID, spec.Install.Minecraft)
 	if err != nil {
 		return spec, true, fmt.Errorf("旧Forge versionInfo无效: %w", err)
 	}
-	// Only this explicitly supported generation may omit inheritsFrom. Both
-	// the fixed installer and versionInfo.jar must independently bind the base.
-	if request.GameVersion == "1.7.10" && version.InheritsFrom == "" && version.Jar == base.ID && spec.Install.Minecraft == base.ID {
-		var presence struct{ InheritsFrom json.RawMessage }
-		if err := json.Unmarshal(spec.VersionInfo, &presence); err != nil {
-			return spec, true, err
-		}
-		if len(presence.InheritsFrom) == 0 {
-			version.InheritsFrom = base.ID
-		}
-	}
+
 	if !legacyForgeID(request, version.ID) || spec.Install.Version != version.ID || version.InheritsFrom != base.ID || version.MainClass != legacyForgeMain || version.Arguments != nil || version.LegacyArguments == "" || len(version.Patches) != 0 || len(version.Downloads) != 0 || version.AssetIndex.ID != "" || version.Java.Major != 0 && version.Java.Major != 8 {
 		return spec, true, errors.New("旧Forge客户端版本、父身份、主类或参数格式不受支持")
 	}

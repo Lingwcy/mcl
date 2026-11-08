@@ -42,13 +42,12 @@ func (s *LoaderService) resolve(ctx context.Context, value instance.Instance, ba
 	if !ok {
 		return resolvedVersion{version: base}, nil
 	}
-	// Loader caches currently pin a single official base digest. Do not reuse
-	// a processor generation against a mutable multi-document base chain.
-	if len(base.Sources) > 1 {
-		return resolvedVersion{}, fmt.Errorf("继承型官方客户端的加载器缓存身份尚未接入；当前仅支持其原版启动")
+	request, err := (loader.Request{Type: required.Type, Version: required.Version, GameVersion: value.Version.ID, BaseSHA1: strings.ToLower(value.Version.SHA1)}).WithBase(base)
+	if err != nil {
+		return resolvedVersion{}, err
 	}
-	request := loader.Request{Type: required.Type, Version: required.Version, GameVersion: value.Version.ID, BaseSHA1: strings.ToLower(value.Version.SHA1)}
-	if err := request.Validate(); err != nil {
+	request, err = request.WithPlatform(target)
+	if err != nil {
 		return resolvedVersion{}, err
 	}
 	profile, cacheErr := s.store.Load(ctx, request)
@@ -82,6 +81,9 @@ func (s *LoaderService) resolve(ctx context.Context, value instance.Instance, ba
 		if err := s.store.Save(ctx, profile); err != nil {
 			return resolvedVersion{}, fmt.Errorf("保存加载器配置: %w", err)
 		}
+	}
+	if profile.Request != request {
+		return resolvedVersion{}, fmt.Errorf("加载器缓存与当前完整基底身份不匹配")
 	}
 	effective, err := profile.Merge(base)
 	if err != nil {

@@ -110,7 +110,10 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 				relative = coordinate.Path()
 			}
 			if lib.LocalRoot != "" {
-				p.Classpath = append(p.Classpath, path.Join(lib.LocalRoot, relative))
+				local := path.Join(lib.LocalRoot, relative)
+				if !slices.Contains(p.Classpath, local) {
+					p.Classpath = append(p.Classpath, local)
+				}
 				continue
 			}
 			file, err := add("cache/libraries/"+relative, data)
