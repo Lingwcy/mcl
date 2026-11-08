@@ -652,3 +652,14 @@ C阶段统一体验包已构建；实现支持矩阵和未验收项以第24节�
 - 新增base_identity_test.go、compatibility_matrix_test.go、conditional_libraries_test.go、forge_complete_chain_test.go、forge_native_tasks_test.go、forge_directory_tasks_test.go、processor_compatibility_test.go等合成回归源码并调整原有边界；覆盖完整父链/跨平台缓存、早期旧模板矩阵、条件库、原生数据/路径/未知输入、规范化摘要和工具Java8/固定清单。全部未运行、未编译测试目标；生产build不等于测试通过。
 - 未执行test/vet/race、Java探测、任何处理器/安装器/游戏、真实目录变更、UI自动化或资源公网安装验收。只有只读参考/官方源码访问；不编造真实Forge版本、游戏主菜单或异常恢复通过记录。
 - C的上述实现范围统一收尾，验证债务完整保留。范围外老式客户端改写/缺摘要资源、未知Tweaker/插件/脚本、缺CPU native、未来格式与服务端安装语义继续明确不支持，不将这些包装成“所有历史版本已兼容”。D–P不在本次执行。
+
+
+## 25. 用户1.6.1截图：OS version缺失修复（2026-11-09）
+
+- 用户实际体验1.6.1时，安装任务报“客户端平台兼容性: library org.lwjgl.lwjgl:lwjgl:2.9.0: OS version is required to evaluate this rule”。这是用户提供的失败证据，不是成功运行验收；截图未确认OS/CPU/Java，不填造具体兼容组合。
+- 根因是入口将meta.CurrentPlatform()直接交给LibraryService与InstallationService。它只含编译OS/CPU，Version始终为空；旧LWJGL的os.version正则在原版前置检查遇到空值后按设计拒绝。规则检查本身不能跳过，不能写死10.0、改成“缺省放行”或把这次错误解释成用户Java/下载损坏。
+- 新增platform.HostPlatform与host_darwin/windows/linux适配，应用依赖组装时读取一次并注入同一快照：macOS用kern.osproductversion（产品版本，不是Darwin内核），Windows用RtlGetNtVersionNumbers的major.minor（不受GetVersionEx清单兼容值影响、不使用营销版本名/构建号），Linux用uname release（不是发行版VERSION_ID）。沿安装/修复/启动准备/参数选择的现有平台值传递，不在UI渲染或核心规则解析时探测，不执行Java/shell。
+- 系统版本读取失败不伪造；保留OS/CPU供不依赖版本的现代功能使用，日志保留真实探测错误。版本敏感规则仍明确失败，错误改为中文“无法判断系统版本规则：未读取到当前操作系统版本”。无新依赖、无配置/实例/缓存格式变更，不要求删除实例或重下载完整游戏。
+- 新增platform/host_test.go（注入探测函数的纯值测试）、meta/os_version_test.go和install/os_version_test.go（旧LWJGL规则结构与计划传递）。覆盖三平台值、旧macOS匹配/非匹配、不同OS短路、读取失败/缺版本仍拒绝；均仅合成回归源码，未执行或编译测试目标。
+- gofmt与git diff --check；生产build、Windows/Linux/macOS amd64主程序交叉编译、MyGo darwin/arm64编译/临时签名/DMG均成功。体验包build/darwin-arm64/mcl-0.0.2-os-version-fix-arm64.dmg约8.5MB；Windows单文件主程序build/mcl-os-version-fix-windows-amd64.exe约27MB，不是NSIS安装包。
+- 没有运行测试/vet/race、原生系统版本探测、Java/处理器/游戏或用户真实目录操作，不把编译当作1.6.1已启动成功。用户替换修正版后可在原实例“再次校验/重试”；后续实际缺CPU native等错误仍需按真实结果处理。

@@ -69,7 +69,13 @@ func run() error {
 	catalog := meta.NewClient(paths.Metadata)
 	instances := storage.NewInstanceStore(paths.Instances)
 	loaderCatalog := loader.NewClient()
-	library := app.NewLibraryServiceWithLoaders(catalog, instances, meta.CurrentPlatform(), loaderCatalog)
+	host, hostErr := platform.HostPlatform()
+	if hostErr != nil {
+		// Modern versions without an OS-version predicate can still be managed.
+		// Rules requiring the unavailable version continue to fail closed.
+		slog.Warn("OS version could not be read; version-sensitive rules will fail", "error", hostErr)
+	}
+	library := app.NewLibraryServiceWithLoaders(catalog, instances, host, loaderCatalog)
 	sessions := storage.NewSessionStore(paths.Root, process.Running)
 	assetStore := storage.NewAssetStore(paths.Instances)
 	assets := app.NewAssetsService(instances, assetStore, sessions)
@@ -109,11 +115,11 @@ func run() error {
 		&java.Installer{Directory: filepath.Join(paths.Root, "java"), Transfers: transfers, Transport: network, Cache: downloadCache}, javaCatalog)
 	forgeInstaller := loader.NewForgeInstallerWithJava(loaderCatalog, sharedDownloads, process.RunLoaderProcessor, javaService.EnsureProcessor)
 	loaders := app.NewLoaderService(loaderCatalog, storage.NewLoaderStore(paths.Root), forgeInstaller)
-	installations := app.NewInstallationServiceWithGameDirectory(catalog, instances, storage.NewInstallationStore(paths.Root), sharedDownloads, meta.CurrentPlatform(), sessions, loaders, assetStore.Directory, assetStore.OpenGame)
+	installations := app.NewInstallationServiceWithGameDirectory(catalog, instances, storage.NewInstallationStore(paths.Root), sharedDownloads, host, sessions, loaders, assetStore.Directory, assetStore.OpenGame)
 	instanceSettings := app.NewInstanceSettingsService(instances, sessions)
 	instanceDeletion := app.NewInstanceDeletionService(storage.NewInstanceDeletionStore(paths.Root), sessions, mygo.Shell.TrashItem)
 	memoryProbe := platform.NewMemoryProbe()
-	memoryService := app.NewMemoryService(memoryProbe, meta.CurrentPlatform().Arch)
+	memoryService := app.NewMemoryService(memoryProbe, host.Arch)
 	launcher := app.NewLaunchService(installations, javaService.Ensure, memoryProbe, func(plan launch.Plan, register func(launch.ProcessIdentity) error) (launch.Game, error) {
 		game, err := assetStore.OpenGame(ctx, plan.InstanceID())
 		if err != nil {
