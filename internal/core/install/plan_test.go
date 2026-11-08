@@ -101,7 +101,7 @@ func TestAssetIndexPlanAndBoundaries(t *testing.T) {
 	if _, err := PlanAssets(data); err == nil {
 		t.Fatal("conflicting hash size accepted")
 	}
-	for _, body := range []string{`{}`, `{"objects":{},"virtual":true}`, `{"objects":{},"map_to_resources":true}`, `{"objects":{"../a":{"hash":"` + hash + `","size":1}}}`, `{"objects":{"a":{"hash":"bad","size":1}}}`} {
+	for _, body := range []string{`{}`, `{"objects":{"../a":{"hash":"` + hash + `","size":1}}}`, `{"objects":{"a":{"hash":"bad","size":1}}}`} {
 		if _, err := PlanAssets([]byte(body)); err == nil {
 			t.Fatalf("invalid asset index accepted: %s", body)
 		}

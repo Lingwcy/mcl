@@ -182,3 +182,21 @@ func TestLegacyLog4jConfigurationRetainsVerifiedPath(t *testing.T) {
 		t.Fatal("legacy logging did not use verified file path")
 	}
 }
+
+func TestHistoricalGameAssetsUsesCurrentInstanceGeneration(t *testing.T) {
+	o := legacyOptions(t, "--username ${auth_player_name} --assets ${game_assets}")
+	o.LegacyAssetsDirectory = "instances/" + o.InstanceID + "/legacy-assets/ready-" + strings.Repeat("A", 26)
+	plan, err := Build(o, session(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := plan.ProcessArguments("support.jar")
+	expected := filepath.Join(o.Root, filepath.FromSlash(o.LegacyAssetsDirectory), "files")
+	if !slices.Contains(args, expected) {
+		t.Fatal("game_assets did not use the prepared instance generation")
+	}
+	o.LegacyAssetsDirectory = "instances/foreign/legacy-assets/ready-" + strings.Repeat("A", 26)
+	if _, err := Build(o, session(t)); err == nil {
+		t.Fatal("foreign asset generation accepted")
+	}
+}

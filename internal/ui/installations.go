@@ -307,6 +307,8 @@ func installationStage(stage string) string {
 		return "下载与校验游戏文件"
 	case "assets":
 		return "下载与校验资产对象"
+	case "legacy-assets":
+		return "准备历史资源"
 	case "natives":
 		return "准备本地库"
 	default:

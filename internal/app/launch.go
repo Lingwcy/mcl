@@ -206,7 +206,7 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	}
 	options := launch.Options{
 		Root: s.installations.client.Root, InstanceID: id, Version: resolved.version, GameDirectory: gameDirectory,
-		Platform: s.installations.platform, Java: runtime, NativeDirectory: receipt.NativeDirectory,
+		Platform: s.installations.platform, Java: runtime, NativeDirectory: receipt.NativeDirectory, LegacyAssetsDirectory: receipt.LegacyAssetsDirectory,
 		MaxMemoryMiB: memoryMiB,
 		GCMode:       fallback.GCMode, JVMArguments: jvmArguments, Game: fallback.Game,
 	}

@@ -14,21 +14,25 @@ import (
 // Receipt records a completed installation, not an integrity guarantee for
 // later launches. Preparation must still verify the required files each time.
 type Receipt struct {
-	InstanceID        string           `json:"instanceId"`
-	VersionID         string           `json:"versionId"`
-	VersionSHA1       string           `json:"versionSha1"`
-	OS                string           `json:"os"`
-	Arch              string           `json:"arch"`
-	NativeDirectory   string           `json:"nativeDirectory"`
-	CompletedAt       time.Time        `json:"completedAt"`
-	Loader            *instance.Loader `json:"loader,omitempty"`
-	LoaderFingerprint string           `json:"loaderFingerprint,omitempty"`
+	InstanceID            string           `json:"instanceId"`
+	VersionID             string           `json:"versionId"`
+	VersionSHA1           string           `json:"versionSha1"`
+	OS                    string           `json:"os"`
+	Arch                  string           `json:"arch"`
+	NativeDirectory       string           `json:"nativeDirectory"`
+	LegacyAssetsDirectory string           `json:"legacyAssetsDirectory,omitempty"`
+	CompletedAt           time.Time        `json:"completedAt"`
+	Loader                *instance.Loader `json:"loader,omitempty"`
+	LoaderFingerprint     string           `json:"loaderFingerprint,omitempty"`
 }
 
 func (r Receipt) Validate() error {
 	parent := path.Join("instances", r.InstanceID, "natives")
 	if !instance.ValidID(r.InstanceID) || !meta.ValidID(r.VersionID) || !meta.ValidSHA1(r.VersionSHA1) || r.CompletedAt.IsZero() || !validNativeGeneration(parent, r.NativeDirectory) {
 		return errors.New("invalid installation receipt")
+	}
+	if r.LegacyAssetsDirectory != "" && !validLegacyGeneration(path.Join("instances", r.InstanceID, "legacy-assets"), r.LegacyAssetsDirectory) {
+		return errors.New("invalid legacy asset receipt directory")
 	}
 	if (r.OS != "osx" && r.OS != "windows" && r.OS != "linux") || (r.Arch != "amd64" && r.Arch != "arm64" && r.Arch != "386") {
 		return errors.New("invalid installation platform")

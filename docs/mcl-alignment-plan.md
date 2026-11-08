@@ -1,7 +1,7 @@
 # mcl 能力补齐与参考对齐 Plan
 
 日期：2026-11-08
-状态：逐项实施中。C1、C2 已实现并构建/交付；新增回归和真实 JVM/游戏验证待授权。下一项 C3 历史资产及本地库。每项先更新本 Plan，再单独 commit。
+状态：逐项实施中。C1–C3 已完成各自实现/构建交付；新增回归及真实 JVM/游戏验证待授权。下一项 C4 旧 Forge 与 loader 兼容。每项先更新本 Plan，再单独 commit。
 主要参考：SJMCL，基线 d5b109e0abb42460a8fd665c58ca4b0cc9982182。
 
 ## 1. 目标与现状
@@ -84,6 +84,8 @@ C 兼容性底座 → D 既有目录接入 → T 持久下载与恢复 → I 实
 - 补旧版日志配置、平台规则与启动占位符；不为了兼容偷偷下载 Agent/认证或安全补丁。
 
 ### C3. 历史资产及本地库
+
+状态：已研究、已设计、已实现、已构建/交付；回归、历史游戏与文件系统竞争验证未运行。范围为带固定摘要索引/对象的 virtual、map_to_resources 和现有 native 格式；不扩展为所有旧版本/ARM本地库兼容，见第20节。
 
 - 补 virtual/assets 与 map-to-resources 等历史布局，明确共享对象与实例映射的所有权。
 - 覆盖旧 classifier natives、解压排除项和不同系统/架构命名；不能把 x86 的“64”当作 ARM64。
@@ -263,7 +265,16 @@ C2 实现/构建闭环：
 - [x] 补离线回归源码并完成生产/Windows和Linux amd64编译、macOS arm64体验包，更新 Plan 后单独提交。
 - [ ] 授权后执行新增离线回归及真实1.12.2/1.16.5与继承样本验收；不把合成文档当官方历史版本已验证。
 
-下一项 C3：历史 virtual/assets、map-to-resources、具名资源映射所有权与取消恢复、旧 native classifier/排除项和架构匹配。C4 及后续 D–P 未实施。
+C3 实现/构建闭环：
+
+- [x] 支持散列对象与具名映射计划分离，索引/路径/别名/文件目录冲突及资源规模边界。
+- [x] 实例独占 virtual 资源代际、所有权标记、私有复制/非覆盖发布/收据/启动 game_assets 路由。
+- [x] map_to_resources 使用入口注入的真实游戏目录，缺项非覆盖发布、相同复用、不同冲突保留；取消/重开可重查已发布子集。
+- [x] 旧 native 操作系统/位数/ARM 明确匹配、排除项校验、同FD解压前后摘要与CRC/展开边界、所有权回收。
+- [x] 补回归源码，生产/Windows和Linux amd64编译及macOS arm64体验包，更新Plan后单独提交。
+- [ ] 授权后执行离线回归、真实历史版本/native与外部目录/取消/竞争/崩溃验收；本轮未执行。
+
+下一项 C4：按Forge安装器代际、处理器Java与客户端后处理逐类扩展；明确导入/安装/可运行状态。D–P仍未实施。
 
 ## 17. 具体如何参考我们的参考仓库
 
@@ -475,3 +486,32 @@ C2 实现/构建闭环：
 - CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize成功编译/临时签名/DMG；build/darwin-arm64/mcl-0.0.2-legacy-metadata-preview-arm64.dmg约8.5MB，未公证、未发布Release。
 - 新增meta/legacy_test.go、resolve_test.go与launch/legacy_test.go，覆盖词法/Unicode/引用边界、官方来源/摘要/独立原文缓存、父链循环/深度/取消、null/未知补丁/客户端引用拒绝、条件变体/深拷贝、组合规模、旧在线/离线会话/令牌隐私、继承客户端安装和启动计划、旧日志。全部仅回归源码，未执行、未编译测试目标。
 - 没有运行go test/vet/race、UI自动化、网络验收、Java或Minecraft；不将生产/交叉编译称为历史版本实机通过。下一项为C3。
+
+## 20. C3 实施记录（2026-11-08）
+
+### 参考与选择
+
+- 固定参考 d5b109e0abb42460a8fd665c58ca4b0cc9982182，静态读取 launch/helpers/file_validator.rs 的 prepare_legacy_assets、get_native_library_artifacts/get_native_library_paths/extract_native_libraries，instance/helpers/asset_index.rs、command_generator.rs 的 game_assets/assets_root。参考按 legacy/pre-1.6 索引名复制到共享virtual/legacy及游戏resources，已存在则跳过；mcl不照搬按名称猜布局、无界复制或存在即成功。
+- 采用实际索引的virtual/map_to_resources标记及游戏模板game_assets需求，仍只下载官方散列对象，不构造历史私有源、替换ARM库或下载安全/认证补丁。具名副本按实例隔离，不写共享virtual目录、无硬链接，规避不同实例/旧游戏修改互相影响。当前顺序复制（单项并发），不新增下载预算或后台动画。
+
+### 完整链路与归属
+
+- core/install/asset_plan.go：有界索引解析为共享Files和排序Mappings；摘要去重、同hash大小一致，拒绝穿越/绝对路径/Windows保留名/大小写和NFC别名（含父目录）/文件目录冲突。索引16MiB、100000项，具名对象单项512MiB、按具名路径累计16GiB；不放开原下载/解压边界。
+- execute.go/asset_files.go：从同一FD重新验证索引的固定大小/摘要再解析，复制时校验实际流的SHA1、大小、FD与路径身份和修改时间。逐级打开真实目录，拒绝根内外链接重定向；复制不链接共享对象。另一个实例修复替换共享对象时，本次旧FD或完整校验副本可保留；身份变化则失败，不发布未校验内容。
+- legacy_assets.go：virtual写中央 instances/<id>/legacy-assets/.prepare-<nonce>，内容位于files，成功非覆盖发布ready代际。Kind/实例/nonce/索引摘要owner标记有界读取；收据新增可选legacyAssetsDirectory，旧收据仍可读。每次准备新代际，保存成功才回收原收据代际；保存失败/取消回收本次代际，异常退出在下次持实例OS锁、确认无游戏后清理已标记遗留。无标记/未知标记/链接目录保留，不猜其可删。
+- map_to_resources写真实游戏resources，内外位置均由入口注入AssetStore.OpenGame，不把外部卷离线变成内置fallback。私有同卷stage核验后逐文件MoveNoReplace；存在且大小/摘要相同才复用，内容不同或链接报错保留。不会整体清空resources，也不删除用户新增、已改或不在本索引的文件。
+- 取消/普通失败/进程退出可留下已发布且校验成功的resources子集与空父目录，下次从固定索引重查/补齐，不声称整批原子事务；不删除已发布文件回滚。私有标记stage可在下次恢复清理，标记写成之前的异常遗留保留。资源冲突须由用户另行处理，不能自动覆盖“修复”。
+- app.InstallationService沿SessionRegistry保留OS锁/存活/更新或删除pending保护，显式新构造器注入游戏根；虚拟代际经安装结果→收据→LaunchService选项→同实例目录校验→game_assets。assets_root仍共享散列索引/对象根，不用它冒充具名目录。任务增加真实“准备历史资源”阶段，未改布局。
+
+### native边界
+
+- 旧classifier按windows/linux/osx/macos与32/64/x86/x64/amd64/x86_64/arm64/aarch64判断。无CPU后缀的旧包只作为x86双位数包，不能推断ARM；缺库/不匹配明确失败。已有现代classifier架构别名也明确处理，不猜未知平台。
+- 排除项最多128、验证安全相对前缀；保留META-INF排除。已验证相同归档/相同排除项去重，不同排除项冲突报错。解压同一FD前后验证归档摘要/大小/身份，ZIP CRC、链接/穿越/Unicode文件别名、10000项/128MiB归档/64MiB单项/256MiB展开边界保留。暂存目录句柄锚定，发布MoveNoReplace，现代native仍走原classPath。
+- 新native代际也写kind/parent/nonce/归档计划摘要标记；自动回收只处理匹配标记目录。旧无标记代际不批量扫删；只有原收据明确引用的旧代际才在成功替换后走已有精确删除。不会凭“ready-”外形删除未知用户目录。
+
+### 构建与待验收
+
+- 受影响Go文件gofmt、git diff --check；CGO_ENABLED=0 ./scripts/go.sh build ./...；Windows/Linux amd64主程序交叉编译返回0。Go1.27.3/MyGo0.7.4，无依赖升级。
+- CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize成功编译/临时签名/DMG；交付build/darwin-arm64/mcl-0.0.2-legacy-assets-preview-arm64.dmg约8.5MB，app约18.8MB，未公证、未发布Release。
+- 新增asset_plan_test.go、legacy_assets_test.go、legacy_execute_test.go并补natives/plan/launch回归，覆盖旗标/去重/路径别名、实际副本/共享隔离/冲突保留、取消重试/遗留标记、链接拒绝、摘要或路径替换、离线缓存执行链、game_assets路由和native架构/排除项。全部未执行、未编译测试目标；格式整理和生产build不等于回归通过。
+- 未运行测试/vet/race、Java/游戏、公网/原生/文件系统自动化或用户目录操作。未增加任何真实历史MC/Java/OS组合“已验收”证据。pre-1.6缺摘要/旧元数据及缺ARM native等边界仍拒绝；不宣称所有历史整合包可运行。下一项C4。

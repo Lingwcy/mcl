@@ -74,18 +74,19 @@ func (s Session) MarshalJSON() ([]byte, error) {
 }
 
 type Options struct {
-	Root            string
-	GameDirectory   string
-	InstanceID      string
-	Version         meta.Version
-	Platform        meta.Platform
-	Java            java.Runtime
-	NativeDirectory string
-	MaxMemoryMiB    int
-	MinMemoryMiB    int
-	GCMode          GCMode
-	JVMArguments    []string
-	Game            GameSettings
+	Root                  string
+	GameDirectory         string
+	InstanceID            string
+	Version               meta.Version
+	Platform              meta.Platform
+	Java                  java.Runtime
+	LegacyAssetsDirectory string
+	NativeDirectory       string
+	MaxMemoryMiB          int
+	MinMemoryMiB          int
+	GCMode                GCMode
+	JVMArguments          []string
+	Game                  GameSettings
 }
 
 // Plan keeps executable arguments private so common formatting and JSON
@@ -248,12 +249,21 @@ func build(o Options, s *Session) (Preview, error) {
 	if gameDirectory == "" {
 		gameDirectory = absolute(path.Join("instances", o.InstanceID, "game"))
 	}
+	if o.LegacyAssetsDirectory != "" {
+		parent := path.Join("instances", o.InstanceID, "legacy-assets")
+		if !install.ValidLegacyAssetsDirectory(parent, o.LegacyAssetsDirectory) {
+			return Preview{}, errors.New("历史资源目录不属于当前实例")
+		}
+	}
 	values := map[string]string{
 		"auth_player_name": "<登录后提供>", "auth_uuid": "<登录后提供>", "auth_access_token": "<登录后提供>", "auth_session": "<登录后提供>", "clientid": "<登录后提供>", "auth_xuid": "<登录后提供>",
 		"user_type": "msa", "user_properties": "{}", "version_name": o.Version.ID, "version_type": o.Version.Type,
 		"game_directory": gameDirectory, "assets_root": absolute("cache/assets"), "assets_index_name": o.Version.AssetIndex.ID,
 		"natives_directory": absolute(o.NativeDirectory), "launcher_name": "mcl", "launcher_version": "0.1.0", "classpath": strings.Join(classpath, separator),
 		"classpath_separator": separator, "library_directory": absolute("cache/libraries"),
+	}
+	if o.LegacyAssetsDirectory != "" {
+		values["game_assets"] = absolute(path.Join(o.LegacyAssetsDirectory, "files"))
 	}
 	if o.Version.LibraryDirectory != "" {
 		values["library_directory"] = absolute(o.Version.LibraryDirectory)
@@ -357,8 +367,8 @@ func substitute(value string, values map[string]string) (string, error) {
 		}
 		key, suffix, closed := strings.Cut(rest, "}")
 		replacement, known := values[key]
-		if key == "game_assets" {
-			return "", errors.New("此版本要求历史 game_assets 目录映射，尚待历史资源布局支持，不能用散列对象目录替代")
+		if key == "game_assets" && !known {
+			return "", errors.New("此版本要求已准备的历史 game_assets 具名目录，不能用散列对象目录替代")
 		}
 		if !closed || !known {
 			return "", fmt.Errorf("不支持的启动参数占位符 %q", key)

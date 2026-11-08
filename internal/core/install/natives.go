@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"context"
 	"crypto/rand"
+	"crypto/sha1"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,8 +13,9 @@ import (
 	"path"
 	"strings"
 
-	"mcl/internal/core/download"
+	assetarchive "mcl/internal/core/archive"
 	"mcl/internal/core/meta"
+	"mcl/internal/fileio"
 )
 
 // PrepareNatives publishes a fresh directory only after all legacy archives
@@ -25,17 +28,32 @@ func PrepareNatives(ctx context.Context, root *os.Root, parent string, archives 
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if err := root.MkdirAll(parent, 0o700); err != nil {
+	parentRoot, err := realDirectory(root, parent, true)
+	if err != nil {
 		return "", err
 	}
+	defer parentRoot.Close()
 	id := rand.Text()
 	temporary, final := path.Join(parent, ".prepare-"+id), path.Join(parent, "ready-"+id)
-	if err := root.Mkdir(temporary, 0o700); err != nil {
+	if err := parentRoot.Mkdir(path.Base(temporary), 0o700); err != nil {
+		return "", err
+	}
+	stage, err := realDirectory(parentRoot, path.Base(temporary), false)
+	if err != nil {
+		return "", err
+	}
+	defer stage.Close()
+	descriptor, err := json.Marshal(archives)
+	if err != nil {
+		return "", err
+	}
+	if err := writeAssetOwner(ctx, stage, assetOwner{1, "native", parent, id, fmt.Sprintf("%x", sha1.Sum(descriptor))}); err != nil {
 		return "", err
 	}
 	defer func() {
 		if err != nil {
-			root.RemoveAll(temporary)
+			stage.Close()
+			parentRoot.RemoveAll(path.Base(temporary))
 		}
 	}()
 	claimed := make(map[string]bool)
@@ -45,31 +63,35 @@ func PrepareNatives(ctx context.Context, root *os.Root, parent string, archives 
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		if err := download.Verify(ctx, root, archive.File); err != nil {
-			return "", fmt.Errorf("verify native archive: %w", err)
-		}
 		if archive.File.Size > 128<<20 {
 			return "", errors.New("native archive exceeds 128 MiB")
 		}
-		if err := extractArchive(ctx, root, temporary, archive, claimed, &expanded, &entries); err != nil {
+		if err := extractArchive(ctx, root, stage, archive, claimed, &expanded, &entries); err != nil {
 			return "", err
 		}
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if err := root.Rename(temporary, final); err != nil {
+	stage.Close()
+	if err := fileio.PublishDirectory(parentRoot, path.Base(temporary), path.Base(final)); err != nil {
 		return "", err
 	}
 	return final, nil
 }
 
-func extractArchive(ctx context.Context, root *os.Root, directory string, archive NativeArchive, claimed map[string]bool, expanded *uint64, entries *int) error {
-	f, err := root.Open(archive.File.Path)
+func extractArchive(ctx context.Context, root, stage *os.Root, archive NativeArchive, claimed map[string]bool, expanded *uint64, entries *int) error {
+	if err := validateNativeExclusions(archive.Exclude); err != nil {
+		return err
+	}
+	f, identity, err := openAssetFile(root, archive.File.Path, archive.File.Size)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	if err := streamAsset(ctx, f, io.Discard, archive.File.Size, archive.File.SHA1); err != nil {
+		return err
+	}
 	z, err := zip.NewReader(f, archive.File.Size)
 	if err != nil {
 		return fmt.Errorf("open native archive: %w", err)
@@ -83,7 +105,7 @@ func extractArchive(ctx context.Context, root *os.Root, directory string, archiv
 			return err
 		}
 		name := strings.TrimSuffix(entry.Name, "/")
-		if !meta.ValidPath(name) {
+		if !meta.ValidPath(name) || !assetarchive.SafePath(name) {
 			return fmt.Errorf("unsafe native archive entry %q", entry.Name)
 		}
 		if entry.Mode()&os.ModeType != 0 && !entry.FileInfo().IsDir() {
@@ -92,14 +114,14 @@ func extractArchive(ctx context.Context, root *os.Root, directory string, archiv
 		if entry.FileInfo().IsDir() {
 			continue
 		}
-		excluded := strings.HasPrefix(name, "META-INF/")
+		excluded := name == "META-INF" || strings.HasPrefix(name, "META-INF/")
 		for _, prefix := range archive.Exclude {
 			excluded = excluded || strings.HasPrefix(name, prefix)
 		}
 		if excluded {
 			continue
 		}
-		key := strings.ToLower(name)
+		key := assetarchive.Key(name)
 		if claimed[key] {
 			return fmt.Errorf("duplicate native entry %q", name)
 		}
@@ -108,15 +130,20 @@ func extractArchive(ctx context.Context, root *os.Root, directory string, archiv
 			return errors.New("native archive expansion limit exceeded")
 		}
 		*expanded += entry.UncompressedSize64
-		target := path.Join(directory, name)
-		if err := root.MkdirAll(path.Dir(target), 0o700); err != nil {
+		target, err := realDirectory(stage, path.Dir(name), true)
+		if err != nil {
 			return err
 		}
-		if err := extractEntry(ctx, root, target, entry); err != nil {
+		err = extractEntry(ctx, target, path.Base(name), entry)
+		target.Close()
+		if err != nil {
 			return err
 		}
 	}
-	return nil
+	if err := streamAsset(ctx, f, io.Discard, archive.File.Size, archive.File.SHA1); err != nil {
+		return err
+	}
+	return sameAssetFile(root, archive.File.Path, f, identity)
 }
 
 func extractEntry(ctx context.Context, root *os.Root, target string, entry *zip.File) error {

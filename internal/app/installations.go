@@ -32,17 +32,18 @@ type InstanceReader interface {
 // reservation to a live game. The registry combines an OS lock with persisted
 // kernel process identity to protect sessions left by a previous launcher.
 type InstallationService struct {
-	gameDirectory GameDirectoryResolver
-	catalog       VersionCatalog
-	instances     InstanceReader
-	receipts      InstallationRepository
-	client        *download.Client
-	platform      meta.Platform
-	registry      SessionRegistry
-	loaders       *LoaderService
-	mu            sync.Mutex
-	active        map[string]bool
-	slot          chan struct{}
+	openGameDirectory func(context.Context, string) (*os.Root, error)
+	gameDirectory     GameDirectoryResolver
+	catalog           VersionCatalog
+	instances         InstanceReader
+	receipts          InstallationRepository
+	client            *download.Client
+	platform          meta.Platform
+	registry          SessionRegistry
+	loaders           *LoaderService
+	mu                sync.Mutex
+	active            map[string]bool
+	slot              chan struct{}
 }
 
 func NewInstallationService(catalog VersionCatalog, instances InstanceReader, receipts InstallationRepository, client *download.Client, platform meta.Platform, registry SessionRegistry, loaders *LoaderService, directories ...GameDirectoryResolver) *InstallationService {
@@ -51,6 +52,15 @@ func NewInstallationService(catalog VersionCatalog, instances InstanceReader, re
 		directory = directories[0]
 	}
 	return &InstallationService{gameDirectory: directory, catalog: catalog, instances: instances, receipts: receipts, client: client, platform: platform, registry: registry, loaders: loaders, active: make(map[string]bool), slot: make(chan struct{}, 1)}
+}
+
+// NewInstallationServiceWithGameDirectory adds the ownership-validating opener
+// before the service is shared with workers. Existing internal-only users keep
+// the original constructor; external directories never use a pathname fallback.
+func NewInstallationServiceWithGameDirectory(catalog VersionCatalog, instances InstanceReader, receipts InstallationRepository, client *download.Client, platform meta.Platform, registry SessionRegistry, loaders *LoaderService, directory GameDirectoryResolver, open func(context.Context, string) (*os.Root, error)) *InstallationService {
+	s := NewInstallationService(catalog, instances, receipts, client, platform, registry, loaders, directory)
+	s.openGameDirectory = open
+	return s
 }
 
 func (s *InstallationService) Load(ctx context.Context) (map[string]install.Receipt, error) {
@@ -198,22 +208,39 @@ func (s *InstallationService) execute(ctx context.Context, value instance.Instan
 	if err := install.CleanupNatives(root, parent, previous.NativeDirectory); err != nil {
 		return install.Receipt{}, fmt.Errorf("清理未完成的本地库: %w", err)
 	}
-	result, err := install.Execute(ctx, s.client, plan, parent, report)
+	if err := install.CleanupLegacyAssets(ctx, root, id, previous.LegacyAssetsDirectory); err != nil {
+		return install.Receipt{}, fmt.Errorf("清理未完成历史资源: %w", err)
+	}
+	var game *os.Root
+	if s.openGameDirectory != nil {
+		game, err = s.openGameDirectory(ctx, id)
+		if err != nil {
+			return install.Receipt{}, err
+		}
+		defer game.Close()
+	}
+	// map_to_resources requires the injected, ownership-validated game root.
+	// A missing opener is an explicit failure, never dataRoot fallback.
+	result, err := install.Execute(ctx, s.client, plan, parent, report, game)
 	if err != nil {
 		return install.Receipt{}, err
 	}
-	receipt := install.Receipt{InstanceID: id, VersionID: value.Version.ID, VersionSHA1: value.Version.SHA1, OS: s.platform.OS, Arch: meta.NormalizeArch(s.platform.Arch), NativeDirectory: result.NativeDirectory, CompletedAt: time.Now().UTC()}
+	receipt := install.Receipt{InstanceID: id, VersionID: value.Version.ID, VersionSHA1: value.Version.SHA1, OS: s.platform.OS, Arch: meta.NormalizeArch(s.platform.Arch), NativeDirectory: result.NativeDirectory, LegacyAssetsDirectory: result.LegacyAssetsDirectory, CompletedAt: time.Now().UTC()}
 	if required, ok := value.RequiredLoader(); ok {
 		receipt.Loader, receipt.LoaderFingerprint = &required, resolved.profileFingerprint
 	}
 	if err := s.receipts.Save(ctx, receipt); err != nil {
 		install.RemoveNativeDirectory(root, parent, result.NativeDirectory)
+		install.RemoveLegacyAssets(context.WithoutCancel(ctx), root, id, result.LegacyAssetsDirectory)
 		return install.Receipt{}, fmt.Errorf("保存安装结果: %w", err)
 	}
 	// Only a fully committed generation replaces the old one. This application's
 	// reservation excludes its live sessions from preparation/native cleanup.
 	if previous.NativeDirectory != "" && previous.NativeDirectory != receipt.NativeDirectory {
 		install.RemoveNativeDirectory(root, parent, previous.NativeDirectory)
+	}
+	if previous.LegacyAssetsDirectory != "" && previous.LegacyAssetsDirectory != receipt.LegacyAssetsDirectory {
+		install.RemoveLegacyAssets(context.WithoutCancel(ctx), root, id, previous.LegacyAssetsDirectory)
 	}
 	return receipt, nil
 }

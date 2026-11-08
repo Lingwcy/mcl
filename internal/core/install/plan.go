@@ -2,7 +2,6 @@
 package install
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path"
@@ -31,6 +30,7 @@ type Plan struct {
 	Classpath                               []string
 	ClientPath, AssetIndexPath, LoggingPath string
 	Natives                                 []NativeArchive
+	NeedsGameAssets                         bool
 }
 
 func Build(version meta.Version, platform meta.Platform) (Plan, error) {
@@ -45,8 +45,14 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 		return Plan{}, errors.New("unsupported installation platform")
 	}
 	p := Plan{VersionID: version.ID, Platform: platform}
+	for _, argument := range version.Arguments.Game {
+		for _, value := range argument.Values {
+			p.NeedsGameAssets = p.NeedsGameAssets || strings.Contains(value, "${game_assets}")
+		}
+	}
 	seen := make(map[string]download.File)
 	nativeGroups := make(map[string]bool)
+	nativeArchives := make(map[string]int)
 	add := func(target string, data meta.Download) (download.File, error) {
 		f := download.File{Path: target, Download: data}
 		if err := f.Validate(); err != nil {
@@ -140,6 +146,16 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 		if platform.Arch == "arm64" && !strings.HasSuffix(classifier, "-arm64") && !strings.HasSuffix(classifier, "-aarch64") {
 			return Plan{}, fmt.Errorf("library %s lacks explicit ARM64 natives", lib.Name)
 		}
+		matched, err := legacyNativeMatches(classifier, platform)
+		if err != nil {
+			return Plan{}, fmt.Errorf("library %s: %w", lib.Name, err)
+		}
+		if !matched {
+			return Plan{}, fmt.Errorf("library %s native classifier %s does not match %s/%s", lib.Name, classifier, platform.OS, platform.Arch)
+		}
+		if err := validateNativeExclusions(lib.Extract.Exclude); err != nil {
+			return Plan{}, err
+		}
 		data, ok := lib.Downloads.Classifiers[classifier]
 		if !ok {
 			return Plan{}, fmt.Errorf("library %s is missing classifier %s", lib.Name, classifier)
@@ -153,6 +169,13 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 		if err != nil {
 			return Plan{}, err
 		}
+		if previous, ok := nativeArchives[file.Path]; ok {
+			if !slices.Equal(p.Natives[previous].Exclude, lib.Extract.Exclude) {
+				return Plan{}, errors.New("同一本地库归档存在不同的解压排除项")
+			}
+			continue
+		}
+		nativeArchives[file.Path] = len(p.Natives)
 		p.Natives = append(p.Natives, NativeArchive{File: file, Exclude: slices.Clone(lib.Extract.Exclude)})
 	}
 	for group, matched := range nativeGroups {
@@ -185,7 +208,7 @@ func modernNativeMatches(classifier string, p meta.Platform) (bool, error) {
 		base = "macos"
 	}
 	arch := "amd64"
-	for _, suffix := range []struct{ suffix, arch string }{{"-arm64", "arm64"}, {"-aarch64", "arm64"}, {"-x86", "386"}, {"-arm32", "arm"}} {
+	for _, suffix := range []struct{ suffix, arch string }{{"-x86_64", "amd64"}, {"-aarch64", "arm64"}, {"-arm64", "arm64"}, {"-amd64", "amd64"}, {"-x64", "amd64"}, {"-x86", "386"}, {"-arm32", "arm"}, {"-64", "amd64"}, {"-32", "386"}} {
 		if strings.HasSuffix(base, suffix.suffix) {
 			base = strings.TrimSuffix(base, suffix.suffix)
 			arch = suffix.arch
@@ -211,42 +234,9 @@ type AssetIndex struct {
 	MapToResources bool                   `json:"map_to_resources"`
 }
 
-// PlanAssets accepts only the hashed object layout. Named virtual/resource
-// copies need a separate legacy pipeline and cannot silently appear installed.
+// PlanAssets returns the shared, hash-addressed downloads for every supported
+// layout. Named copies are prepared separately under the instance reservation.
 func PlanAssets(data []byte) ([]download.File, error) {
-	if len(data) > MaxAssetIndexSize {
-		return nil, errors.New("asset index exceeds 16 MiB")
-	}
-	var index AssetIndex
-	if err := json.Unmarshal(data, &index); err != nil {
-		return nil, fmt.Errorf("parse asset index: %w", err)
-	}
-	if index.Objects == nil || index.Virtual || index.MapToResources {
-		return nil, errors.New("unsupported or missing hashed asset layout")
-	}
-	if len(index.Objects) > 100_000 {
-		return nil, errors.New("asset index has too many objects")
-	}
-	byHash := make(map[string]download.File)
-	for name, object := range index.Objects {
-		if !meta.ValidPath(name) || !meta.ValidSHA1(object.Hash) {
-			return nil, errors.New("unsafe asset name or hash")
-		}
-		hash := strings.ToLower(object.Hash)
-		if previous, ok := byHash[hash]; ok && previous.Size != object.Size {
-			return nil, errors.New("conflicting asset size for one hash")
-		}
-		relative := hash[:2] + "/" + hash
-		file := download.File{Path: "cache/assets/objects/" + relative, Download: meta.Download{URL: AssetObjectURL + relative, SHA1: hash, Size: object.Size}}
-		if err := file.Validate(); err != nil {
-			return nil, err
-		}
-		byHash[hash] = file
-	}
-	files := make([]download.File, 0, len(byHash))
-	for _, file := range byHash {
-		files = append(files, file)
-	}
-	slices.SortFunc(files, func(a, b download.File) int { return strings.Compare(a.Path, b.Path) })
-	return files, nil
+	plan, err := ParseAssetPlan(data)
+	return plan.Files, err
 }
