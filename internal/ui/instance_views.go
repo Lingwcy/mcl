@@ -1,10 +1,6 @@
 package ui
 
-import (
-	"fmt"
-
-	"github.com/egoist/mygo/ui"
-)
+import "github.com/egoist/mygo/ui"
 
 func (s *Shell) libraryStatus(c *ui.Context) {
 	l := &s.library
@@ -105,24 +101,6 @@ func (s *Shell) instanceSettingsView(c *ui.Context) {
 				})
 				gameSettingsDivider(c)
 				gameSettingRow(c, "memory", "游戏内存", func() { instanceSettingValue(c, "自动分配") })
-			})
-			ui.Row(c).FillWidth().Gap(10).Children(func() {
-				ui.Text(c, fmt.Sprintf("Java %d · 启动时检查兼容性", state.value.RequiredJava)).FontSize(11).TextColor(t.TextMuted).Grow(1).MinWidth(0).MaxLines(2)
-				ui.Button(c.Key("manage-instance-java"), "Java 管理").Height(26).FontSize(11).Shrink(0).OnClick(func() { s.page = settingsPage })
-			})
-		})
-		ui.Column(c.Key("instance-files-group")).FillWidth().Gap(8).Children(func() {
-			settingsGroupLabel(c, "游戏文件")
-			ui.Column(c).FillWidth().Radius(10).Border(0.5, colors(t).ListDivider).Clip().Children(func() {
-				gameSettingRow(c, "files", "安装文件", func() {
-					ui.Spacer(c)
-					ui.Button(c.Key("repair-install"), "安装 / 修复").Height(26).FontSize(12).Disabled(state.saving || reason != "" || s.installation.active || s.installation.actions.Start == nil || !supportedPackLoader(value)).OnClick(s.startInstallation)
-				})
-				gameSettingsDivider(c)
-				gameSettingRow(c, "launch", "启动条件", func() {
-					ui.Spacer(c)
-					ui.Button(c.Key("check-launch"), "检查").Label("检查启动条件").Height(26).FontSize(12).Disabled(state.saving || reason != "" || s.installation.active || s.installation.actions.Check == nil || !supportedPackLoader(value)).OnClick(s.startLaunchCheck)
-				})
 			})
 		})
 		message := state.validation
