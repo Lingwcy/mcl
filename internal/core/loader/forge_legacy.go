@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -32,24 +31,28 @@ type legacyForgeSpec struct {
 }
 
 func legacyForgeID(request Request, id string) bool {
-	if request.Type != "forge" || request.GameVersion != "1.12.2" {
+	if _, ok := legacyForgeTweakerFor(request); !ok {
 		return false
 	}
 	build := strings.TrimPrefix(request.Version, request.GameVersion+"-")
+	if request.GameVersion == "1.7.10" {
+		return id == request.GameVersion+"-Forge"+build || id == request.GameVersion+"-forge-"+build
+	}
 	return id == request.GameVersion+"-forge-"+build || id == request.GameVersion+"-forge"+request.GameVersion+"-"+build
 }
 func legacyForgeCore(request Request, name string) bool {
 	coordinate, err := meta.ParseCoordinate(name)
 	build := strings.TrimPrefix(request.Version, request.GameVersion+"-")
-	return err == nil && request.Type == "forge" && request.GameVersion == "1.12.2" && coordinate.Group == "net.minecraftforge" && coordinate.Artifact == "forge" && coordinate.Version == request.GameVersion+"-"+build && coordinate.Extension == "jar" && (coordinate.Classifier == "" || coordinate.Classifier == "universal")
+	_, supported := legacyForgeTweakerFor(request)
+	return err == nil && supported && coordinate.Group == "net.minecraftforge" && coordinate.Artifact == "forge" && coordinate.Version == request.GameVersion+"-"+build && coordinate.Extension == "jar" && (coordinate.Classifier == "" || coordinate.Classifier == "universal")
 }
 
-func legacyForgeArguments(template string) (meta.Arguments, error) {
+func legacyForgeArguments(request Request, template string) (meta.Arguments, error) {
 	values, err := meta.SplitLegacyArguments(template)
 	if err != nil {
 		return meta.Arguments{}, err
 	}
-	if err := validateLegacyForgeArguments(values); err != nil {
+	if err := validateLegacyForgeArguments(request, values); err != nil {
 		return meta.Arguments{}, err
 	}
 	result := meta.Arguments{}
@@ -58,7 +61,11 @@ func legacyForgeArguments(template string) (meta.Arguments, error) {
 	}
 	return result, nil
 }
-func validateLegacyForgeArguments(values []string) error {
+func validateLegacyForgeArguments(request Request, values []string) error {
+	tweaker, supported := legacyForgeTweakerFor(request)
+	if !supported {
+		return errors.New("旧Forge游戏代际未接入")
+	}
 	if len(values) == 0 || len(values) > 128 || len(values)%2 != 0 {
 		return errors.New("旧Forge游戏参数必须为有界选项/值对")
 	}
@@ -75,7 +82,7 @@ func validateLegacyForgeArguments(values []string) error {
 		}
 		seen[option] = true
 		if option == "--tweakClass" {
-			if value != legacyForgeTweaker {
+			if value != tweaker {
 				return errors.New("旧Forge使用未知Tweaker，未当作受支持的LaunchWrapper配置")
 			}
 			continue
@@ -104,12 +111,15 @@ func validateLegacyForgeProfile(profile Profile) error {
 		}
 		values = append(values, arg.Values[0])
 	}
-	if err := validateLegacyForgeArguments(values); err != nil {
+	if err := validateLegacyForgeArguments(profile.Request, values); err != nil {
 		return err
 	}
 	core, wrapper := 0, 0
 	for _, lib := range profile.Libraries {
-		if lib.Name == "net.minecraft:launchwrapper:1.12" {
+		if err := validateLegacyRuntimeLibrary(profile.Request, lib, false); err != nil {
+			return err
+		}
+		if legacyForgeWrapper(profile.Request, lib.Name) {
 			wrapper++
 		}
 		if legacyForgeCore(profile.Request, lib.Name) {
@@ -117,7 +127,7 @@ func validateLegacyForgeProfile(profile Profile) error {
 		}
 	}
 	if core != 1 || wrapper != 1 {
-		return errors.New("旧Forge没有唯一匹配版本的Universal或LaunchWrapper 1.12运行库")
+		return errors.New("旧Forge没有唯一匹配版本的Universal或已支持LaunchWrapper运行库")
 	}
 	return nil
 }
@@ -145,8 +155,8 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 			return spec, true, errors.New("旧Forge清单混入现代处理器字段")
 		}
 	}
-	if request.Type != "forge" || request.GameVersion != "1.12.2" {
-		return spec, true, errors.New("已识别旧Forge安装器；本批仅支持1.12.2的install/versionInfo格式，其他代际待接入")
+	if _, supported := legacyForgeTweakerFor(request); !supported {
+		return spec, true, errors.New("已识别旧Forge安装器；当前仅支持1.7.10/1.12.2的install/versionInfo无处理器格式，其他代际待接入")
 	}
 	if err := request.Validate(); err != nil {
 		return spec, true, err
@@ -163,6 +173,17 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 	version, err := meta.ParseVersion(spec.VersionInfo)
 	if err != nil {
 		return spec, true, fmt.Errorf("旧Forge versionInfo无效: %w", err)
+	}
+	// Only this explicitly supported generation may omit inheritsFrom. Both
+	// the fixed installer and versionInfo.jar must independently bind the base.
+	if request.GameVersion == "1.7.10" && version.InheritsFrom == "" && version.Jar == base.ID && spec.Install.Minecraft == base.ID {
+		var presence struct{ InheritsFrom json.RawMessage }
+		if err := json.Unmarshal(spec.VersionInfo, &presence); err != nil {
+			return spec, true, err
+		}
+		if len(presence.InheritsFrom) == 0 {
+			version.InheritsFrom = base.ID
+		}
 	}
 	if !legacyForgeID(request, version.ID) || spec.Install.Version != version.ID || version.InheritsFrom != base.ID || version.MainClass != legacyForgeMain || version.Arguments != nil || version.LegacyArguments == "" || len(version.Patches) != 0 || len(version.Downloads) != 0 || version.AssetIndex.ID != "" || version.Java.Major != 0 && version.Java.Major != 8 {
 		return spec, true, errors.New("旧Forge客户端版本、父身份、主类或参数格式不受支持")
@@ -190,14 +211,17 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 				return spec, true, errors.New("旧Forge依赖checksum声明无效")
 			}
 		}
-		if lib.Name == "net.minecraft:launchwrapper:1.12" {
+		if err := validateLegacyRuntimeLibrary(request, lib.Library, false); err != nil {
+			return spec, true, err
+		}
+		if legacyForgeWrapper(request, lib.Name) {
 			if len(lib.Rules) != 0 || lib.ClientReq != nil && !*lib.ClientReq {
 				return spec, true, errors.New("旧Forge LaunchWrapper入口不能省略")
 			}
 			wrapper++
 		}
 		if lib.Name == spec.Install.Path {
-			if len(lib.Rules) != 0 {
+			if len(lib.Rules) != 0 || lib.ClientReq != nil && !*lib.ClientReq {
 				return spec, true, errors.New("旧Forge Universal不能按平台条件省略")
 			}
 			core++
@@ -207,9 +231,9 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 		}
 	}
 	if core != 1 || wrapper != 1 {
-		return spec, true, errors.New("旧Forge运行库未唯一引用内嵌Universal和LaunchWrapper 1.12")
+		return spec, true, errors.New("旧Forge运行库未唯一引用内嵌Universal和已支持LaunchWrapper")
 	}
-	args, err := legacyForgeArguments(version.LegacyArguments)
+	args, err := legacyForgeArguments(request, version.LegacyArguments)
 	if err != nil {
 		return spec, true, err
 	}
@@ -220,23 +244,20 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 	return spec, true, nil
 }
 
-// Legacy URL aliases are canonicalized only for Forge's own historical Maven
-// root. Never copy a reference proxy or turn arbitrary HTTP into trusted input.
+// Exact historical public repository roots may upgrade to canonical HTTPS.
+// Coordinates still require fixed digests and sizes before downloading. Never
+// rewrite arbitrary artifact URLs, paths, credentials, queries or private hosts.
 func legacyForgeLibraryRoot(value string) (string, error) {
 	switch strings.TrimRight(value, "/") {
-	case "":
+	case "", "http://libraries.minecraft.net", "https://libraries.minecraft.net":
 		return "https://libraries.minecraft.net", nil
 	case "http://files.minecraftforge.net/maven", "https://files.minecraftforge.net/maven", "https://maven.minecraftforge.net":
 		return "https://maven.minecraftforge.net", nil
-	}
-	u, err := url.Parse(value)
-	if err != nil || !AllowedLibraryURL(value) || u.Path != "" && u.Path != "/" {
-		return "", errors.New("旧Forge依赖仓库不受支持")
-	}
-	if u.Host != "libraries.minecraft.net" && u.Host != "repo.maven.apache.org" && u.Host != "repo1.maven.org" {
+	case "http://repo1.maven.org/maven2", "https://repo1.maven.org/maven2", "http://repo.maven.apache.org/maven2", "https://repo.maven.apache.org/maven2":
+		return "https://repo.maven.apache.org/maven2", nil
+	default:
 		return "", errors.New("旧Forge依赖必须使用明确的官方或公共Maven根")
 	}
-	return strings.TrimRight(value, "/"), nil
 }
 
 func (s *ForgeInstaller) prepareLegacyForge(ctx context.Context, z *archive.Zip, request Request, base meta.Version, spec legacyForgeSpec, stage *os.Root, generation, installerSHA1 string, report func(download.Progress)) (Profile, error) {
@@ -297,6 +318,9 @@ func (s *ForgeInstaller) prepareLegacyForge(ctx context.Context, z *archive.Zip,
 			if err != nil {
 				return Profile{}, fmt.Errorf("固定旧Forge依赖 %s: %w", lib.Name, err)
 			}
+			if file.Size > 512<<20 {
+				return Profile{}, errors.New("旧Forge单项依赖超过512MiB")
+			}
 			total += file.Size
 			if total > 4<<30 {
 				return Profile{}, errors.New("旧Forge依赖超过4GiB")
@@ -336,9 +360,10 @@ func (s *ForgeInstaller) prepareLegacyForge(ctx context.Context, z *archive.Zip,
 		}
 		identity.Path = fixed.Path
 		lib.Downloads.Artifact = &identity
-		if lib.Name == spec.Install.Path || lib.Name == "net.minecraft:launchwrapper:1.12" {
-			entry := "net/minecraftforge/fml/common/launcher/FMLTweaker.class"
-			if lib.Name == "net.minecraft:launchwrapper:1.12" {
+		if lib.Name == spec.Install.Path || legacyForgeWrapper(request, lib.Name) {
+			tweaker, _ := legacyForgeTweakerFor(request)
+			entry := strings.ReplaceAll(tweaker, ".", "/") + ".class"
+			if legacyForgeWrapper(request, lib.Name) {
 				entry = "net/minecraft/launchwrapper/Launch.class"
 			}
 			f, err := stage.Open(target)

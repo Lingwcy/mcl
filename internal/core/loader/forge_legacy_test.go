@@ -230,7 +230,7 @@ func TestLegacyForgeRejectsUnknownFormatsAndEntrypoints(t *testing.T) {
 	request, base, document, files := legacyFixture(t)
 	request.GameVersion = "1.7.10"
 	if _, _, err := readLegacyForgeSpec(t.Context(), legacyArchive(t, document, files), request, base); err == nil {
-		t.Fatal("unimplemented earlier generation accepted")
+		t.Fatal("different requested game and official base accepted")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -255,7 +255,7 @@ func TestLegacyRepositoryAndArgumentSafety(t *testing.T) {
 	}
 	values, _ := meta.SelectArguments(spec.version.Arguments.Game, meta.CurrentPlatform())
 	values = append(values, "--tweakClass", legacyForgeTweaker)
-	if err := validateLegacyForgeArguments(values); err == nil {
+	if err := validateLegacyForgeArguments(request, values); err == nil {
 		t.Fatal("duplicate tweaker accepted")
 	}
 }

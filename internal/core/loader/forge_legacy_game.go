@@ -12,6 +12,9 @@ import (
 )
 
 func processedLegacyCore(request Request, name string) bool {
+	if request.GameVersion != "1.12.2" {
+		return false
+	}
 	if legacyForgeCore(request, name) {
 		return true
 	}
@@ -19,10 +22,10 @@ func processedLegacyCore(request Request, name string) bool {
 	return err == nil && request.Type == "forge" && request.GameVersion == "1.12.2" && coordinate.Group == "net.minecraftforge" && coordinate.Artifact == "forge" && coordinate.Version == request.GameVersion+"-"+strings.TrimPrefix(request.Version, request.GameVersion+"-") && coordinate.Classifier == "client" && coordinate.Extension == "jar"
 }
 func normalizeProcessedLegacyVersion(request Request, version *meta.Version) error {
-	if !legacyForgeID(request, version.ID) || version.MainClass != legacyForgeMain || version.Java.Major != 0 && version.Java.Major != 8 || version.Jar != "" && version.Jar != request.GameVersion || len(version.Patches) != 0 || len(version.Downloads) != 0 || version.AssetIndex.ID != "" {
+	if request.GameVersion != "1.12.2" || !legacyForgeID(request, version.ID) || version.MainClass != legacyForgeMain || version.Java.Major != 0 && version.Java.Major != 8 || version.Jar != "" && version.Jar != request.GameVersion || len(version.Patches) != 0 || len(version.Downloads) != 0 || version.AssetIndex.ID != "" {
 		return errors.New("此现代安装器的旧游戏配置不在受支持1.12.2 LaunchWrapper范围")
 	}
-	args, err := legacyForgeArguments(version.LegacyArguments)
+	args, err := legacyForgeArguments(request, version.LegacyArguments)
 	if err != nil {
 		return err
 	}
@@ -32,7 +35,7 @@ func normalizeProcessedLegacyVersion(request Request, version *meta.Version) err
 	return nil
 }
 func validateProcessedLegacyGame(profile Profile) error {
-	if profile.Legacy || !legacyForgeID(profile.Request, profile.ID) || profile.MainClass != legacyForgeMain || profile.JavaMajor != 8 || len(profile.Arguments.JVM) != 0 {
+	if profile.Request.GameVersion != "1.12.2" || profile.Legacy || !legacyForgeID(profile.Request, profile.ID) || profile.MainClass != legacyForgeMain || profile.JavaMajor != 8 || len(profile.Arguments.JVM) != 0 {
 		return errors.New("处理器旧游戏模板身份不匹配")
 	}
 	var values []string
@@ -42,11 +45,14 @@ func validateProcessedLegacyGame(profile Profile) error {
 		}
 		values = append(values, argument.Values[0])
 	}
-	if err := validateLegacyForgeArguments(values); err != nil {
+	if err := validateLegacyForgeArguments(profile.Request, values); err != nil {
 		return err
 	}
 	core, wrapper := 0, 0
 	for _, library := range profile.Libraries {
+		if err := validateLegacyRuntimeLibrary(profile.Request, library, true); err != nil {
+			return err
+		}
 		if processedLegacyCore(profile.Request, library.Name) {
 			if len(library.Rules) != 0 {
 				return errors.New("Forge核心客户端不能条件省略")

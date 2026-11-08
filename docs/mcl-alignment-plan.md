@@ -1,7 +1,7 @@
 # mcl 能力补齐与参考对齐 Plan
 
 日期：2026-11-08
-状态：逐项实施中。C1–C3、C4a/C4b已实现/构建交付；新增回归及真实JVM/处理器/游戏验证待授权。C4整体未完成，下一项C4c为更早Forge代际及剩余身份/处理器能力。每项先更新本Plan，再单独commit。
+状态：逐项实施中。C1–C3、C4a/C4b/C4c1已实现/构建交付；新增回归及真实JVM/处理器/游戏验证待授权。C4整体未完成，下一项C4c2为其余明确旧Forge代际，再继续剩余工具及继承基底完整身份。每项先更新本Plan，再单独commit。
 主要参考：SJMCL，基线 d5b109e0abb42460a8fd665c58ca4b0cc9982182。
 
 ## 1. 目标与现状
@@ -44,7 +44,7 @@
 
 C 兼容性底座 → D 既有目录接入 → T 持久下载与恢复 → I 实例生命周期 → R 游戏资料管理 → A 批量资源维护 → L 诊断/控制 → P 产品化。
 
-- C1–C3、C4a/C4b已完成各自实现/构建闭环，精确范围与未验证项见第18–22节；继续C4c，不跳过其余历史格式和资源差距。
+- C1–C3、C4a/C4b/C4c1已完成各自实现/构建闭环，精确范围与未验证项见第18–23节；继续C4c2，不跳过其余历史格式和资源差距。
 - D 可先只发现现代受支持版本，不为等待全部历史兼容而阻塞只读扫描。
 - T 应复用现有下载控制/缓存/摘要保护，不能另建一套不共享预算的下载器。
 - I 的资源迁移、loader 变更和 A 的批量更新依赖现有实例锁及恢复机制；新增事务不能绕过删除/更新 pending 标记。
@@ -94,7 +94,7 @@ C 兼容性底座 → D 既有目录接入 → T 持久下载与恢复 → I 实
 
 ### C4. 旧 Forge 与 loader 兼容
 
-状态：进行中，不标整体完成。C4a接1.12.2的install/versionInfo无processors格式；C4b接独立工具Java和spec1的受限旧启动模板，均已构建未验证。C4c更早代际、剩余身份/工具及实际验收待推进，见第21–22节。
+状态：进行中，不标整体完成。C4a接1.12.2旧格式；C4b接独立工具Java和spec1受限旧模板；C4c1接1.7.10无处理器旧格式，均仅构建未验证。C4c2继续其余明确旧代际；剩余工具、完整基底身份与实际验收待推进，见第21–23节。
 
 - 按安装器/配置代际列出支持范围，逐类补旧 Forge、缺失 processor/客户端后处理。
 - 固定官方安装器与依赖身份；工具执行有界、可取消、使用经过检查的 Java。
@@ -534,7 +534,8 @@ C4分批状态：
 | Forge 1.12.2 install/versionInfo、内嵌Universal、无processors | C4a已实现/构建，未验证 | 仅两个明确版本ID形式、匹配父ID/坐标、LaunchWrapper 1.12/FMLTweaker、固定依赖身份；缺摘要失败 |
 | 同为1.12.2但新版spec1/version.json且minecraftArguments/LaunchWrapper | C4b已实现/构建，未验证 | 仅现有允许的处理器/任务、唯一匹配核心和LaunchWrapper1.12；不凭游戏版本猜安装器格式 |
 | 现代spec1 + arguments + 已有受支持processor | C4b接独立工具Java | 工具按固定JAR头部下限选择同架构稳定JVM，不改变游戏major；未知/预览/超范围工具拒绝 |
-| 1.7.10及其他更早旧安装器/主类/工具 | 待C4c | 即使有install/versionInfo也暂拒绝，不直接放开旧入口 |
+| 1.7.10 install/versionInfo、内嵌Universal、无processors | C4c1已实现/构建，未验证 | 固定cpw FMLTweaker、LaunchWrapper1.11/1.12唯一入口；不能混成现代旧模板 |
+| 1.8.9等中间代际及更早旧安装器/未知工具 | 待C4c2及后续 | 不从版本范围推断Tweaker/入口，不能泛化为全部旧Forge |
 | NeoForge、其他loader或未知Tweaker伪装旧格式 | 拒绝 | 不借旧标记绕过现代校验 |
 | 多文档官方继承base叠加loader | 仍待后续身份设计 | C2的单base摘要缓存守卫保留 |
 
@@ -581,3 +582,24 @@ C4分批状态：
 - CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize完成编译/临时签名/DMG，build/darwin-arm64/mcl-0.0.2-processor-java-preview-arm64.dmg约8.6MB、app约18.8MB，未公证、未发Release。
 - 新增app/processor_java_test.go、loader/processor_java_test.go、forge_legacy_game_test.go源码，涵盖游戏/工具major隔离、兼容偏好/补丁/EA/架构、缺少时的官方LTS策略、库存失败/取消、固定JAR摘要/头部/扫描预算、multi-release/清单隐式依赖拒绝、现代旧模板生成/缓存/合并与工具失败不发布。合成class仅8字节头且不可执行，模拟Runner只写合成ZIP；14.23.5.2860不是实际官方格式/运行证据。
 - 所有新回归未执行、未编译为测试目标；生产build不等于测试源码通过。未运行test/vet/race、任何Java/处理器/游戏、公网/原生自动化或用户目录操作；没有增加真实可运行组合或实际下载证据。
+
+
+## 23. C4c1：1.7.10 无处理器旧 Forge（2026-11-08）
+
+### 本批行为与参考
+
+- 继续静态阅读固定d5b109e0参考forge.rs旧LegacyInstallProfile分支的install.path/file_path、旧游戏模板与库合并；参考泛化入口/缺少依赖摘要不照搬。独立Go按明确游戏代际选择策略，不开放任意旧主类或推断整个版本范围。
+- 新增1.7.10 install/versionInfo无processors格式：单文档官方Java8基底、固定官方安装器SHA1/大小、匹配带完整分支的Forge核心坐标与两个明确ID形式、内嵌Universal。Tweaker只许cpw.mods.fml.common.launcher.FMLTweaker，核对cpw/...class条目；唯一LaunchWrapper只接1.11或1.12，核对Launch条目，不混用1.12.2的net.minecraftforge命名空间。
+- 仅此旧代际允许省略inheritsFrom：必须原字段确实不存在，并且install.minecraft与versionInfo.jar同时精确指向当前base。显式null/空/其他父ID不回退；不凭实例名、版本前缀、文件名或ID猜身份。其余客户端/资产/patches/Java/模板限制沿C4a，未知代际明确失败。
+- Profile.Legacy复用原有校验/指纹/独立代际，游戏Java8完整模板替换原版game参数，保留官方JVM/client/assets/native与C1私有无凭据支持JAR；不Probe、选择、安装或运行处理器Java。导入/创建/修复/启动沿原LoaderService、安装收据、SessionRegistry和StartTracked，不新增旁路或配置schema。
+- 旧核心和Wrapper不能条件省略、标服务端专用或夹带另一个版本/分类抢占classpath；旧缓存及C4b现代旧模板也施加相应冲突校验。现代LegacyGame仍只接1.12.2，不因共享策略扩展而误放开1.7.10 spec1或未知处理器。
+- 依赖仍先固定摘要与大小；单项512MiB、累计4GiB，checksums约束不弱化。仅精确历史公共仓库根允许规范化HTTPS（Mojang、Forge、Maven Central/maven2），不改写任意artifact URL，不接受私有主机/凭据/查询/额外路径、不绕分发限制；原Maven Central根遗漏maven2路径已修正。
+- Forge目录保留已由官方列出的完整-game分支，数字build的该后缀不再误标预发布；推荐信息可装饰同build/同game的已列出分支，不凭promotion构造下载坐标。未知qualifier仍非稳定，版本身份不删分支，创建前/安装器内继续复核。
+
+### 构建与未验收
+
+- 受影响Go文件gofmt、git diff --check；CGO_ENABLED=0 ./scripts/go.sh build ./...及Windows/Linux amd64主程序交叉编译返回0。Go1.27.3/MyGo0.7.4，无依赖变更。
+- CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize完成编译/临时签名/DMG；build/darwin-arm64/mcl-0.0.2-forge-1.7.10-preview-arm64.dmg约8.6MB、app约18.8MB，未公证、未发布Release。
+- 新增forge_legacy_17_test.go/forge_releases_test.go，调整原有单个参数验证调用；源码覆盖两个Wrapper、显式/缺省父绑定、无工具Java完整准备/缓存/合并/私有启动计划、跨代Tweaker/入口/分支和条件冲突、null/缺失归属/现代语义拒绝、公共根精确升级及目录分支/推荐保留。所有回归未执行、未编译测试目标。
+- 10.13.4.1614-1.7.10仅合成标签，安装包/JAR/类内容均非该官方构建字节，不证明其实际格式、完整安装或可运行。未运行任何Java/处理器/游戏、测试/vet/race、公网/原生自动化或用户目录操作。旧ARM native缺失仍报错，不借x86/更高Java冒充兼容。
+- C4整体未完成。下一项C4c2按明确格式继续1.8.9等中间旧代际，再补剩余processor/完整继承基底身份；目前保留多文档base叠加loader守卫与未知工具错误，不跳D。
