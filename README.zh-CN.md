@@ -23,4 +23,4 @@ git tag v0.0.1
 git push origin main v0.0.1
 ```
 
-CI 自动发布 macOS 通用 DMG（Apple Silicon 和 Intel）、Windows x64 安装包及 SHA-256 校验文件。macOS 应用采用临时签名，Windows 安装包尚未签名。手动运行 **Desktop release** 可生成供下载的构建产物。
+CI 自动发布 macOS 通用 DMG（Apple Silicon 和 Intel）、Windows x64 安装包及 SHA-256 校验文件。Windows 文件名中的 `amd64` 表示 **x86-64／x64**，适用于 Intel 和 AMD 的 64 位 Windows，不是 ARM64，也不适用于 32 位 Windows（x86）。CI 会检查主程序和安装包内程序的真实 PE 架构及摘要，不只检查文件名。macOS 应用采用临时签名，Windows 安装包尚未签名。手动运行 **Desktop release** 可生成供下载的构建产物。
