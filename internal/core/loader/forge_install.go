@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"mcl/internal/core/archive"
 	"mcl/internal/core/download"
@@ -25,19 +24,34 @@ import (
 
 type ProcessorRunner func(context.Context, string, string, []string) error
 
+// ProcessorJavaResolver returns a probed stable runtime for this tool minimum.
+// It is deliberately separate from the game runtime and cannot change its major.
+type ProcessorJavaResolver func(context.Context, int, meta.Platform, []string, func(java.Progress)) (java.Runtime, error)
+
 type ForgeInstaller struct {
-	catalog   *Client
-	downloads *download.Client
-	run       ProcessorRunner
+	catalog     *Client
+	downloads   *download.Client
+	run         ProcessorRunner
+	resolveJava ProcessorJavaResolver
 }
 
 func NewForgeInstaller(catalog *Client, downloads *download.Client, run ProcessorRunner) *ForgeInstaller {
 	return &ForgeInstaller{catalog: catalog, downloads: downloads, run: run}
 }
 
+func NewForgeInstallerWithJava(catalog *Client, downloads *download.Client, run ProcessorRunner, resolve ProcessorJavaResolver) *ForgeInstaller {
+	s := NewForgeInstaller(catalog, downloads, run)
+	s.resolveJava = resolve
+	return s
+}
+
 func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta.Version, executable string, platform meta.Platform, report func(string, download.Progress)) (Profile, error) {
-	ctx, cancel := context.WithTimeout(ctx, 25*time.Minute)
-	defer cancel()
+	// Downloads retain their active-network budgets; user rate-limit waits and
+	// automatic tool-Java installation are not charged to one wall-clock timer.
+	// The production processor adapter bounds each actual child separately.
+	if err := ctx.Err(); err != nil {
+		return Profile{}, err
+	}
 	coordinate, origin, versionID, err := forgeInstaller(request)
 	if err != nil {
 		return Profile{}, err
@@ -124,24 +138,8 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 		}
 		return profile, nil
 	}
-	if s.run == nil {
-		return Profile{}, errors.New("Java 安装处理器未配置")
-	}
-	if executable == "" {
-		return Profile{}, errors.New("此现代安装器需要单独可用的 Java 9+ 处理器环境")
-	}
-	javaRuntime, err := java.Probe(ctx, executable)
-	if err != nil {
-		return Profile{}, err
-	}
-	if err := javaRuntime.Check(max(9, base.Java.Major), platform); err != nil {
-		return Profile{}, fmt.Errorf("现代安装处理器环境不兼容（游戏 Java 与处理器 Java 尚需独立选择）: %w", err)
-	}
 	spec, version, err := readForgeSpec(ctx, z, request, versionID)
 	if err != nil {
-		return Profile{}, err
-	}
-	if err := javaRuntime.Check(max(base.Java.Major, version.Java.Major), platform); err != nil {
 		return Profile{}, err
 	}
 	values, resources, err := forgeData(spec)
@@ -200,7 +198,11 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err := bundleFile.Close(); err != nil {
 		return Profile{}, err
 	}
-	if err := s.runProcessors(ctx, cache, stage, stagePath, javaRuntime.Executable, base, processors, known, progress("loader-processors")); err != nil {
+	if err := s.runProcessors(ctx, cache, stage, stagePath, executable, platform, base, processors, known, progress("loader-processors"), func(p java.Progress) {
+		if report != nil {
+			report(p.Stage, download.Progress{Bytes: p.Bytes, TotalBytes: p.Total})
+		}
+	}); err != nil {
 		return Profile{}, err
 	}
 	if patched, ok := values["PATCHED"]; ok {
@@ -214,11 +216,14 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 			return Profile{}, err
 		}
 	}
-	profile, err := completedForgeProfile(request, version, known, "ready-"+nonce, bundle.SHA1)
+	profile, err := completedForgeProfile(request, version, known, "ready-"+nonce, bundle.SHA1, spec.LegacyGame)
 	if err != nil {
 		return Profile{}, err
 	}
 	if _, err := profile.Merge(base); err != nil {
+		return Profile{}, err
+	}
+	if err := verifyProcessedLegacyEntrypoints(ctx, stage, profile); err != nil {
 		return Profile{}, err
 	}
 	if err := stage.RemoveAll("work"); err != nil {
@@ -276,7 +281,9 @@ func planForgeInputs(z *archive.Zip, libraries map[string]forgeLibrary, processo
 	return inputs, mappings, nil
 }
 
-func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Root, stagePath, executable string, base meta.Version, processors []preparedProcessor, known map[string]meta.Download, report func(download.Progress)) error {
+func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Root, stagePath, executable string, platform meta.Platform, base meta.Version, processors []preparedProcessor, known map[string]meta.Download, report func(download.Progress), javaReport func(java.Progress)) error {
+	classes := 0
+	runtimes := make(map[int]java.Runtime)
 	progress := download.Progress{TotalFiles: len(processors)}
 	report(progress)
 	for index, p := range processors {
@@ -296,24 +303,50 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 				return err
 			}
 		} else {
+			if s.run == nil {
+				return errors.New("Java 安装处理器未配置")
+			}
+			main, err := forgeJarMain(ctx, stage, p.jar)
+			if err != nil {
+				return err
+			}
+			minimum := 9
 			var classpath []string
 			for _, relative := range p.classpath {
 				file, ok := known[relative]
 				if !ok {
 					return fmt.Errorf("安装处理器缺少已校验依赖 %s", relative)
 				}
+				entry := ""
+				if relative == p.jar {
+					entry = main
+				}
+				required, err := processorJarMinimum(ctx, stage, relative, file, entry, &classes)
+				if err != nil {
+					return fmt.Errorf("分析安装工具Java要求 %s: %w", relative, err)
+				}
+				minimum = max(minimum, required)
+				classpath = append(classpath, filepath.Join(stagePath, filepath.FromSlash(relative)))
+			}
+			runtime, found := runtimes[minimum]
+			if !found {
+				runtime, err = s.processorRuntime(ctx, minimum, platform, []string{executable}, javaReport)
+				if err != nil {
+					return err
+				}
+				runtimes[minimum] = runtime
+			}
+			// Java installation may take time; recheck the fixed tools immediately
+			// before handing their paths to the process adapter.
+			for _, relative := range p.classpath {
+				file := known[relative]
 				if _, err := hashForgeFile(ctx, stage, relative, file.SHA1, file.Size); err != nil {
 					return err
 				}
-				classpath = append(classpath, filepath.Join(stagePath, filepath.FromSlash(relative)))
-			}
-			main, err := forgeJarMain(ctx, stage, p.jar)
-			if err != nil {
-				return err
 			}
 			args := append([]string{"-Xmx1024m", "-Dfile.encoding=UTF-8", "-Djava.net.preferIPv4Stack=true", "-cp",
 				strings.Join(classpath, string(os.PathListSeparator)), main}, p.args...)
-			if err := s.run(ctx, executable, filepath.Join(stagePath, "work"), args); err != nil {
+			if err := s.run(ctx, runtime.Executable, filepath.Join(stagePath, "work"), args); err != nil {
 				return fmt.Errorf("安装处理器 %d (%s): %w", index+1, path.Base(p.jar), err)
 			}
 		}
@@ -330,9 +363,9 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 	return nil
 }
 
-func completedForgeProfile(request Request, version meta.Version, known map[string]meta.Download, generation, installerSHA1 string) (Profile, error) {
+func completedForgeProfile(request Request, version meta.Version, known map[string]meta.Download, generation, installerSHA1 string, legacyGame bool) (Profile, error) {
 	profile := Profile{Request: request, ID: version.ID, MainClass: version.MainClass, JavaMajor: version.Java.Major,
-		Arguments: *version.Arguments, Generation: generation, InstallerSHA1: installerSHA1}
+		Arguments: *version.Arguments, Generation: generation, InstallerSHA1: installerSHA1, LegacyGame: legacyGame}
 	seen := make(map[string]bool)
 	for _, library := range version.Libraries {
 		coordinate, err := meta.ParseCoordinate(library.Name)

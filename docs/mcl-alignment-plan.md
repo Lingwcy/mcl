@@ -1,7 +1,7 @@
 # mcl 能力补齐与参考对齐 Plan
 
 日期：2026-11-08
-状态：逐项实施中。C1–C3及C4a首批旧Forge格式已实现/构建交付；新增回归及真实JVM/游戏验证待授权。C4整体未完成，下一项C4b为处理器Java分离及新版安装器的旧启动模板。每项先更新本Plan，再单独commit。
+状态：逐项实施中。C1–C3、C4a/C4b已实现/构建交付；新增回归及真实JVM/处理器/游戏验证待授权。C4整体未完成，下一项C4c为更早Forge代际及剩余身份/处理器能力。每项先更新本Plan，再单独commit。
 主要参考：SJMCL，基线 d5b109e0abb42460a8fd665c58ca4b0cc9982182。
 
 ## 1. 目标与现状
@@ -44,7 +44,7 @@
 
 C 兼容性底座 → D 既有目录接入 → T 持久下载与恢复 → I 实例生命周期 → R 游戏资料管理 → A 批量资源维护 → L 诊断/控制 → P 产品化。
 
-- C1 已获开发授权并完成实现/构建闭环，精确范围与未验证项见第18节；继续 C2，不跳过历史格式和资源差距。
+- C1–C3、C4a/C4b已完成各自实现/构建闭环，精确范围与未验证项见第18–22节；继续C4c，不跳过其余历史格式和资源差距。
 - D 可先只发现现代受支持版本，不为等待全部历史兼容而阻塞只读扫描。
 - T 应复用现有下载控制/缓存/摘要保护，不能另建一套不共享预算的下载器。
 - I 的资源迁移、loader 变更和 A 的批量更新依赖现有实例锁及恢复机制；新增事务不能绕过删除/更新 pending 标记。
@@ -94,7 +94,7 @@ C 兼容性底座 → D 既有目录接入 → T 持久下载与恢复 → I 实
 
 ### C4. 旧 Forge 与 loader 兼容
 
-状态：进行中，不标整体完成。C4a仅接1.12.2的install/versionInfo无processors格式，已构建未验证；C4b及后续代际尚待推进。细分矩阵、采用范围和证据见第21节。
+状态：进行中，不标整体完成。C4a接1.12.2的install/versionInfo无processors格式；C4b接独立工具Java和spec1的受限旧启动模板，均已构建未验证。C4c更早代际、剩余身份/工具及实际验收待推进，见第21–22节。
 
 - 按安装器/配置代际列出支持范围，逐类补旧 Forge、缺失 processor/客户端后处理。
 - 固定官方安装器与依赖身份；工具执行有界、可取消、使用经过检查的 Java。
@@ -532,8 +532,8 @@ C4分批状态：
 | 格式/运行条件 | 本轮状态 | 明确边界 |
 | --- | --- | --- |
 | Forge 1.12.2 install/versionInfo、内嵌Universal、无processors | C4a已实现/构建，未验证 | 仅两个明确版本ID形式、匹配父ID/坐标、LaunchWrapper 1.12/FMLTweaker、固定依赖身份；缺摘要失败 |
-| 同为1.12.2但新版spec1/version.json且minecraftArguments/LaunchWrapper | 仍待C4b | 不能凭游戏版本或同一Forge构建号承诺走旧分支 |
-| 现代spec1 + arguments + 已有受支持processor | 保留既有实现，修正收据身份 | 游戏Java8时仍缺独立处理器Java选择，明确错误，不把高major拿来冒充游戏Java |
+| 同为1.12.2但新版spec1/version.json且minecraftArguments/LaunchWrapper | C4b已实现/构建，未验证 | 仅现有允许的处理器/任务、唯一匹配核心和LaunchWrapper1.12；不凭游戏版本猜安装器格式 |
+| 现代spec1 + arguments + 已有受支持processor | C4b接独立工具Java | 工具按固定JAR头部下限选择同架构稳定JVM，不改变游戏major；未知/预览/超范围工具拒绝 |
 | 1.7.10及其他更早旧安装器/主类/工具 | 待C4c | 即使有install/versionInfo也暂拒绝，不直接放开旧入口 |
 | NeoForge、其他loader或未知Tweaker伪装旧格式 | 拒绝 | 不借旧标记绕过现代校验 |
 | 多文档官方继承base叠加loader | 仍待后续身份设计 | C2的单base摘要缓存守卫保留 |
@@ -555,3 +555,29 @@ C4分批状态：
 - forge_legacy_test.go为合成JSON/JAR/内存HTTP适配源码：安装器完整无Java分支、固定文件身份/代际、缓存序列化/损坏、旧模板到私有启动计划、未知格式/父ID/坐标/Tweaker/URL拒绝、现代格式隔离和取消。receipt_test.go补四类loader收据匹配。全部未执行、未编译测试目标。
 - 用例中的14.23.5.2860字符串和1.12.2仅标识合成结构；安装包字节/摘要/类内容都是合成，不是该官方构建的真实样本。没有下载或运行真实Forge，不能宣称该构建实际使用旧格式、所有1.12.2已支持或已进入游戏。
 - 未运行test/vet/race、Java/处理器/游戏、公网/原生自动化/实机验收。C4整体仍未完成，下一项C4b继续处理器Java分离和现代安装器的旧参数；不跳到D。
+
+
+## 22. C4b 独立工具 Java 与现代安装器旧游戏模板（2026-11-08）
+
+### 参考与分层
+
+- 固定参考仍为d5b109e0abb42460a8fd665c58ca4b0cc9982182，静态复核instance/helpers/loader/common.rs的execute_processors：参考复用游戏配置/客户端java_version选择执行环境。本轮不照搬此耦合、GPL代码、任意仓库/脚本或隐式依赖；继续独立实现Go，未升级依赖。
+- core/loader注入ProcessorJavaResolver；app.JavaService.EnsureProcessor与游戏Ensure分开，main注入同一JavaService的库存、串行受管安装器、网络/并发/缓存预算。工具环境只在实际Java处理器执行前按需准备；C4a无处理器分支和纯受控映射复制不探测/安装工具Java。
+- 游戏仍按原官方/合并配置的精确主版本选择，不因工具需要17/21/25而改变Java8游戏、实例Java偏好或全局默认。工具可使用兼容显式提示，否则选择已装稳定同架构环境中最低适用major/最新补丁；缺少时固定Temurin稳定LTS17/21/25中满足要求的最小major，不以工具策略替换游戏策略。安装失败/取消保持错误，不伪装回退。
+
+### 固定工具与模板边界
+
+- 每个处理器及显式classpath先核验固定JAR大小/SHA1，同一FD扫描前后再验证完整摘要、路径/FD身份、修改时间；复用经过路径/链接/别名/体积校验的ZIP索引，不重复构造完整ZIP目录。archive.ReadPrefix只读8字节class头，不把未完整读取条目的CRC当作校验依据；完整JAR独立摘要才是边界。
+- 全次准备最多50万条class头；保留512MiB/JAR、5万项/ZIP与4GiB展开约束。分析magic/major/minor，工具使用9–25且稳定/同架构（9下限因既有工具参数文件），拒绝预览与超出25的根class。multi-release版本9–25的class不得高于目录版本，未来版本目录不抬高根级下限且不会被当前工具JVM选中。类头下限只是保守选择依据，不是字节码/API/反射或实际运行兼容性证明。
+- 主类必须与固定JAR清单一致且有根级class；工具及classpath依赖的非空Manifest Class-Path直接拒绝，不能在已固定classpath外隐式加载本地或远端代码。保留处理器/任务允许列表、参数/路径和输出身份、受控私有work目录与平台子进程取消/单项期限；未增加Agent、脚本或自定义工具入口。
+- 安装处理器前重新校验所有classpath，避免自动Java准备期间的文件变化被忽略。取消/工具失败不发布运行库代际；已完成的受管Java可复用，不删除共享环境或旧代际。删除整段25分钟墙钟限制，下载继续使用主动网络预算，限速等待/自动Java安装不被累计误杀；真实子进程仍由生产Runner单项限时。
+- spec1/version.json的旧模板只接Forge1.12.2、匹配ID/父ID、Java8、LaunchWrapper1.12及唯一匹配Forge核心（含受控client生成分类）、固定FMLTweaker与完整受限minecraftArguments。不接自定义主类/Tweaker、客户端/资源/patches覆盖或新旧模板混合。未知processor sides不能静默过滤为成功，server用途仍按原规则跳过。
+- Profile新增omitempty的LegacyGame，区分现代处理器+旧游戏模板与C4a无处理器Legacy，不能互相冒充；默认false不改变既有现代缓存指纹。生成入口JAR必须包含FMLTweaker/Launch条目，完整游戏模板替换原版game参数，保留原版JVM/client/assets/native及C1 Java8传输，缓存/收据/真实启动继续沿原锁与StartTracked。
+- 仅沿已有任务阶段显示查找/获取/下载/检查工具Java，不新增说明面板。没有扩展未知处理器任务、1.7.10、继承型base叠加loader或代际回收；C4整体未完成，下一项C4c。
+
+### 构建与未验证
+
+- 受影响Go文件gofmt、git diff --check；CGO_ENABLED=0 ./scripts/go.sh build ./...、Windows/Linux amd64主程序交叉编译均返回0。Go1.27.3/MyGo0.7.4，无依赖更新。
+- CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize完成编译/临时签名/DMG，build/darwin-arm64/mcl-0.0.2-processor-java-preview-arm64.dmg约8.6MB、app约18.8MB，未公证、未发Release。
+- 新增app/processor_java_test.go、loader/processor_java_test.go、forge_legacy_game_test.go源码，涵盖游戏/工具major隔离、兼容偏好/补丁/EA/架构、缺少时的官方LTS策略、库存失败/取消、固定JAR摘要/头部/扫描预算、multi-release/清单隐式依赖拒绝、现代旧模板生成/缓存/合并与工具失败不发布。合成class仅8字节头且不可执行，模拟Runner只写合成ZIP；14.23.5.2860不是实际官方格式/运行证据。
+- 所有新回归未执行、未编译为测试目标；生产build不等于测试源码通过。未运行test/vet/race、任何Java/处理器/游戏、公网/原生自动化或用户目录操作；没有增加真实可运行组合或实际下载证据。

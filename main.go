@@ -103,15 +103,15 @@ func run() error {
 	assetDiagnostics := app.NewAssetDiagnosticService(instances, sessions, assetStore, java.Probe)
 	marketInstaller := app.NewMarketInstaller(marketService, instances, sessions, storage.NewMarketStore(paths.Root), sharedDownloads)
 	archiveImporter := app.NewArchiveImporter(marketService, catalog, instances, sessions, storage.NewArchiveStore(paths.Root), sharedDownloads)
-	forgeInstaller := loader.NewForgeInstaller(loaderCatalog, sharedDownloads, process.RunLoaderProcessor)
-	loaders := app.NewLoaderService(loaderCatalog, storage.NewLoaderStore(paths.Root), forgeInstaller)
-	installations := app.NewInstallationServiceWithGameDirectory(catalog, instances, storage.NewInstallationStore(paths.Root), sharedDownloads, meta.CurrentPlatform(), sessions, loaders, assetStore.Directory, assetStore.OpenGame)
-	instanceSettings := app.NewInstanceSettingsService(instances, sessions)
-	instanceDeletion := app.NewInstanceDeletionService(storage.NewInstanceDeletionStore(paths.Root), sessions, mygo.Shell.TrashItem)
 	javaCatalog := java.NewCatalogClient()
 	javaCatalog.HTTP.Transport = network
 	javaService := app.NewJavaService(storage.NewJavaStore(paths.Root), platform.JavaCandidates,
 		&java.Installer{Directory: filepath.Join(paths.Root, "java"), Transfers: transfers, Transport: network, Cache: downloadCache}, javaCatalog)
+	forgeInstaller := loader.NewForgeInstallerWithJava(loaderCatalog, sharedDownloads, process.RunLoaderProcessor, javaService.EnsureProcessor)
+	loaders := app.NewLoaderService(loaderCatalog, storage.NewLoaderStore(paths.Root), forgeInstaller)
+	installations := app.NewInstallationServiceWithGameDirectory(catalog, instances, storage.NewInstallationStore(paths.Root), sharedDownloads, meta.CurrentPlatform(), sessions, loaders, assetStore.Directory, assetStore.OpenGame)
+	instanceSettings := app.NewInstanceSettingsService(instances, sessions)
+	instanceDeletion := app.NewInstanceDeletionService(storage.NewInstanceDeletionStore(paths.Root), sessions, mygo.Shell.TrashItem)
 	memoryProbe := platform.NewMemoryProbe()
 	memoryService := app.NewMemoryService(memoryProbe, meta.CurrentPlatform().Arch)
 	launcher := app.NewLaunchService(installations, javaService.Ensure, memoryProbe, func(plan launch.Plan, register func(launch.ProcessIdentity) error) (launch.Game, error) {

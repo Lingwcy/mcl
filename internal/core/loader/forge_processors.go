@@ -135,7 +135,9 @@ func prepareForgeProcessor(spec forgeProcessor, values map[string]forgeValue, st
 		if err != nil {
 			return result, err
 		}
-		result.classpath = append(result.classpath, p)
+		if !slices.Contains(result.classpath, p) {
+			result.classpath = append(result.classpath, p)
+		}
 	}
 	result.outputs = make(map[string]string)
 	for target, hash := range spec.Outputs {
@@ -231,6 +233,19 @@ func forgeJarMain(ctx context.Context, stage *os.Root, relative string) (string,
 	if err != nil {
 		return "", err
 	}
+	main, err := processorManifest(data)
+	if err != nil {
+		return "", err
+	}
+	if main == "" {
+		return "", errors.New("安装处理器缺少有效主类")
+	}
+	return main, nil
+}
+
+// A manifest must not expand the fixed classpath with implicit local/remote
+// dependencies. Explicit processor classpaths remain the only source of code.
+func processorManifest(data []byte) (string, error) {
 	scanner := bufio.NewScanner(strings.NewReader(string(data)))
 	var fields []string
 	for scanner.Scan() {
@@ -247,14 +262,25 @@ func forgeJarMain(ctx context.Context, stage *os.Root, relative string) (string,
 	if err := scanner.Err(); err != nil {
 		return "", err
 	}
+	main := ""
 	for _, line := range fields {
 		key, class, found := strings.Cut(line, ": ")
-		if found && strings.EqualFold(key, "Main-Class") && class != "" && !strings.HasPrefix(class, "-") &&
+		if !found {
+			continue
+		}
+		if strings.EqualFold(key, "Class-Path") && strings.TrimSpace(class) != "" {
+			return "", errors.New("安装工具清单不能隐式扩展固定依赖")
+		}
+		if !strings.EqualFold(key, "Main-Class") {
+			continue
+		}
+		if main != "" || class == "" || strings.HasPrefix(class, "-") ||
 			strings.IndexFunc(class, func(r rune) bool {
 				return r != '.' && r != '_' && r != '$' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9')
-			}) == -1 {
-			return class, nil
+			}) != -1 {
+			return "", errors.New("安装工具清单主类无效或重复")
 		}
+		main = class
 	}
-	return "", errors.New("安装处理器缺少有效主类")
+	return main, nil
 }

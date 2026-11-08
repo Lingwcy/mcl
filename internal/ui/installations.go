@@ -295,6 +295,14 @@ func installationStage(stage string) string {
 		return "自动下载 Java"
 	case "java-extract":
 		return "安装并检查 Java"
+	case "processor-java-discovery":
+		return "查找安装工具 Java"
+	case "processor-java-catalog":
+		return "获取安装工具 Java"
+	case "processor-java-download":
+		return "下载安装工具 Java"
+	case "processor-java-extract":
+		return "安装并检查工具 Java"
 	case "metadata":
 		return "读取版本信息"
 	case "loader":

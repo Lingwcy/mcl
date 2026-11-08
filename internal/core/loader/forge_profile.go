@@ -28,6 +28,7 @@ type forgeSpec struct {
 	Libraries  []meta.Library
 	Processors []forgeProcessor
 	Data       map[string]struct{ Client string }
+	LegacyGame bool `json:"-"`
 }
 
 type forgeLibrary struct {
@@ -81,7 +82,8 @@ func readForgeSpec(ctx context.Context, z *archive.Zip, request Request, version
 	if err := json.Unmarshal(data, &spec); err != nil {
 		return spec, meta.Version{}, fmt.Errorf("读取安装配置: %w", err)
 	}
-	if spec.Spec != 1 || spec.Minecraft != request.GameVersion || spec.Version != versionID ||
+	validID := spec.Version == versionID || legacyForgeID(request, spec.Version)
+	if spec.Spec != 1 || spec.Minecraft != request.GameVersion || !validID ||
 		len(spec.Libraries) > 256 || len(spec.Data) > 128 || len(spec.Processors) > 64 {
 		return spec, meta.Version{}, errors.New("安装配置的版本、格式或数量不受支持")
 	}
@@ -96,9 +98,26 @@ func readForgeSpec(ctx context.Context, z *archive.Zip, request Request, version
 	if err != nil {
 		return spec, version, err
 	}
-	if version.ID != versionID || version.InheritsFrom != request.GameVersion || version.Arguments == nil ||
-		!forgeMainClass(version.MainClass) || len(version.Libraries) == 0 || len(version.Libraries) > 256 {
+	if version.ID != spec.Version || version.InheritsFrom != request.GameVersion || len(version.Libraries) == 0 || len(version.Libraries) > 256 {
 		return spec, version, errors.New("启动配置与所选加载器或 Minecraft 版本不匹配")
+	}
+	if version.Arguments == nil && version.LegacyArguments != "" {
+		if err := normalizeProcessedLegacyVersion(request, &version); err != nil {
+			return spec, version, err
+		}
+		spec.LegacyGame = true
+	} else if version.Arguments == nil || version.LegacyArguments != "" || !forgeMainClass(version.MainClass) {
+		return spec, version, errors.New("启动配置与所选加载器或 Minecraft 版本不匹配")
+	}
+	for _, processor := range spec.Processors {
+		if len(processor.Sides) > 2 {
+			return spec, version, errors.New("安装处理器sides数量无效")
+		}
+		for _, side := range processor.Sides {
+			if side != "client" && side != "server" {
+				return spec, version, errors.New("未知安装处理器用途，不能静默省略")
+			}
+		}
 	}
 	spec.Processors = slices.DeleteFunc(spec.Processors, func(p forgeProcessor) bool {
 		return len(p.Sides) > 0 && !slices.Contains(p.Sides, "client")

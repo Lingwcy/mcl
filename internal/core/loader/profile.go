@@ -47,6 +47,7 @@ type Profile struct {
 	Generation    string          `json:",omitempty"`
 	InstallerSHA1 string          `json:",omitempty"`
 	Legacy        bool            `json:",omitempty"`
+	LegacyGame    bool            `json:",omitempty"`
 	Outputs       []meta.Download `json:",omitempty"`
 }
 
@@ -82,6 +83,11 @@ func (p Profile) Validate() error {
 			return err
 		}
 	}
+	if p.LegacyGame {
+		if err := validateProcessedLegacyGame(p); err != nil {
+			return err
+		}
+	}
 	if prepared {
 		_, _, versionID, err := forgeInstaller(p.Request)
 		if err != nil {
@@ -91,10 +97,13 @@ func (p Profile) Validate() error {
 		if p.Legacy {
 			validIdentity = legacyForgeID(p.Request, p.ID) && p.MainClass == legacyForgeMain
 		}
+		if p.LegacyGame {
+			validIdentity = legacyForgeID(p.Request, p.ID) && p.MainClass == legacyForgeMain && len(p.Outputs) > 0
+		}
 		if !validIdentity || !validGeneration(p.Generation) || !meta.ValidSHA1(p.InstallerSHA1) || len(p.Outputs) > 256 {
 			return errors.New("Forge 系加载器运行环境信息无效")
 		}
-	} else if p.Generation != "" || p.InstallerSHA1 != "" || len(p.Outputs) != 0 || p.Legacy {
+	} else if p.Generation != "" || p.InstallerSHA1 != "" || len(p.Outputs) != 0 || p.Legacy || p.LegacyGame {
 		return errors.New("加载器包含非预期的生成文件")
 	}
 	found := prepared
@@ -179,7 +188,7 @@ func (p Profile) Merge(base meta.Version) (meta.Version, error) {
 	effective.Java.Major = max(base.Java.Major, p.JavaMajor)
 	args := *base.Arguments
 	args.Game = append(slices.Clone(args.Game), p.Arguments.Game...)
-	if p.Legacy {
+	if p.Legacy || p.LegacyGame {
 		if base.Java.Major != 8 {
 			return meta.Version{}, errors.New("旧 Forge 配置要求稳定 Java 8 的官方客户端")
 		}
