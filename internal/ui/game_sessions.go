@@ -67,6 +67,15 @@ func (s *Shell) showLogs(id string) {
 	s.page = logsPage
 }
 
+// Auto-open only once, at this launch's successful completion, while its own
+// workspace is still visible. Snapshot refreshes never request navigation.
+func (s *Shell) maybeOpenGameLogs(enabled, canceled bool, id string) {
+	if !enabled || canceled || id == "" || s.page != launchPage || s.installation.launchGameID != id {
+		return
+	}
+	s.showLogs(id)
+}
+
 func (s *Shell) stopGame(id string) {
 	if s.games.actions.Stop == nil {
 		return
@@ -74,7 +83,7 @@ func (s *Shell) stopGame(id string) {
 	s.games.message = ""
 	s.games.actions.Stop(id, func(err error) {
 		if err != nil {
-			s.games.message = err.Error()
+			s.Notify(ToastError, err.Error())
 		}
 	})
 }
@@ -158,12 +167,9 @@ func (s *Shell) logView(c *ui.Context) {
 					fmt.Fprintf(&text, "[%s] [%s] %s\n", line.Time.Local().Format("15:04:05"), line.Stream, line.Text)
 				}
 				services.WriteClipboard(text.String())
-				g.message = "已复制当前筛选日志"
+				s.Notify(ToastSuccess, "已复制当前筛选日志")
 			})
 		})
-		if g.message != "" {
-			ui.Text(c, g.message).FontSize(11).TextColor(t.TextMuted)
-		}
 		if current != nil && (current.Output.Dropped > 0 || current.Exit.OutputIncomplete) {
 			ui.Textf(c, "保留最近日志；已丢弃 %d 行。退出或脱离时可能未取得完整输出。", current.Output.Dropped).FontSize(11).TextColor(t.TextMuted)
 		}

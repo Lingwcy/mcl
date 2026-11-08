@@ -55,7 +55,7 @@ func (s *ArchiveStore) InspectPackRepair(ctx context.Context, value instance.Ins
 	}
 	archiveSHA := strings.ToLower(pack.ArchiveSHA1)
 	info, err := root.Lstat(path.Join("cache", "market", archiveSHA))
-	if err == nil && info.Mode().IsRegular() && info.Size() > 0 && info.Size() <= 512<<20 && plan.Archive.Size == 0 {
+	if err == nil && info.Mode().IsRegular() && info.Size() > 0 && info.Size() <= modpack.MaxArchiveSize && plan.Archive.Size == 0 {
 		plan.Archive = market.File{SHA1: archiveSHA, Size: info.Size()}
 	}
 	game, err := s.assets.openGame(ctx, value.ID)
@@ -65,7 +65,7 @@ func (s *ArchiveStore) InspectPackRepair(ctx context.Context, value instance.Ins
 	defer game.Close()
 	files := origin.Resolved
 	if files == nil {
-		if origin.Manifest.Format == "modrinth" {
+		if origin.Manifest.Format == "modrinth" || origin.Manifest.Format == "multimc" {
 			files = (app.ArchiveImportPlan{Manifest: origin.Manifest, Files: origin.Manifest.Files, SelectedOptional: origin.Optional}).ActiveFiles()
 		} else {
 			plan.Legacy = len(origin.Manifest.Files) > 0

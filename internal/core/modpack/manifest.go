@@ -14,12 +14,17 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"mcl/internal/core/archive"
 	"mcl/internal/core/meta"
 )
 
 const MaxFiles = 5000
+
+// MaxArchiveSize bounds compressed input; extraction retains separate limits.
+const MaxArchiveSize int64 = 2 << 30
 
 type Loader struct{ Type, Version string }
 type File struct {
@@ -32,6 +37,8 @@ type File struct {
 }
 type Manifest struct {
 	Format, Name, Version, Minecraft string
+	Author, Summary                  string             `json:",omitempty"`
+	RuntimeComponents                []RuntimeComponent `json:",omitempty"`
 	Loaders                          []Loader
 	Files                            []File
 	Overrides                        []archive.Mapping
@@ -47,8 +54,16 @@ func Read(ctx context.Context, z *archive.Zip) (Manifest, error) {
 			cf = true
 		}
 	}
-	if mr == cf {
-		return Manifest{}, errors.New("整合包缺少清单，或同时包含多种清单")
+	candidates := multiMCCandidates(z)
+	count := len(candidates)
+	if mr {
+		count++
+	}
+	if cf {
+		count++
+	}
+	if count != 1 {
+		return Manifest{}, errors.New("整合包缺少受支持清单，或包含多个候选实例/清单")
 	}
 	var m Manifest
 	var prefixes []string
@@ -56,11 +71,16 @@ func Read(ctx context.Context, z *archive.Zip) (Manifest, error) {
 	if mr {
 		m, err = readModrinth(ctx, z)
 		prefixes = []string{"overrides/", "client-overrides/"}
-	} else {
+	} else if cf {
 		m, prefixes, err = readCurseForge(ctx, z)
+	} else {
+		m, prefixes, err = readMultiMC(ctx, z, candidates[0])
 	}
 	if err != nil {
 		return Manifest{}, err
+	}
+	if len(m.Name) > 1024 || len(m.Version) > 256 || len(m.Author) > 1024 || len(m.Summary) > 16<<10 || !utf8.ValidString(m.Name+m.Version+m.Author+m.Summary) || utf8.RuneCountInString(m.Summary) > 4096 || strings.IndexFunc(m.Name+m.Version+m.Author, unicode.IsControl) >= 0 || strings.IndexFunc(m.Summary, func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\t' }) >= 0 {
+		return Manifest{}, errors.New("整合包元信息过长或含无效控制字符")
 	}
 	if !meta.ValidID(m.Minecraft) || len(m.Files) > MaxFiles {
 		return Manifest{}, errors.New("整合包游戏版本或文件数量无效")
@@ -122,6 +142,7 @@ func readModrinth(ctx context.Context, z *archive.Zip) (Manifest, error) {
 		Game          string            `json:"game"`
 		Name          string            `json:"name"`
 		Version       string            `json:"versionId"`
+		Summary       string            `json:"summary"`
 		Dependencies  map[string]string `json:"dependencies"`
 		Files         []struct {
 			Path      string            `json:"path"`
@@ -137,7 +158,7 @@ func readModrinth(ctx context.Context, z *archive.Zip) (Manifest, error) {
 	if raw.FormatVersion != 1 || raw.Game != "minecraft" {
 		return Manifest{}, errors.New("不支持此 MRPack 格式或游戏")
 	}
-	m := Manifest{Format: "modrinth", Name: raw.Name, Version: raw.Version, Minecraft: raw.Dependencies["minecraft"]}
+	m := Manifest{Format: "modrinth", Name: raw.Name, Version: raw.Version, Summary: raw.Summary, Minecraft: raw.Dependencies["minecraft"]}
 	for name, version := range raw.Dependencies {
 		if name == "minecraft" {
 			continue
@@ -185,11 +206,13 @@ func readCurseForge(ctx context.Context, z *archive.Zip) (Manifest, []string, er
 		ManifestVersion int    `json:"manifestVersion"`
 		Name            string `json:"name"`
 		Version         string `json:"version"`
+		Author          string `json:"author"`
 		Overrides       string `json:"overrides"`
 		Minecraft       struct {
 			Version string `json:"version"`
 			Loaders []struct {
-				ID string `json:"id"`
+				ID      string `json:"id"`
+				Primary bool   `json:"primary"`
 			} `json:"modLoaders"`
 		} `json:"minecraft"`
 		Files []struct {
@@ -204,8 +227,24 @@ func readCurseForge(ctx context.Context, z *archive.Zip) (Manifest, []string, er
 	if raw.ManifestType != "minecraftModpack" || raw.ManifestVersion != 1 {
 		return Manifest{}, nil, errors.New("不支持此 CurseForge 整合包格式")
 	}
-	m := Manifest{Format: "curseforge", Name: raw.Name, Version: raw.Version, Minecraft: raw.Minecraft.Version}
-	for _, loader := range raw.Minecraft.Loaders {
+	m := Manifest{Format: "curseforge", Name: raw.Name, Version: raw.Version, Author: raw.Author, Minecraft: raw.Minecraft.Version}
+	selected := raw.Minecraft.Loaders
+	if len(selected) > 1 {
+		primary := -1
+		for index, required := range selected {
+			if required.Primary {
+				if primary >= 0 {
+					return Manifest{}, nil, errors.New("CurseForge 包包含多个主加载器")
+				}
+				primary = index
+			}
+		}
+		if primary < 0 {
+			return Manifest{}, nil, errors.New("CurseForge 包没有明确的主加载器")
+		}
+		selected = selected[primary : primary+1]
+	}
+	for _, loader := range selected {
 		kind, version, ok := strings.Cut(loader.ID, "-")
 		if !ok || !slices.Contains([]string{"fabric", "quilt", "forge", "neoforge"}, kind) {
 			return Manifest{}, nil, errors.New("整合包加载器类型不支持")

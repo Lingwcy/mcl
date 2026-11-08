@@ -19,6 +19,10 @@ var (
 		Duration: 200 * time.Millisecond, Ease: ui.EaseOut, Colors: true,
 		Enter: &ui.Motion{X: 8, Opacity: 0}, Exit: &ui.Motion{X: -4, Opacity: 0},
 	}
+	motionToast = ui.ElementTransition{
+		Duration: 180 * time.Millisecond, Ease: ui.EaseOut,
+		Enter: &ui.Motion{X: 8, Opacity: 0}, Exit: &ui.Motion{X: 6, Opacity: 0},
+	}
 	motionReveal = ui.ElementTransition{
 		Duration: 180 * time.Millisecond, Ease: ui.EaseOut, Colors: true,
 		Enter: &ui.Motion{Y: 4, Opacity: 0},

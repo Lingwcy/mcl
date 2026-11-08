@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 
 	"mcl/internal/core/instance"
@@ -59,7 +60,21 @@ func acquireDirectory(directory, name string) (*Lock, error) {
 }
 
 // acquire takes ownership of root, including on failure.
-func acquire(root *os.Root, name string) (*Lock, error) {
+func acquire(root *os.Root, name string) (*Lock, error) { return acquireMode(root, name, false) }
+
+// AcquireDownloadCache takes ownership of root. Shared leases cover complete
+// download jobs; maintenance requires an exclusive lease on the same inode.
+// AcquireDownloadCacheInit serializes creating and validating the owned child.
+// The parent lock is never unlinked, just like the per-cache maintenance lock.
+func AcquireDownloadCacheInit(root *os.Root) (*Lock, error) {
+	return acquire(root, ".mcl-cache-init.lock")
+}
+
+func AcquireDownloadCache(root *os.Root, exclusive bool) (*Lock, error) {
+	return acquireMode(root, "cache.lock", !exclusive)
+}
+
+func acquireMode(root *os.Root, name string, shared bool) (*Lock, error) {
 	if info, err := root.Lstat(name); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		root.Close()
 		return nil, errors.New("lock must not be a symlink")
@@ -78,7 +93,11 @@ func acquire(root *os.Root, name string) (*Lock, error) {
 		root.Close()
 		return nil, errors.New("lock must be an empty regular file")
 	}
-	if err := tryLock(f); err != nil {
+	lockFile := tryLock
+	if shared {
+		lockFile = trySharedLock
+	}
+	if err := lockFile(f); err != nil {
 		f.Close()
 		root.Close()
 		return nil, err
@@ -89,4 +108,24 @@ func acquire(root *os.Root, name string) (*Lock, error) {
 func (l *Lock) Close() error {
 	l.once.Do(func() { l.err = errors.Join(unlock(l.file), l.file.Close(), l.root.Close()) })
 	return l.err
+}
+
+// AcquireGameDirectories serializes location registration and new instance
+// publication. The lock inode is retained across processes.
+func AcquireGameDirectories(directory string) (*Lock, error) {
+	return acquireDirectory(directory, "game-directories.lock")
+}
+
+// AcquireGameDirectoryInit takes ownership of the selected parent handle.
+func AcquireGameDirectoryInit(root *os.Root) (*Lock, error) {
+	return acquire(root, ".mcl-games-init.lock")
+}
+
+// AcquireInstanceDeletion is outside the directory sent to Trash, so the final
+// move stays serialized after releasing the instance's internal Windows lock.
+func AcquireInstanceDeletion(directory, id string) (*Lock, error) {
+	if !instance.ValidID(id) {
+		return nil, errors.New("invalid instance ID")
+	}
+	return acquireDirectory(filepath.Join(directory, "instance-deletions"), id+".lock")
 }

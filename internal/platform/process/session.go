@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -27,6 +28,7 @@ type Exit = launch.Exit
 // explicit. The application can stop observing/detach during quit without
 // terminating Java. An internal waiter reaps the child on its natural exit.
 type Session struct {
+	warnings             []string
 	cmd                  *exec.Cmd
 	output               *launch.Output
 	readers              [2]*os.File
@@ -58,14 +60,17 @@ func Start(plan launch.Plan) (*Session, error) {
 // StartTracked commits identity before Java may execute. The registration
 // callback runs under the caller's instance reservation. A callback failure
 // aborts the still-gated/suspended child; it never becomes an untracked JVM.
-func StartTracked(plan launch.Plan, register func(launch.ProcessIdentity) error) (*Session, error) {
+func StartTracked(plan launch.Plan, register func(launch.ProcessIdentity) error, directory ...*os.Root) (*Session, error) {
 	if register == nil {
 		return nil, errors.New("missing game identity registration")
 	}
-	return start(plan, register)
+	return start(plan, register, directory...)
 }
 
-func start(plan launch.Plan, register func(launch.ProcessIdentity) error) (*Session, error) {
+func start(plan launch.Plan, register func(launch.ProcessIdentity) error, directory ...*os.Root) (*Session, error) {
+	if register == nil && plan.Priority() != launch.PriorityNormal {
+		return nil, errors.New("自定义游戏优先级需要受控身份交接")
+	}
 	data, err := plan.JVMArgumentFile()
 	if err != nil {
 		return nil, err
@@ -90,11 +95,32 @@ func start(plan launch.Plan, register func(launch.ProcessIdentity) error) (*Sess
 	}()
 	// Confine the working directory, too, before passing its absolute path to
 	// exec. Preparation holds the instance exclusion against app mutations.
-	game, err := root.OpenRoot(path.Join(plan.InstancePath(), "game"))
+	var game *os.Root
+	if len(directory) > 0 && directory[0] != nil {
+		// The production adapter supplies an ownership-validated game root.
+		game, err = directory[0].OpenRoot(".")
+	} else {
+		expected := filepath.Join(plan.DataRoot(), filepath.FromSlash(plan.InstancePath()), "game")
+		if filepath.Clean(plan.Directory()) != expected {
+			return nil, errors.New("外部游戏工作目录尚未经过所有权检查")
+		}
+		game, err = root.OpenRoot(path.Join(plan.InstancePath(), "game"))
+	}
 	if err != nil {
 		return nil, err
 	}
-	game.Close()
+	defer game.Close()
+	opened, err := game.Stat(".")
+	if err != nil {
+		return nil, err
+	}
+	current, err := os.Lstat(plan.Directory())
+	if err != nil {
+		return nil, err
+	}
+	if !current.IsDir() || current.Mode()&os.ModeSymlink != 0 || !os.SameFile(opened, current) {
+		return nil, errors.New("游戏工作目录发生变化，已取消启动")
+	}
 	if err := root.MkdirAll(path.Dir(argumentPath), 0o700); err != nil {
 		return nil, err
 	}
@@ -154,14 +180,14 @@ func start(plan launch.Plan, register func(launch.ProcessIdentity) error) (*Sess
 		w.Close()
 	}
 	s.control, err = attach(cmd, func() error {
-		if register == nil {
-			return nil
+		warning, err := prepareChildPriority(cmd.Process.Pid, plan.Priority(), register, Inspect, setChildPriority)
+		if warning != "" {
+			s.warnings = []string{warning}
+			writer := s.output.Stream("launcher")
+			fmt.Fprintln(writer, warning)
+			writer.Close()
 		}
-		identity, err := Inspect(cmd.Process.Pid)
-		if err != nil {
-			return err
-		}
-		return register(identity)
+		return err
 	})
 	if err == nil {
 		err = resume()
@@ -205,6 +231,8 @@ func (s *Session) String() string {
 	return fmt.Sprintf("ProcessSession{pid:%d,finished:%t}", s.PID(), !s.exit.FinishedAt.IsZero())
 }
 func (s *Session) GoString() string { return s.String() }
+
+func (s *Session) StartupWarnings() []string { return slices.Clone(s.warnings) }
 
 func (s *Session) PID() int                      { return s.cmd.Process.Pid }
 func (s *Session) Output() launch.OutputSnapshot { return s.output.Snapshot() }

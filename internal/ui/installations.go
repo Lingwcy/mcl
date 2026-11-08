@@ -165,6 +165,7 @@ func (s *Shell) startGame() {
 		s.openAccounts()
 		return
 	}
+	launchSettings := s.settings
 	i.generation++
 	generation := i.generation
 	i.instanceID, i.name, i.active = value.ID, value.Name, true
@@ -182,7 +183,7 @@ func (s *Shell) startGame() {
 	}
 	s.taskEvent("准备启动游戏 · "+profile.Name, false)
 	s.page = launchPage
-	i.cancel = i.actions.Launch(value.ID, profile.ID(), s.settings, func(p install.Progress) {
+	i.cancel = i.actions.Launch(value.ID, profile.ID(), launchSettings, func(p install.Progress) {
 		if i.active && i.generation == generation {
 			s.taskProgress(p)
 		}
@@ -193,6 +194,7 @@ func (s *Shell) startGame() {
 		if i.generation != generation {
 			return
 		}
+		canceled := stopAfterStart || i.canceling
 		i.active, i.cancel, i.canceling = false, nil, false
 		i.requestLaunchStop = nil
 		switch {
@@ -207,6 +209,11 @@ func (s *Shell) startGame() {
 			i.receipts[value.ID] = result.Receipt
 			i.launchGameID = result.GameID
 			i.message = "游戏进程已启动。"
+			for _, warning := range result.Warnings {
+				s.taskEvent(warning, false)
+				s.Notify(ToastWarning, warning)
+			}
+			s.maybeOpenGameLogs(launchSettings.Game.ShowLogs, canceled, result.GameID)
 			s.loadAccounts()
 		}
 		s.taskEvent(i.message, i.failed)

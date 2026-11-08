@@ -7,19 +7,24 @@ import (
 	"path/filepath"
 	"strings"
 
+	"mcl/internal/core/download"
+	"mcl/internal/core/instance"
 	"mcl/internal/core/launch"
 )
 
 // Settings contains user preferences only. Account credentials belong in the
 // system credential store, never in this model.
 type Settings struct {
-	JavaPath string `json:"java_path"`
+	GameDirectoryID string `json:"game_directory_id,omitempty"`
+	JavaPath        string `json:"java_path"`
 	// Legacy heap values remain readable but launch preparation uses automatic
 	// allocation for every instance. New configurations leave these at zero.
-	MaxMemoryMiB int           `json:"max_memory_mib"`
-	MinMemoryMiB int           `json:"min_memory_mib,omitempty"`
-	GCMode       launch.GCMode `json:"gc_mode,omitempty"`
-	JVMArguments string        `json:"jvm_arguments,omitempty"`
+	MaxMemoryMiB int                  `json:"max_memory_mib"`
+	MinMemoryMiB int                  `json:"min_memory_mib,omitempty"`
+	GCMode       launch.GCMode        `json:"gc_mode,omitempty"`
+	JVMArguments string               `json:"jvm_arguments,omitempty"`
+	Game         launch.GameSettings  `json:"game,omitempty"`
+	Download     download.Preferences `json:"download,omitempty"`
 }
 
 func DefaultSettings() Settings {
@@ -27,6 +32,15 @@ func DefaultSettings() Settings {
 }
 
 func (s Settings) Validate() error {
+	if s.GameDirectoryID != "" && !instance.ValidID(s.GameDirectoryID) {
+		return errors.New("默认游戏目录标识无效")
+	}
+	if err := s.Game.Validate(); err != nil {
+		return err
+	}
+	if err := s.Download.Validate(); err != nil {
+		return err
+	}
 	if s.MaxMemoryMiB != 0 && (s.MaxMemoryMiB < 512 || s.MaxMemoryMiB > 65536) {
 		return errors.New("游戏内存应在 512 到 65536 MiB 之间")
 	}

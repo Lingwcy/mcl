@@ -47,7 +47,9 @@ func preparedFixture(t *testing.T, starter app.ProcessStarter) (installFixture, 
 	}
 	// Deliberately differ from both persisted heap values to exercise automatic
 	// allocation rather than accidentally retaining the former 4096 MiB default.
-	return f, app.NewLaunchService(f.service, resolveJava, func() (uint64, error) { return 12 << 30, nil }, starter, nil), fallback
+	return f, app.NewLaunchService(f.service, resolveJava, func(context.Context) (app.MemoryStatus, error) {
+		return app.MemoryStatus{TotalBytes: 16 << 30, AvailableBytes: 12 << 30}, nil
+	}, starter, nil), fallback
 }
 
 func authenticatedFixture(t *testing.T) launch.Session {
@@ -72,7 +74,7 @@ func TestPreparedPreviewReservationAndCancel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(preview.Arguments, "<登录后提供>") || !slices.Contains(preview.Arguments, "-Xmx3072m") {
+	if !slices.Contains(preview.Arguments, "<登录后提供>") || !slices.Contains(preview.Arguments, "-Xmx7270m") {
 		t.Fatal("preview lost automatic memory allocation or invented authentication")
 	}
 	if _, err := f.service.Run(t.Context(), f.value.ID, nil); err == nil {
@@ -173,5 +175,41 @@ func TestJavaFailurePrecedesDownloads(t *testing.T) {
 	}
 	if _, err := f.service.Run(t.Context(), f.value.ID, nil); err != nil {
 		t.Fatal("failed Java check retained the reservation")
+	}
+}
+
+func TestPreparedStartRechecksCurrentAvailableMemory(t *testing.T) {
+	f, _, settings := preparedFixture(t, nil)
+	available := uint64(12) << 30
+	calls, started := 0, false
+	var observed launch.Plan
+	service := app.NewLaunchService(f.service,
+		func(ctx context.Context, major int, target meta.Platform, preferred []string, _ func(java.Progress)) (java.Runtime, error) {
+			return java.Runtime{Executable: settings.JavaPath, Version: "17.0.1", Major: 17, Arch: target.Arch}, nil
+		},
+		func(context.Context) (app.MemoryStatus, error) {
+			calls++
+			return app.MemoryStatus{TotalBytes: 16 << 30, AvailableBytes: available}, nil
+		},
+		func(plan launch.Plan, _ func(launch.ProcessIdentity) error) (launch.Game, error) {
+			started = true
+			observed = plan
+			return nil, errors.New("fixture stops before process creation")
+		}, nil)
+	prepared, err := service.Prepare(t.Context(), f.value.ID, settings, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Close()
+	preview, err := prepared.Preview()
+	if err != nil || !slices.Contains(preview.Arguments, "-Xmx7270m") {
+		t.Fatal("preparation ignored current availability", err)
+	}
+	available = 4 << 30
+	if _, err := prepared.Start(authenticatedFixture(t)); err == nil {
+		t.Fatal("fixture should stop before actual process creation")
+	}
+	if calls != 2 || !started || !slices.Contains(observed.Preview().Arguments, "-Xmx2867m") {
+		t.Fatal("handoff reused the stale preparation or UI memory budget")
 	}
 }

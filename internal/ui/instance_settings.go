@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
 	"mcl/internal/app"
@@ -15,6 +16,7 @@ import (
 // Each edit session owns its drafts and callbacks, not build-scoped elements.
 // Writes are serialized per session and keep going when navigating away.
 type instanceSettingsState struct {
+	deleting                      bool
 	id, name, javaPath, iconStyle string
 	icon                          []byte
 	bitmap                        *ui.Bitmap
@@ -46,7 +48,7 @@ func (s *Shell) openInstanceSettings() {
 		return
 	}
 	s.page = instanceSettingsPage
-	if old := s.instanceEditor; old != nil && old.id == value.ID && (old.saving || old.loading || old.saveError != "" || old.validation != "") {
+	if old := s.instanceEditor; old != nil && old.id == value.ID && (old.deleting || old.saving || old.loading || old.saveError != "" || old.validation != "") {
 		return
 	}
 	s.loadInstanceSettings(value)
@@ -54,7 +56,7 @@ func (s *Shell) openInstanceSettings() {
 
 func (s *Shell) loadInstanceSettings(value instance.Instance) {
 	if old := s.instanceEditor; old != nil {
-		if old.id == value.ID && old.saving {
+		if old.id == value.ID && (old.saving || old.deleting) {
 			return
 		}
 		s.cancelInstanceSettingsIcon()
@@ -111,6 +113,9 @@ func (s *Shell) instanceEditBlockReason(id string) string {
 			return "游戏仍在运行，结束后可修改实例信息"
 		}
 	}
+	if task := s.market.install; task != nil && task.busy && (task.request.InstanceID == id || (task.archivePlan != nil && task.archivePlan.Instance.ID == id)) {
+		return "实例安装任务进行中，完成后可修改或删除"
+	}
 	if (s.installation.active && s.installation.instanceID == id) || s.assetUpdateBlocked(id) ||
 		(s.assets.changing && s.assets.changeID == id) || s.repairingPack(id) || s.diagnosingAssets(id) || s.identifyingAssets(id) || s.associatingAsset(id) {
 		return "实例任务进行中，完成后可修改信息"
@@ -121,7 +126,7 @@ func (s *Shell) instanceEditBlockReason(id string) string {
 // A valid edit is persisted off-thread. While a write is in flight, newer
 // drafts stay editable and are coalesced into the next write on completion.
 func (s *Shell) saveInstancePreferences(state *instanceSettingsState) {
-	if !state.loaded || state.loading || state.conflict || s.library.actions.SavePreferences == nil {
+	if state.deleting || !state.loaded || state.loading || state.conflict || s.library.actions.SavePreferences == nil {
 		return
 	}
 	desired := state.draft()
@@ -237,4 +242,57 @@ func instanceSettingsIconStyle(state *instanceSettingsState) string {
 		return required.Type
 	}
 	return "grass"
+}
+
+func (s *Shell) deleteSelectedInstance() {
+	state := s.instanceEditor
+	if state == nil || !state.loaded || state.loading || state.saving || state.deleting || state.iconBusy || s.library.actions.DeleteInstance == nil || s.instanceEditBlockReason(state.id) != "" {
+		return
+	}
+	state.deleting = true
+	s.library.actions.DeleteInstance(state.id, func(err error) {
+		state.deleting = false
+		if err != nil {
+			if !errors.Is(err, context.Canceled) {
+				s.Notify(ToastError, err.Error())
+			}
+			return
+		}
+		id := state.id
+		if s.deletedInstances == nil {
+			s.deletedInstances = make(map[string]bool)
+		}
+		s.deletedInstances[id] = true
+		s.library.snapshot.Instances = slices.DeleteFunc(s.library.snapshot.Instances, func(value instance.Instance) bool { return value.ID == id })
+		delete(s.library.icons, id)
+		delete(s.installation.receipts, id)
+		if s.assets.instanceID == id {
+			if s.assets.cancel != nil {
+				s.assets.cancel()
+				s.assets.cancel = nil
+			}
+			s.assets.generation++
+			s.cancelAssetArtwork()
+			s.assets.instanceID = ""
+			s.assets.snapshot = app.AssetSnapshot{}
+		}
+		if current := s.market.install; current != nil && current.request.InstanceID == id && !current.busy {
+			s.market.install = nil
+			s.market.showInstall = false
+		}
+		if s.instanceEditor == state {
+			s.cancelInstanceSettingsIcon()
+			s.instanceEditor = nil
+		}
+		if s.library.selectedID == id {
+			s.library.selectedID = ""
+			if len(s.library.snapshot.Instances) > 0 {
+				s.library.selectedID = s.library.snapshot.Instances[0].ID
+			}
+			s.openHome()
+		}
+		s.refreshGameDirectories()
+		s.refreshSessions()
+		s.Notify(ToastSuccess, "实例及其全部数据已移入废纸篓")
+	})
 }

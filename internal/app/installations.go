@@ -12,6 +12,7 @@ import (
 	"mcl/internal/core/download"
 	"mcl/internal/core/install"
 	"mcl/internal/core/instance"
+	"mcl/internal/core/java"
 	"mcl/internal/core/loader"
 	"mcl/internal/core/meta"
 )
@@ -31,20 +32,25 @@ type InstanceReader interface {
 // reservation to a live game. The registry combines an OS lock with persisted
 // kernel process identity to protect sessions left by a previous launcher.
 type InstallationService struct {
-	catalog   VersionCatalog
-	instances InstanceReader
-	receipts  InstallationRepository
-	client    *download.Client
-	platform  meta.Platform
-	registry  SessionRegistry
-	loaders   *LoaderService
-	mu        sync.Mutex
-	active    map[string]bool
-	slot      chan struct{}
+	gameDirectory GameDirectoryResolver
+	catalog       VersionCatalog
+	instances     InstanceReader
+	receipts      InstallationRepository
+	client        *download.Client
+	platform      meta.Platform
+	registry      SessionRegistry
+	loaders       *LoaderService
+	mu            sync.Mutex
+	active        map[string]bool
+	slot          chan struct{}
 }
 
-func NewInstallationService(catalog VersionCatalog, instances InstanceReader, receipts InstallationRepository, client *download.Client, platform meta.Platform, registry SessionRegistry, loaders *LoaderService) *InstallationService {
-	return &InstallationService{catalog: catalog, instances: instances, receipts: receipts, client: client, platform: platform, registry: registry, loaders: loaders, active: make(map[string]bool), slot: make(chan struct{}, 1)}
+func NewInstallationService(catalog VersionCatalog, instances InstanceReader, receipts InstallationRepository, client *download.Client, platform meta.Platform, registry SessionRegistry, loaders *LoaderService, directories ...GameDirectoryResolver) *InstallationService {
+	var directory GameDirectoryResolver
+	if len(directories) > 0 {
+		directory = directories[0]
+	}
+	return &InstallationService{gameDirectory: directory, catalog: catalog, instances: instances, receipts: receipts, client: client, platform: platform, registry: registry, loaders: loaders, active: make(map[string]bool), slot: make(chan struct{}, 1)}
 }
 
 func (s *InstallationService) Load(ctx context.Context) (map[string]install.Receipt, error) {
@@ -118,6 +124,13 @@ func (s *InstallationService) run(ctx context.Context, id, fallbackJava string, 
 	value, err := s.instances.Get(ctx, id)
 	if err != nil {
 		return install.Receipt{}, err
+	}
+	if s.gameDirectory != nil {
+		if _, err := s.gameDirectory(ctx, id); err != nil {
+			return install.Receipt{}, fmt.Errorf("读取实例游戏目录: %w", err)
+		}
+	} else if value.GameDirectoryID != "" {
+		return install.Receipt{}, errors.New("外部游戏目录解析未配置")
 	}
 	resolved, err := s.resolveVersion(ctx, value, fallbackJava, report)
 	if err != nil {
@@ -203,4 +216,64 @@ func (s *InstallationService) execute(ctx context.Context, value instance.Instan
 		install.RemoveNativeDirectory(root, parent, previous.NativeDirectory)
 	}
 	return receipt, nil
+}
+
+// RunAutomatic installs a pack's client and fixed loader using a verified Java
+// runtime. No game/account is launched and no heap budget is needed to install.
+func (s *InstallationService) RunAutomatic(ctx context.Context, id string, resolveJava JavaResolver, report func(install.Progress)) (install.Receipt, error) {
+	if resolveJava == nil {
+		return install.Receipt{}, errors.New("Java 自动安装服务尚未配置")
+	}
+	reserved, err := s.reserve(ctx, id)
+	if err != nil {
+		return install.Receipt{}, err
+	}
+	defer reserved.Close()
+	value, err := s.instances.Get(ctx, id)
+	if err != nil {
+		return install.Receipt{}, err
+	}
+	if s.gameDirectory != nil {
+		if _, err := s.gameDirectory(ctx, id); err != nil {
+			return install.Receipt{}, err
+		}
+	} else if value.GameDirectoryID != "" {
+		return install.Receipt{}, errors.New("外部游戏目录未配置")
+	}
+	if report != nil {
+		report(install.Progress{Stage: "metadata"})
+	}
+	base, err := s.catalog.Version(ctx, value.Version)
+	if err != nil {
+		return install.Receipt{}, err
+	}
+	preferred := []string{value.JavaPath}
+	javaProgress := func(p java.Progress) {
+		if report != nil {
+			report(install.Progress{Stage: p.Stage, Progress: download.Progress{Bytes: p.Bytes, TotalBytes: p.Total}})
+		}
+	}
+	runtime, err := resolveJava(ctx, base.Java.Major, s.platform, preferred, javaProgress)
+	if err != nil {
+		return install.Receipt{}, err
+	}
+	if err := runtime.Check(base.Java.Major, s.platform); err != nil {
+		return install.Receipt{}, err
+	}
+	loaderInstance := value
+	loaderInstance.JavaPath = runtime.Executable
+	resolved, err := s.resolveLoader(ctx, loaderInstance, base, runtime.Executable, report)
+	if err != nil {
+		return install.Receipt{}, err
+	}
+	if resolved.version.Java.Major > runtime.Major {
+		runtime, err = resolveJava(ctx, resolved.version.Java.Major, s.platform, preferred, javaProgress)
+		if err != nil {
+			return install.Receipt{}, err
+		}
+	}
+	if err := runtime.Check(resolved.version.Java.Major, s.platform); err != nil {
+		return install.Receipt{}, err
+	}
+	return s.execute(ctx, value, resolved, report)
 }

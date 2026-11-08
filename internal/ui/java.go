@@ -204,7 +204,7 @@ func (s *Shell) cancelJavaInstall() {
 }
 
 func (s *Shell) javaView(c *ui.Context) {
-	j, t := &s.java, s.theme
+	j := &s.java
 	ui.Column(c.Key("java-workspace")).Grow(1).MinHeight(0).FillWidth().Padding(18, 24, 20).Gap(8).Children(func() {
 		ui.Row(c.Key("java-toolbar")).FillWidth().Height(28).Shrink(0).Gap(8).Children(func() {
 			if j.downloads {
@@ -226,13 +226,6 @@ func (s *Shell) javaView(c *ui.Context) {
 				iconButton(c, "refresh-java", "重新发现本机 Java", iconRefresh, s.refreshJava).Disabled(j.editing)
 			}
 		})
-		if j.message != "" {
-			color := t.TextMuted
-			if j.failed {
-				color = t.Danger
-			}
-			ui.Text(c, j.message).FontSize(11).TextColor(color).MaxLines(3)
-		}
 		s.javaTaskCard(c)
 		if j.downloads {
 			s.javaDownloadList(c)

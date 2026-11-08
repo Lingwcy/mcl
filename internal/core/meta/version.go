@@ -175,8 +175,8 @@ func ParseVersion(data []byte) (Version, error) {
 // ValidateVanilla defines the currently implemented version format. Legacy and
 // inherited documents are decoded but cannot silently enter the modern pipeline.
 func (v Version) ValidateVanilla() error {
-	if v.Type != "release" || v.InheritsFrom != "" || v.Arguments == nil {
-		return errors.New("目前仅支持带现代参数格式的原版正式版；旧版与继承版本尚未开放")
+	if (v.Type != "release" && v.Type != "snapshot") || v.InheritsFrom != "" || v.Arguments == nil {
+		return errors.New("目前仅支持带现代参数格式的官方版本；旧版格式与继承文档尚未开放")
 	}
 	if v.Java.Major <= 0 || len(v.Arguments.Game) == 0 || len(v.Arguments.JVM) == 0 {
 		return errors.New("版本缺少 Java 要求或启动参数")

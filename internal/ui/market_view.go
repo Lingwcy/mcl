@@ -20,9 +20,6 @@ const (
 func (s *Shell) marketView(c *ui.Context) {
 	m, t := &s.market, s.theme
 	ui.Column(c.Key("market-content")).Grow(1).MinHeight(0).FillWidth().Padding(12, 20, 10).Gap(8).Children(func() {
-		if m.message != "" {
-			ui.Text(c, m.message).FontSize(11).TextColor(t.TextMuted).MaxLines(2)
-		}
 		if m.showKey {
 			s.marketKeyView(c)
 			return

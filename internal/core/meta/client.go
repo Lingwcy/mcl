@@ -31,11 +31,12 @@ type Catalog struct {
 // Client caches mutable manifests by age and immutable version documents by
 // their official SHA-1. HTTP is injectable so ordinary tests never need a network.
 type Client struct {
-	HTTP        *http.Client
-	CacheDir    string
-	ManifestURL string
-	MaxAge      time.Duration
-	manifestMu  sync.Mutex
+	HTTP          *http.Client
+	CacheDir      string
+	ManifestURL   string
+	MaxAge        time.Duration
+	VerifiedFetch func(context.Context, string, string, int64) ([]byte, error)
+	manifestMu    sync.Mutex
 }
 
 func NewClient(cacheDir string) *Client {
@@ -107,7 +108,13 @@ func (c *Client) Version(ctx context.Context, entry ManifestEntry) (Version, err
 			return version, nil
 		}
 	}
-	data, err := c.fetch(ctx, entry.URL)
+	var data []byte
+	var err error
+	if c.VerifiedFetch != nil {
+		data, err = c.VerifiedFetch(ctx, entry.URL, entry.SHA1, maxMetadataSize)
+	} else {
+		data, err = c.fetch(ctx, entry.URL)
+	}
 	if err != nil {
 		return Version{}, err
 	}

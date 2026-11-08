@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"mcl/internal/app"
 	"mcl/internal/core/instance"
@@ -13,14 +14,16 @@ import (
 
 // LibraryActions starts work outside rendering. Completions run on the UI thread.
 type LibraryActions struct {
-	Load            func(bool, func(app.LibrarySnapshot, error))
-	Create          func(app.CreateInstance, func(instance.Instance, error))
-	CreateTask      func(app.CreateInstance, func(instance.Instance, error)) func()
-	LoadInstance    func(string, func(instance.Instance, error))
-	SavePreferences func(string, app.InstancePreferences, app.InstancePreferences, func(instance.Instance, error))
-	LoaderReleases  func(string, string, func([]loader.Release, error)) func()
-	PickIcon        func(func([]byte, error)) func()
-	PickArchive     func(app.Settings, func(app.ArchiveImportPlan, error)) func()
+	DeleteInstance     func(string, func(error)) func()
+	Load               func(bool, func(app.LibrarySnapshot, error))
+	Create             func(app.CreateInstance, func(instance.Instance, error))
+	CreateTask         func(app.CreateInstance, func(instance.Instance, error)) func()
+	LoadInstance       func(string, func(instance.Instance, error))
+	SavePreferences    func(string, app.InstancePreferences, app.InstancePreferences, func(instance.Instance, error))
+	LoaderReleases     func(string, string, func([]loader.Release, error)) func()
+	PickIcon           func(func([]byte, error)) func()
+	PickArchive        func(app.Settings, func(app.ArchiveImportPlan, error)) func()
+	InspectArchiveFile func(string, app.Settings, func(app.ArchiveImportPlan, error)) func()
 }
 
 type libraryState struct {
@@ -55,6 +58,7 @@ func (s *Shell) refreshLibrary(refresh bool) {
 	l.busy, l.message, l.failed = true, "", false
 	l.actions.Load(refresh, func(snapshot app.LibrarySnapshot, err error) {
 		l.busy = false
+		snapshot.Instances = slices.DeleteFunc(snapshot.Instances, func(value instance.Instance) bool { return s.deletedInstances[value.ID] })
 		if err == nil || snapshot.InstancesLoaded {
 			l.snapshot.Instances = snapshot.Instances
 			s.cacheInstanceIcons(snapshot.Instances)
@@ -121,7 +125,12 @@ func (s *Shell) createInstance() {
 	if l.busy || (l.actions.Create == nil && l.actions.CreateTask == nil) {
 		return
 	}
-	settings := s.settings
+	settings := s.creationSettings()
+	if !s.gameDirectoryAvailable(settings.GameDirectoryID) {
+		s.Notify(ToastError, "请选择可用的游戏目录")
+		return
+	}
+	s.gameDirectories.pickerOpen = false
 	l.busy, l.message, l.failed = true, "", false
 	draft := &s.creation
 	request := app.CreateInstance{Name: l.name, VersionID: l.selected, Settings: settings, Icon: append([]byte(nil), draft.icon...), IconStyle: draft.iconStyle}
@@ -147,6 +156,7 @@ func (s *Shell) createInstance() {
 		}
 		l.snapshot.Instances = append([]instance.Instance{value}, l.snapshot.Instances...)
 		s.cacheInstanceIcons([]instance.Instance{value})
+		s.refreshGameDirectories()
 		l.selectedID, l.name, l.message, l.newDetails = value.ID, "", "实例已创建，游戏目录与其他实例隔离。", false
 		s.page = libraryPage
 		s.ensureAssets()

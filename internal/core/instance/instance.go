@@ -16,17 +16,19 @@ import (
 )
 
 type Instance struct {
-	ID           string             `json:"id"`
-	Name         string             `json:"name"`
-	Version      meta.ManifestEntry `json:"version"`
-	RequiredJava int                `json:"required_java"`
-	JavaPath     string             `json:"java_path"`
-	MaxMemoryMiB int                `json:"max_memory_mib"`
-	CreatedAt    time.Time          `json:"created_at"`
-	Pack         *Pack              `json:"pack,omitempty"`
-	Loader       *Loader            `json:"loader,omitempty"`
-	Icon         []byte             `json:"icon,omitempty"`
-	IconStyle    string             `json:"icon_style,omitempty"`
+	GameDirectoryID string             `json:"game_directory_id,omitempty"`
+	ID              string             `json:"id"`
+	Name            string             `json:"name"`
+	Description     string             `json:"description,omitempty"`
+	Version         meta.ManifestEntry `json:"version"`
+	RequiredJava    int                `json:"required_java"`
+	JavaPath        string             `json:"java_path"`
+	MaxMemoryMiB    int                `json:"max_memory_mib"`
+	CreatedAt       time.Time          `json:"created_at"`
+	Pack            *Pack              `json:"pack,omitempty"`
+	Loader          *Loader            `json:"loader,omitempty"`
+	Icon            []byte             `json:"icon,omitempty"`
+	IconStyle       string             `json:"icon_style,omitempty"`
 }
 
 type Loader struct {
@@ -34,6 +36,9 @@ type Loader struct {
 	Version string `json:"version"`
 }
 type Pack struct {
+	Name        string   `json:"name,omitempty"`
+	Version     string   `json:"version,omitempty"`
+	Author      string   `json:"author,omitempty"`
 	Source      string   `json:"source"`
 	ProjectID   string   `json:"project_id"`
 	VersionID   string   `json:"version_id"`
@@ -80,8 +85,11 @@ func ValidateName(name string) error {
 }
 
 func (i Instance) Validate() error {
-	if !ValidID(i.ID) || i.RequiredJava <= 0 || i.CreatedAt.IsZero() {
+	if (i.GameDirectoryID != "" && !ValidID(i.GameDirectoryID)) || !ValidID(i.ID) || i.RequiredJava <= 0 || i.CreatedAt.IsZero() {
 		return errors.New("invalid instance ID, Java requirement or creation time")
+	}
+	if err := ValidateDescription(i.Description); err != nil {
+		return err
 	}
 	if err := ValidateName(i.Name); err != nil {
 		return err
@@ -102,7 +110,10 @@ func (i Instance) Validate() error {
 	}
 	if i.Pack != nil {
 		p := i.Pack
-		if (p.Source != "modrinth" && p.Source != "curseforge") || p.ProjectID == "" || p.VersionID == "" || !meta.ValidSHA1(p.ArchiveSHA1) || len(p.Loaders) > 1 {
+		if len(p.Name) > 1024 || len(p.Version) > 256 || len(p.Author) > 1024 || !utf8.ValidString(p.Name+p.Version+p.Author) || strings.IndexFunc(p.Name+p.Version+p.Author, unicode.IsControl) >= 0 {
+			return errors.New("invalid modpack metadata")
+		}
+		if (p.Source != "modrinth" && p.Source != "curseforge" && !(p.Source == "multimc" && p.Local)) || p.ProjectID == "" || p.VersionID == "" || !meta.ValidSHA1(p.ArchiveSHA1) || len(p.Loaders) > 1 {
 			return errors.New("invalid modpack identity or runtime")
 		}
 		if p.Local && (p.ProjectID != "local-"+p.ArchiveSHA1 || p.VersionID != p.ArchiveSHA1) {
@@ -127,4 +138,11 @@ func ValidIconStyle(value string) bool {
 func ValidLoader(value Loader) bool {
 	return (value.Type == "fabric" || value.Type == "quilt" || value.Type == "forge" || value.Type == "neoforge") &&
 		meta.ValidID(value.Version) && !strings.ContainsAny(value.Version, " /\\:\r\n")
+}
+
+func ValidateDescription(value string) error {
+	if !utf8.ValidString(value) || len(value) > 16<<10 || utf8.RuneCountInString(value) > 4096 || strings.IndexFunc(value, func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\t' }) >= 0 {
+		return errors.New("实例描述最多4096个字符，且不能含无效控制字符")
+	}
+	return nil
 }

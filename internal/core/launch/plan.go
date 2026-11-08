@@ -75,6 +75,7 @@ func (s Session) MarshalJSON() ([]byte, error) {
 
 type Options struct {
 	Root            string
+	GameDirectory   string
 	InstanceID      string
 	Version         meta.Version
 	Platform        meta.Platform
@@ -84,11 +85,13 @@ type Options struct {
 	MinMemoryMiB    int
 	GCMode          GCMode
 	JVMArguments    []string
+	Game            GameSettings
 }
 
 // Plan keeps executable arguments private so common formatting and JSON
 // diagnostics cannot accidentally disclose the session token.
 type Plan struct {
+	priority                                ProcessPriority
 	executable, directory, root, instanceID string
 	arguments, secrets                      []string
 	mainIndex                               int
@@ -96,9 +99,10 @@ type Plan struct {
 }
 
 type Preview struct {
-	Executable string   `json:"executable"`
-	Directory  string   `json:"directory"`
-	Arguments  []string `json:"arguments"`
+	Priority   ProcessPriority `json:"process_priority,omitempty"`
+	Executable string          `json:"executable"`
+	Directory  string          `json:"directory"`
+	Arguments  []string        `json:"arguments"`
 }
 
 func Build(options Options, session Session) (Plan, error) {
@@ -110,7 +114,7 @@ func Build(options Options, session Session) (Plan, error) {
 		return Plan{}, err
 	}
 	index := slices.Index(preview.Arguments, options.Version.MainClass)
-	return Plan{executable: preview.Executable, directory: preview.Directory, root: options.Root, instanceID: options.InstanceID, arguments: preview.Arguments, mainIndex: index, secrets: []string{session.token}, target: meta.Platform{OS: options.Platform.OS, Arch: meta.NormalizeArch(options.Platform.Arch)}}, nil
+	return Plan{priority: options.Game.Priority, executable: preview.Executable, directory: preview.Directory, root: options.Root, instanceID: options.InstanceID, arguments: preview.Arguments, mainIndex: index, secrets: []string{session.token}, target: meta.Platform{OS: options.Platform.OS, Arch: meta.NormalizeArch(options.Platform.Arch)}}, nil
 }
 
 // PreviewOptions produces a reviewable command with explicit unresolved login
@@ -122,7 +126,7 @@ func (p Plan) Preview() Preview {
 	for i, arg := range args {
 		args[i] = p.Redact(arg)
 	}
-	return Preview{Executable: p.Redact(p.executable), Directory: p.Redact(p.directory), Arguments: args}
+	return Preview{Priority: p.priority, Executable: p.Redact(p.executable), Directory: p.Redact(p.directory), Arguments: args}
 }
 func (p Plan) Redact(text string) string {
 	for _, secret := range p.secrets {
@@ -136,10 +140,12 @@ func (p Plan) String() string               { data, _ := p.MarshalJSON(); return
 func (p Plan) GoString() string             { return p.String() }
 func (p Plan) MarshalJSON() ([]byte, error) { return json.Marshal(p.Preview()) }
 
-func (p Plan) Executable() string   { return p.executable }
-func (p Plan) Directory() string    { return p.directory }
-func (p Plan) DataRoot() string     { return p.root }
-func (p Plan) InstancePath() string { return path.Join("instances", p.instanceID) }
+func (p Plan) Executable() string        { return p.executable }
+func (p Plan) Priority() ProcessPriority { return p.priority }
+func (p Plan) Directory() string         { return p.directory }
+func (p Plan) DataRoot() string          { return p.root }
+func (p Plan) InstanceID() string        { return p.instanceID }
+func (p Plan) InstancePath() string      { return path.Join("instances", p.instanceID) }
 
 func (p Plan) Target() meta.Platform { return p.target }
 
@@ -167,8 +173,14 @@ func (p Plan) JVMArgumentFile() ([]byte, error) {
 }
 
 func build(o Options, s *Session) (Preview, error) {
+	if err := o.Game.Validate(); err != nil {
+		return Preview{}, err
+	}
 	if !filepath.IsAbs(o.Root) || !filepath.IsAbs(o.Java.Executable) || !safeText(o.Root) || !safeText(o.Java.Executable) || !instance.ValidID(o.InstanceID) {
 		return Preview{}, errors.New("启动目录、Java 路径或实例 ID 无效")
+	}
+	if o.GameDirectory != "" && (!filepath.IsAbs(o.GameDirectory) || !safeText(o.GameDirectory) || filepath.Clean(o.GameDirectory) != o.GameDirectory) {
+		return Preview{}, errors.New("游戏工作目录无效")
 	}
 	if o.MaxMemoryMiB < 512 || o.MaxMemoryMiB > 65536 || o.Java.Arch == "386" && o.MaxMemoryMiB > 1536 {
 		return Preview{}, errors.New("游戏内存超出当前 JVM 可用范围")
@@ -210,10 +222,14 @@ func build(o Options, s *Session) (Preview, error) {
 		}
 		classpath = append(classpath, full)
 	}
+	gameDirectory := o.GameDirectory
+	if gameDirectory == "" {
+		gameDirectory = absolute(path.Join("instances", o.InstanceID, "game"))
+	}
 	values := map[string]string{
 		"auth_player_name": "<登录后提供>", "auth_uuid": "<登录后提供>", "auth_access_token": "<登录后提供>", "clientid": "<登录后提供>", "auth_xuid": "<登录后提供>",
 		"user_type": "msa", "user_properties": "{}", "version_name": o.Version.ID, "version_type": o.Version.Type,
-		"game_directory": absolute(path.Join("instances", o.InstanceID, "game")), "assets_root": absolute("cache/assets"), "assets_index_name": o.Version.AssetIndex.ID,
+		"game_directory": gameDirectory, "assets_root": absolute("cache/assets"), "assets_index_name": o.Version.AssetIndex.ID,
 		"natives_directory": absolute(o.NativeDirectory), "launcher_name": "mcl", "launcher_version": "0.1.0", "classpath": strings.Join(classpath, separator),
 		"classpath_separator": separator, "library_directory": absolute("cache/libraries"),
 	}
@@ -233,14 +249,20 @@ func build(o Options, s *Session) (Preview, error) {
 		}
 	}
 	platform := o.Platform
-	// First-version launching has no demo, custom-resolution or quick-play
-	// option. Never inherit arbitrary feature flags from caller/UI state.
+	// Only structured, validated settings may enable official feature rules.
+	// In particular, never inherit arbitrary caller demo/quick-play flags.
 	platform.Features = nil
+	quickPlay := o.Game.AutoJoinServer && supportsQuickPlay(o.Version.Arguments.Game)
+	gamePlatform := platform
+	gamePlatform.Features = map[string]bool{
+		"has_custom_resolution":     o.Game.Width != 0 && o.Game.Height != 0,
+		"is_quick_play_multiplayer": quickPlay,
+	}
 	jvm, err := meta.SelectArguments(o.Version.Arguments.JVM, platform)
 	if err != nil {
 		return Preview{}, err
 	}
-	game, err := meta.SelectArguments(o.Version.Arguments.Game, platform)
+	game, err := meta.SelectArguments(o.Version.Arguments.Game, gamePlatform)
 	if err != nil {
 		return Preview{}, err
 	}
@@ -280,15 +302,13 @@ func build(o Options, s *Session) (Preview, error) {
 		}
 		args = append(args, arg)
 	}
-	args = append(args, o.Version.MainClass)
-	for _, arg := range game {
-		value, err := substitute(arg, values)
-		if err != nil {
-			return Preview{}, err
-		}
-		args = append(args, value)
+	gameArgs, err := gameArguments(game, values, o.Game, quickPlay)
+	if err != nil {
+		return Preview{}, err
 	}
-	return Preview{Executable: o.Java.Executable, Directory: values["game_directory"], Arguments: args}, nil
+	args = append(args, o.Version.MainClass)
+	args = append(args, gameArgs...)
+	return Preview{Priority: o.Game.Priority, Executable: o.Java.Executable, Directory: values["game_directory"], Arguments: args}, nil
 }
 
 func substitute(value string, values map[string]string) (string, error) {

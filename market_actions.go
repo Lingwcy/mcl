@@ -8,7 +8,6 @@ import (
 	"mcl/internal/app"
 	"mcl/internal/core/download"
 	"mcl/internal/core/install"
-	"mcl/internal/core/instance"
 	"mcl/internal/core/market"
 	"mcl/internal/platform"
 	launcherui "mcl/internal/ui"
@@ -16,7 +15,7 @@ import (
 	"github.com/egoist/mygo"
 )
 
-func connectMarket(ctx context.Context, workers *sync.WaitGroup, window *mygo.Window, shell *launcherui.Shell, service *app.MarketService, installer *app.MarketInstaller, archiveImporter *app.ArchiveImporter) {
+func connectMarket(ctx context.Context, workers *sync.WaitGroup, window *mygo.Window, shell *launcherui.Shell, service *app.MarketService, installer *app.MarketInstaller, archiveImporter *app.ArchiveImporter, packImports *app.PackImportService) {
 	icons := make(chan struct{}, 4)
 	shell.ConnectMarket(launcherui.MarketActions{
 		CurseForgeAvailable: service.Client().CurseForgeAvailable(),
@@ -51,10 +50,10 @@ func connectMarket(ctx context.Context, workers *sync.WaitGroup, window *mygo.Wi
 			}, done)
 		},
 		SetKey: service.SetCurseForgeKey,
-		InspectArchive: func(request app.ArchiveImportRequest, settings app.Settings, done func(app.ArchiveImportPlan, error)) func() {
-			return marketWork(ctx, workers, window, func(ctx context.Context) (app.ArchiveImportPlan, error) {
-				return archiveImporter.Inspect(ctx, request, settings, nil)
-			}, done)
+		InspectArchive: func(request app.ArchiveImportRequest, settings app.Settings, progress func(download.Progress), done func(app.ArchiveImportPlan, error)) func() {
+			return runTask(ctx, workers, window, func(task context.Context, report func(install.Progress)) (app.ArchiveImportPlan, error) {
+				return archiveImporter.Inspect(task, request, settings, func(p download.Progress) { report(install.Progress{Stage: "modpack", Progress: p}) })
+			}, func(p install.Progress) { progress(p.Progress) }, done)
 		},
 		SupplyArchive: func(plan app.ArchiveImportPlan, done func(app.LocalFileSupply, error)) func() {
 			return marketWork(ctx, workers, window, func(ctx context.Context) (app.LocalFileSupply, error) {
@@ -65,10 +64,15 @@ func connectMarket(ctx context.Context, workers *sync.WaitGroup, window *mygo.Wi
 				return archiveImporter.Supply(ctx, plan, paths)
 			}, done)
 		},
-		ImportArchive: func(plan app.ArchiveImportPlan, progress func(download.Progress), done func(instance.Instance, error)) func() {
-			return runTask(ctx, workers, window, func(ctx context.Context, report func(install.Progress)) (instance.Instance, error) {
-				return archiveImporter.Import(ctx, plan, func(p download.Progress) { report(install.Progress{Stage: "modpack", Progress: p}) })
-			}, func(p install.Progress) { progress(p.Progress) }, done)
+		ImportArchive: func(plan app.ArchiveImportPlan, progress func(install.Progress), done func(app.PackImportResult, error)) func() {
+			return runTask(ctx, workers, window, func(task context.Context, report func(install.Progress)) (app.PackImportResult, error) {
+				return packImports.Run(task, plan, report)
+			}, progress, done)
+		},
+		ResumePackImport: func(id string, progress func(install.Progress), done func(app.PackImportResult, error)) func() {
+			return runTask(ctx, workers, window, func(task context.Context, report func(install.Progress)) (app.PackImportResult, error) {
+				return packImports.Resume(task, id, report)
+			}, progress, done)
 		},
 		InspectPackRepair: func(id string, done func(app.PackRepairPlan, error)) func() {
 			return marketWork(ctx, workers, window, func(ctx context.Context) (app.PackRepairPlan, error) {

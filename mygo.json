@@ -4,5 +4,26 @@
   "version": "0.0.2",
   "out": "build",
   "slug": "mcl",
-  "icon": "resources/icon.png"
+  "icon": "resources/icon.png",
+  "urlSchemes": [
+    "mcl"
+  ],
+  "fileAssociations": [
+    {
+      "ext": [
+        "mrpack"
+      ],
+      "name": "Minecraft Modrinth Modpack",
+      "mimeType": "application/x-modrinth-modpack+zip",
+      "role": "Viewer"
+    },
+    {
+      "ext": [
+        "zip"
+      ],
+      "name": "Minecraft Modpack Archive",
+      "mimeType": "application/zip",
+      "role": "Viewer"
+    }
+  ]
 }

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -15,6 +16,8 @@ import (
 )
 
 type creationState struct {
+	importGeneration                  uint64
+	directoryID                       *string
 	mode                              int
 	kind, loaderVersion, autoName     string
 	versionOpen, loaderOpen, iconOpen bool
@@ -153,16 +156,50 @@ func (s *Shell) pickCreationIcon() {
 }
 
 func (s *Shell) pickCreationArchive() {
-	d := &s.creation
-	if d.importBusy || s.library.actions.PickArchive == nil {
+	if s.library.actions.PickArchive == nil {
 		return
 	}
-	if s.market.install != nil && s.market.install.busy {
-		d.err = "请先完成或取消当前安装任务"
+	settings := s.creationSettings()
+	s.beginArchiveInspection(func(done func(app.ArchiveImportPlan, error)) func() {
+		return s.library.actions.PickArchive(settings, done)
+	})
+}
+
+// ImportArchiveFile accepts a native explicit-open/drop event. Paths are used
+// only for the bounded background cache copy, never stored as pack identity.
+func (s *Shell) ImportArchiveFile(name string) {
+	if current := s.market.install; current != nil && current.archivePlan != nil && !current.complete {
+		s.Notify(ToastWarning, "请先完成或退出当前整合包导入")
+		return
+	}
+	extension := strings.ToLower(filepath.Ext(name))
+	if !filepath.IsAbs(name) || (extension != ".zip" && extension != ".mrpack") {
+		s.Notify(ToastError, "请选择 ZIP 或 MRPack 整合包文件")
+		return
+	}
+	if s.library.actions.InspectArchiveFile == nil {
+		return
+	}
+	settings := s.creationSettings()
+	s.beginArchiveInspection(func(done func(app.ArchiveImportPlan, error)) func() {
+		return s.library.actions.InspectArchiveFile(name, settings, done)
+	})
+}
+func (s *Shell) beginArchiveInspection(run func(func(app.ArchiveImportPlan, error)) func()) {
+	d := &s.creation
+	if d.importBusy || s.library.busy || (s.market.install != nil && s.market.install.busy) {
+		s.Notify(ToastWarning, "请先完成或取消当前导入/安装任务")
 		return
 	}
 	d.importBusy, d.err = true, ""
-	d.cancelImport = s.library.actions.PickArchive(s.settings, func(plan app.ArchiveImportPlan, err error) {
+	d.importGeneration++
+	generation := d.importGeneration
+	d.mode, s.page = 1, newInstancePage
+	s.gameDirectories.pickerOpen = false
+	d.cancelImport = run(func(plan app.ArchiveImportPlan, err error) {
+		if generation != d.importGeneration {
+			return
+		}
 		d.importBusy, d.cancelImport = false, nil
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
@@ -180,13 +217,14 @@ func (s *Shell) pickCreationArchive() {
 			request:     market.InstallRequest{Source: request.Source, Kind: market.Modpack, ProjectID: request.ProjectID, VersionID: request.VersionID},
 			archivePlan: &plan, archiveName: plan.Instance.Name, archiveMissing: plan.MissingRequired(), optional: make(map[string]bool), localArchive: request.LocalArchive,
 		}
+		s.initializeArchiveEditor(s.market.install, plan)
 		s.market.showInstall = true
 	})
 }
 
 func (s *Shell) creationReady() bool {
 	d, l := &s.creation, &s.library
-	return !l.busy && !d.busy && !d.iconBusy && l.selected != "" && instance.ValidateName(strings.TrimSpace(l.name)) == nil &&
+	return s.gameDirectoryAvailable(s.creationGameDirectoryID()) && !l.busy && !d.busy && !d.iconBusy && l.selected != "" && instance.ValidateName(strings.TrimSpace(l.name)) == nil &&
 		(d.kind == "" || (d.loaderVersion != "" && d.err == ""))
 }
 

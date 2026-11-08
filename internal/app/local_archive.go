@@ -38,7 +38,7 @@ func (s *ArchiveImporter) InspectLocal(ctx context.Context, name string, setting
 func (s *ArchiveImporter) resolveArchive(ctx context.Context, request ArchiveImportRequest) (market.File, string, market.Version, error) {
 	if request.LocalArchive != nil {
 		file := *request.LocalArchive
-		if request.Kind != market.Modpack || (request.Source != market.Modrinth && request.Source != market.CurseForge) || file.URL != "" || !market.SafeFilename(file.Filename) || !meta.ValidSHA1(file.SHA1) || file.SHA1 != strings.ToLower(file.SHA1) || file.Size <= 0 || file.Size > 512<<20 || request.ProjectID != "local-"+file.SHA1 || request.VersionID != file.SHA1 {
+		if request.Kind != market.Modpack || (request.Source != market.Modrinth && request.Source != market.CurseForge && request.Source != "multimc") || file.URL != "" || !market.SafeFilename(file.Filename) || !meta.ValidSHA1(file.SHA1) || file.SHA1 != strings.ToLower(file.SHA1) || file.Size <= 0 || file.Size > modpack.MaxArchiveSize || request.ProjectID != "local-"+file.SHA1 || request.VersionID != file.SHA1 {
 			return market.File{}, "", market.Version{}, errors.New("本地整合包固定身份无效")
 		}
 		return file, "", market.Version{}, ctx.Err()
@@ -69,8 +69,8 @@ func (s *ArchiveImporter) resolveArchive(ctx context.Context, request ArchiveImp
 	if err != nil {
 		return file, page, version, err
 	}
-	if file.Size > 512<<20 {
-		return file, page, version, errors.New("压缩包超过 512 MiB")
+	if file.Size > modpack.MaxArchiveSize {
+		return file, page, version, errors.New("压缩包超过 2 GiB")
 	}
 	if restricted || !modpack.AllowedDownload(file.URL) {
 		file.URL = ""

@@ -24,7 +24,12 @@ func (s *MarketService) SetCurseForgeKey(key string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.client = market.NewClient(key)
+	replacement := market.NewClient(key)
+	if s.client != nil {
+		replacement.HTTP = s.client.HTTP
+		replacement.ModrinthURL, replacement.CurseForgeURL = s.client.ModrinthURL, s.client.CurseForgeURL
+	}
+	s.client = replacement
 	return nil
 }
 func (s *MarketService) Search(ctx context.Context, q market.Query) (market.Results, error) {

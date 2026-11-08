@@ -52,6 +52,8 @@ var (
 	iconRefresh          = bundledIcon("rotate-cw")
 	iconSort             = bundledIcon("arrow-down-wide-narrow")
 	iconInfo             = bundledIcon("info")
+	iconError            = bundledIcon("circle-x")
+	iconWarning          = bundledIcon("triangle-alert")
 	iconCheck            = bundledIcon("circle-check")
 	iconTrash            = bundledIcon("trash-2")
 	iconUndo             = bundledIcon("undo-2")

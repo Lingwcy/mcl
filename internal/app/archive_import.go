@@ -13,13 +13,16 @@ import (
 	"mcl/internal/core/archive"
 	"mcl/internal/core/download"
 	"mcl/internal/core/instance"
-	"mcl/internal/core/loader"
 	"mcl/internal/core/market"
 	"mcl/internal/core/meta"
 	"mcl/internal/core/modpack"
 )
 
 type ArchiveImportRequest struct {
+	Description                                   *string `json:"description,omitempty"`
+	Icon                                          []byte  `json:"icon,omitempty"`
+	IconStyle                                     string  `json:"icon_style,omitempty"`
+	GameDirectoryID                               *string `json:"game_directory_id,omitempty"`
 	Source                                        market.Source
 	Kind                                          market.Kind
 	ProjectID, VersionID, InstanceID, Name, World string
@@ -44,6 +47,7 @@ type ArchiveImportPlan struct {
 	Warnings         []string
 }
 type ArchiveStore interface {
+	CheckGameDirectory(context.Context, string) error
 	InspectPack(context.Context, market.File) (modpack.Manifest, error)
 	InspectWorld(context.Context, market.File) ([]archive.Mapping, error)
 	CommitArchive(context.Context, ArchiveImportPlan) error
@@ -67,7 +71,23 @@ func NewArchiveImporter(catalog *MarketService, metadata VersionCatalog, instanc
 	return &ArchiveImporter{catalog: catalog, metadata: metadata, instances: instances, registry: registry, store: store, downloads: downloads}
 }
 func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequest, settings Settings, report func(download.Progress)) (ArchiveImportPlan, error) {
+	if request.Kind == market.Modpack {
+		selected := settings.GameDirectoryID
+		if request.GameDirectoryID != nil {
+			selected = *request.GameDirectoryID
+		}
+		if selected != "" && !instance.ValidID(selected) {
+			return ArchiveImportPlan{}, errors.New("整合包游戏目录标识无效")
+		}
+		request.GameDirectoryID = &selected
+		settings.GameDirectoryID = selected
+	}
 	plan := ArchiveImportPlan{Request: request}
+	if request.Kind == market.Modpack {
+		if err := s.store.CheckGameDirectory(ctx, settings.GameDirectoryID); err != nil {
+			return plan, fmt.Errorf("检查游戏安装位置: %w", err)
+		}
+	}
 	if request.Kind != market.Modpack && request.Kind != market.World {
 		return plan, errors.New("不是可导入的压缩包类型")
 	}
@@ -131,8 +151,8 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 		return plan, err
 	}
 	entry, found := versions.Manifest.Find(manifest.Minecraft)
-	if !found || entry.Type != "release" {
-		return plan, errors.New("整合包要求的 Minecraft 正式版尚不可用")
+	if !found || (entry.Type != "release" && entry.Type != "snapshot") {
+		return plan, errors.New("整合包要求的官方 Minecraft 版本尚不可用")
 	}
 	game, err := s.metadata.Version(ctx, entry)
 	if err != nil {
@@ -141,7 +161,20 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 	if err := game.ValidateVanilla(); err != nil {
 		return plan, err
 	}
-	value := instance.Instance{ID: instance.NewID(), Name: strings.TrimSpace(request.Name), Version: entry, RequiredJava: game.Java.Major, JavaPath: settings.JavaPath, CreatedAt: time.Now().UTC(), Pack: &instance.Pack{Source: string(request.Source), ProjectID: request.ProjectID, VersionID: request.VersionID, ArchiveSHA1: file.SHA1, Local: request.LocalArchive != nil}}
+	if err := manifest.CheckRuntime(game); err != nil {
+		return plan, err
+	}
+	value := instance.Instance{ID: instance.NewID(), Name: strings.TrimSpace(request.Name), Version: entry, RequiredJava: game.Java.Major, JavaPath: settings.JavaPath, GameDirectoryID: settings.GameDirectoryID, CreatedAt: time.Now().UTC(), Pack: &instance.Pack{Source: string(request.Source), ProjectID: request.ProjectID, VersionID: request.VersionID, ArchiveSHA1: file.SHA1, Local: request.LocalArchive != nil}}
+	value.Description = manifest.Summary
+	if request.Description != nil {
+		value.Description = strings.TrimSpace(*request.Description)
+	}
+	value.IconStyle = request.IconStyle
+	value.Icon, err = normalizeInstanceIcon(request.Icon)
+	if err != nil {
+		return plan, err
+	}
+	value.Pack.Name, value.Pack.Version, value.Pack.Author = manifest.Name, manifest.Version, manifest.Author
 	for _, loader := range manifest.Loaders {
 		value.Pack.Loaders = append(value.Pack.Loaders, instance.Loader{Type: loader.Type, Version: loader.Version})
 	}
@@ -149,14 +182,6 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 		return plan, err
 	}
 	plan.Instance = value
-	if len(manifest.Loaders) > 0 {
-		required := manifest.Loaders[0]
-		if loader.Supported(required.Type) {
-			plan.Warnings = append(plan.Warnings, "导入后点击安装运行环境，下载游戏与清单锁定的加载器版本")
-		} else {
-			plan.Warnings = append(plan.Warnings, "此整合包可导入文件，但 "+required.Type+" 安装处理器尚未接入，暂不能启动")
-		}
-	}
 	var total int64
 	for _, f := range manifest.Files {
 		if err := ctx.Err(); err != nil {
@@ -243,7 +268,7 @@ func (s *ArchiveImporter) Supply(ctx context.Context, plan ArchiveImportPlan, pa
 			return LocalFileSupply{}, ctx.Err()
 		}
 		file := plan.Archive
-		if len(paths) != 1 || file.URL != "" || !market.SafeFilename(file.Filename) || !meta.ValidSHA1(file.SHA1) || file.Size <= 0 || file.Size > 512<<20 {
+		if len(paths) != 1 || file.URL != "" || !market.SafeFilename(file.Filename) || !meta.ValidSHA1(file.SHA1) || file.Size <= 0 || file.Size > modpack.MaxArchiveSize {
 			return LocalFileSupply{}, errors.New("请选择固定版本对应的压缩包")
 		}
 		return s.store.SupplyPackFiles(ctx, []modpack.File{archiveSupplyFile(file)}, paths)
@@ -357,6 +382,18 @@ func validatePackTargets(plan ArchiveImportPlan) error {
 func (s *ArchiveImporter) Import(ctx context.Context, plan ArchiveImportPlan, report func(download.Progress)) (instance.Instance, error) {
 	if plan.NeedsArchive {
 		return instance.Instance{}, errors.New("请先补齐原始压缩包")
+	}
+	if plan.Request.Kind == market.Modpack {
+		plan.Instance.Name = strings.TrimSpace(plan.Request.Name)
+		if plan.Request.Description != nil {
+			plan.Instance.Description = strings.TrimSpace(*plan.Request.Description)
+		}
+		plan.Instance.IconStyle = plan.Request.IconStyle
+		var err error
+		plan.Instance.Icon, err = normalizeInstanceIcon(plan.Request.Icon)
+		if err != nil {
+			return instance.Instance{}, err
+		}
 	}
 	if err := plan.Instance.Validate(); err != nil {
 		return instance.Instance{}, err

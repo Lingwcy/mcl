@@ -191,7 +191,7 @@ func (s *Shell) accountRailButton(c *ui.Context) {
 }
 
 func (s *Shell) accountsView(c *ui.Context) {
-	a, t := &s.accounts, s.theme
+	a := &s.accounts
 	ui.Column(c.Key("accounts-content")).Fill().Padding(20, 24).Gap(8).Children(func() {
 		if a.cancel != nil {
 			label := "请在浏览器中完成微软登录"
@@ -206,7 +206,7 @@ func (s *Shell) accountsView(c *ui.Context) {
 				s.accountLoadingView(c, "正在读取账户", false)
 			} else {
 				ui.Column(c.Key("account-load-error")).Fill().Center().Gap(12).Children(func() {
-					ui.Text(c, a.message).FontSize(12).TextColor(t.Danger).MaxLines(3)
+
 					if a.actions.Load != nil {
 						ui.Button(c.Key("reload-accounts"), "重新读取账户").Height(28).OnClick(s.loadAccounts)
 					}
@@ -233,9 +233,6 @@ func (s *Shell) accountsView(c *ui.Context) {
 				}
 			})
 		})
-		if a.message != "" {
-			ui.Text(c, a.message).FontSize(12).TextColor(t.Danger).MaxLines(3)
-		}
 		if a.showOffline {
 			s.offlineAccountForm(c)
 		}
@@ -276,9 +273,7 @@ func (s *Shell) emptyAccountsView(c *ui.Context) {
 			if a.showOffline {
 				s.offlineAccountForm(c)
 			}
-			if a.message != "" {
-				ui.Text(c, a.message).FillWidth().TextAlign(ui.Center).FontSize(12).TextColor(t.Danger).MaxLines(4)
-			} else if !a.actions.MicrosoftAvailable {
+			if !a.actions.MicrosoftAvailable {
 				ui.Text(c, "微软登录需要配置 mcl 自有的应用 Client ID").FillWidth().TextAlign(ui.Center).FontSize(11).TextColor(t.TextMuted)
 			}
 		})

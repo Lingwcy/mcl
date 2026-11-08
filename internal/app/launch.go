@@ -21,10 +21,13 @@ type RuntimeProbe func(context.Context, string) (java.Runtime, error)
 // is platform/process.StartTracked; executing before registration is forbidden.
 type ProcessStarter func(launch.Plan, func(launch.ProcessIdentity) error) (launch.Game, error)
 
+type GameDirectoryResolver func(context.Context, string) (string, error)
+
 type LaunchService struct {
+	gameDirectory   GameDirectoryResolver
 	installations   *InstallationService
 	resolveJava     JavaResolver
-	physicalMemory  func() (uint64, error)
+	memoryProbe     MemoryProbe
 	start           ProcessStarter
 	windowVisible   func(launch.ProcessIdentity) (bool, error)
 	windowWatchDone <-chan struct{}
@@ -58,10 +61,14 @@ func (s *LaunchService) Check(ctx context.Context, id string, settings Settings,
 	return PreparationReport{InstanceID: id, VersionID: p.options.Version.ID, Java: p.options.Java, MemoryMiB: p.options.MaxMemoryMiB, Preview: preview, Receipt: p.receipt}, nil
 }
 
-func NewLaunchService(installations *InstallationService, resolveJava JavaResolver, physicalMemory func() (uint64, error), start ProcessStarter, windowVisible func(launch.ProcessIdentity) (bool, error)) *LaunchService {
+func NewLaunchService(installations *InstallationService, resolveJava JavaResolver, memoryProbe MemoryProbe, start ProcessStarter, windowVisible func(launch.ProcessIdentity) (bool, error), directories ...GameDirectoryResolver) *LaunchService {
 	windowWatchDone := make(chan struct{})
-	return &LaunchService{
-		installations: installations, resolveJava: resolveJava, physicalMemory: physicalMemory, start: start,
+	var directory GameDirectoryResolver
+	if len(directories) > 0 {
+		directory = directories[0]
+	}
+	return &LaunchService{gameDirectory: directory,
+		installations: installations, resolveJava: resolveJava, memoryProbe: memoryProbe, start: start,
 		windowVisible: windowVisible, windowWatchDone: windowWatchDone,
 		stopWindowWatch: sync.OnceFunc(func() { close(windowWatchDone) }),
 		games:           make(map[string]*managedGame), changed: make(chan struct{}, 1),
@@ -69,8 +76,9 @@ func NewLaunchService(installations *InstallationService, resolveJava JavaResolv
 }
 
 type LaunchResult struct {
-	Receipt install.Receipt
-	GameID  string
+	Warnings []string
+	Receipt  install.Receipt
+	GameID   string
 }
 
 func (s *LaunchService) Run(ctx context.Context, id string, settings Settings, resolve func(context.Context) (launch.Session, error), report func(install.Progress)) (LaunchResult, error) {
@@ -89,16 +97,18 @@ func (s *LaunchService) Run(ctx context.Context, id string, settings Settings, r
 	if report != nil {
 		report(install.Progress{Stage: "launch"})
 	}
-	if _, err := p.Start(session); err != nil {
+	game, err := p.Start(session)
+	if err != nil {
 		return LaunchResult{}, err
 	}
-	return LaunchResult{Receipt: p.receipt, GameID: p.gameID}, nil
+	return LaunchResult{Receipt: p.receipt, GameID: p.gameID, Warnings: launch.StartupWarnings(game)}, nil
 }
 
 // Prepared owns the instance reservation. Call Close when abandoning it, or
 // Start to transfer that reservation until the game session finishes. Canceling
 // the preparation context closes an unstarted preparation, never a live game.
 type Prepared struct {
+	memoryProbe MemoryProbe
 	mu          sync.Mutex
 	ctx         context.Context
 	options     launch.Options
@@ -134,6 +144,17 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	if err != nil {
 		return nil, err
 	}
+	gameDirectory := ""
+	if s.gameDirectory != nil {
+		directory, err := s.gameDirectory(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("读取实例游戏目录: %w", err)
+		}
+		gameDirectory = directory
+	} else if value.GameDirectoryID != "" {
+		return nil, errors.New("外部游戏目录解析未配置")
+	}
+
 	if report != nil {
 		report(install.Progress{Stage: "metadata"})
 	}
@@ -171,13 +192,11 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	if err := runtime.Check(resolved.version.Java.Major, s.installations.platform); err != nil {
 		return nil, err
 	}
-	var physicalBytes uint64
-	if s.physicalMemory != nil {
-		if total, err := s.physicalMemory(); err == nil {
-			physicalBytes = total
-		}
-	}
 	receipt, err := s.installations.execute(ctx, value, resolved, report)
+	if err != nil {
+		return nil, err
+	}
+	memoryMiB, err := launchMemoryMiB(ctx, s.memoryProbe, runtime)
 	if err != nil {
 		return nil, err
 	}
@@ -186,10 +205,10 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 		return nil, err
 	}
 	options := launch.Options{
-		Root: s.installations.client.Root, InstanceID: id, Version: resolved.version,
+		Root: s.installations.client.Root, InstanceID: id, Version: resolved.version, GameDirectory: gameDirectory,
 		Platform: s.installations.platform, Java: runtime, NativeDirectory: receipt.NativeDirectory,
-		MaxMemoryMiB: launch.AutomaticMemoryMiB(runtime, physicalBytes),
-		GCMode:       fallback.GCMode, JVMArguments: jvmArguments,
+		MaxMemoryMiB: memoryMiB,
+		GCMode:       fallback.GCMode, JVMArguments: jvmArguments, Game: fallback.Game,
 	}
 	if _, err := launch.PreviewOptions(options); err != nil {
 		return nil, err
@@ -197,7 +216,7 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	p := &Prepared{ctx: ctx, options: options, receipt: receipt, versionSHA1: value.Version.SHA1, start: s.start, release: reserved.Close, lease: reserved.lease, settled: make(chan struct{}), started: s.manage}
+	p := &Prepared{memoryProbe: s.memoryProbe, ctx: ctx, options: options, receipt: receipt, versionSHA1: value.Version.SHA1, start: s.start, release: reserved.Close, lease: reserved.lease, settled: make(chan struct{}), started: s.manage}
 	transferred = true
 	go func() {
 		select {
@@ -246,6 +265,13 @@ func (p *Prepared) Start(session launch.Session) (launch.Game, error) {
 	if p.start == nil {
 		return nil, errors.New("游戏进程服务未配置")
 	}
+	// Authentication may outlive preparation. Re-read current availability
+	// before creating the process rather than launch a stale memory budget.
+	memoryMiB, err := launchMemoryMiB(p.ctx, p.memoryProbe, p.options.Java)
+	if err != nil {
+		return nil, err
+	}
+	p.options.MaxMemoryMiB = memoryMiB
 	plan, err := launch.Build(p.options, session)
 	if err != nil {
 		return nil, err
