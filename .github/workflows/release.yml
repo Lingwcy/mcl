@@ -58,7 +58,7 @@ jobs:
             platform: darwin/universal
             directory: darwin-universal
             installer: mcl-${{ needs.version.outputs.number }}.dmg
-          - name: Windows x64
+          - name: Windows x64 (Intel and AMD)
             runner: windows-2025
             platform: windows/amd64
             directory: windows-amd64
@@ -78,6 +78,16 @@ jobs:
         env:
           PLATFORM: ${{ matrix.platform }}
         run: go tool mygo build -platform "$PLATFORM" -o build/release -skip-notarize
+      - name: Verify Windows x64 application and installer payload
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          INSTALLER: ${{ matrix.installer }}
+          DIRECTORY: ${{ matrix.directory }}
+        run: |
+          ./scripts/verify-windows-x64.ps1 `
+            -Application "build/release/$env:DIRECTORY/mcl.exe" `
+            -Installer "build/release/$env:DIRECTORY/$env:INSTALLER"
       - name: Verify macOS bundle
         if: runner.os == 'macOS'
         env:
@@ -148,7 +158,7 @@ jobs:
             "")
               gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes \
                 --title "mcl $RELEASE_TAG" \
-                --notes "macOS: universal DMG (Apple Silicon and Intel), ad-hoc signed and not notarized. Windows: unsigned x64 installer."
+                --notes "macOS: universal DMG (Apple Silicon and Intel), ad-hoc signed and not notarized. Windows: unsigned x64 (x86-64/AMD64, Intel and AMD) installer, not ARM64 or 32-bit x86."
               ;;
             true) ;;
             *)
