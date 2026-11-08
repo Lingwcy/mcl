@@ -249,7 +249,7 @@ func build(o Options, s *Session) (Preview, error) {
 		gameDirectory = absolute(path.Join("instances", o.InstanceID, "game"))
 	}
 	values := map[string]string{
-		"auth_player_name": "<登录后提供>", "auth_uuid": "<登录后提供>", "auth_access_token": "<登录后提供>", "clientid": "<登录后提供>", "auth_xuid": "<登录后提供>",
+		"auth_player_name": "<登录后提供>", "auth_uuid": "<登录后提供>", "auth_access_token": "<登录后提供>", "auth_session": "<登录后提供>", "clientid": "<登录后提供>", "auth_xuid": "<登录后提供>",
 		"user_type": "msa", "user_properties": "{}", "version_name": o.Version.ID, "version_type": o.Version.Type,
 		"game_directory": gameDirectory, "assets_root": absolute("cache/assets"), "assets_index_name": o.Version.AssetIndex.ID,
 		"natives_directory": absolute(o.NativeDirectory), "launcher_name": "mcl", "launcher_version": "0.1.0", "classpath": strings.Join(classpath, separator),
@@ -266,8 +266,9 @@ func build(o Options, s *Session) (Preview, error) {
 	}
 	if s != nil {
 		values["auth_player_name"], values["auth_uuid"], values["auth_access_token"], values["clientid"], values["auth_xuid"] = s.Name, s.UUID, s.token, s.ClientID, s.XUID
+		values["auth_session"] = "token:" + s.token + ":" + s.UUID
 		if s.offline {
-			values["user_type"], values["auth_access_token"] = "legacy", "0"
+			values["user_type"], values["auth_access_token"], values["auth_session"] = "legacy", "0", "0"
 		}
 	}
 	platform := o.Platform
@@ -319,7 +320,7 @@ func build(o Options, s *Session) (Preview, error) {
 		if err != nil {
 			return Preview{}, err
 		}
-		if !strings.HasPrefix(arg, "-Dlog4j.configurationFile=") {
+		if arg != "-Dlog4j.configurationFile="+absolute(plan.LoggingPath) && arg != "-Dlog4j.configuration="+absolute(plan.LoggingPath) {
 			return Preview{}, errors.New("当前管线不支持该日志参数")
 		}
 		args = append(args, arg)
@@ -356,6 +357,9 @@ func substitute(value string, values map[string]string) (string, error) {
 		}
 		key, suffix, closed := strings.Cut(rest, "}")
 		replacement, known := values[key]
+		if key == "game_assets" {
+			return "", errors.New("此版本要求历史 game_assets 目录映射，尚待历史资源布局支持，不能用散列对象目录替代")
+		}
 		if !closed || !known {
 			return "", fmt.Errorf("不支持的启动参数占位符 %q", key)
 		}

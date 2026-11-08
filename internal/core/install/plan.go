@@ -63,7 +63,11 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 		p.Files = append(p.Files, f)
 		return f, nil
 	}
-	p.ClientPath = path.Join("cache/versions", version.ID, version.ID+".jar")
+	clientVersion := version.ID
+	if version.ClientVersion != "" {
+		clientVersion = version.ClientVersion
+	}
+	p.ClientPath = path.Join("cache/versions", clientVersion, clientVersion+".jar")
 	if _, err := add(p.ClientPath, version.Downloads["client"]); err != nil {
 		return Plan{}, err
 	}

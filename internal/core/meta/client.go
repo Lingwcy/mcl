@@ -84,11 +84,20 @@ func (c *Client) Manifest(ctx context.Context, refresh bool) (Catalog, error) {
 	return Catalog{Manifest: manifest, Warning: cacheErr}, nil
 }
 
-func (c *Client) Version(ctx context.Context, entry ManifestEntry) (Version, error) {
+func (c *Client) versionDocument(ctx context.Context, entry ManifestEntry) (Version, error) {
+	if err := ctx.Err(); err != nil {
+		return Version{}, err
+	}
 	if err := entry.Validate(); err != nil {
 		return Version{}, err
 	}
-	cachePath := filepath.Join(c.CacheDir, "versions", strings.ToLower(entry.SHA1)+".json")
+	directory := filepath.Join(c.CacheDir, "versions")
+	if officialPackage(entry) {
+		// Do not promote same-hash documents previously fetched from an arbitrary
+		// endpoint into official provenance. Old/general cache entries stay intact.
+		directory = filepath.Join(directory, "mojang-v1")
+	}
+	cachePath := filepath.Join(directory, strings.ToLower(entry.SHA1)+".json")
 	parse := func(data []byte) (Version, error) {
 		digest := sha1.Sum(data)
 		if !strings.EqualFold(hex.EncodeToString(digest[:]), entry.SHA1) {

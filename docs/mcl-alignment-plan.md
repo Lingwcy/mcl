@@ -1,7 +1,7 @@
 # mcl 能力补齐与参考对齐 Plan
 
 日期：2026-11-08
-状态：逐项实施中。C1 已实现、已构建并交付源码/体验包，测试及真实 JVM/游戏验证待授权；下一项 C2。用户已授权逐项提交，每项先更新本 Plan 再单独 commit。
+状态：逐项实施中。C1、C2 已实现并构建/交付；新增回归和真实 JVM/游戏验证待授权。下一项 C3 历史资产及本地库。每项先更新本 Plan，再单独 commit。
 主要参考：SJMCL，基线 d5b109e0abb42460a8fd665c58ca4b0cc9982182。
 
 ## 1. 目标与现状
@@ -74,6 +74,8 @@ C 兼容性底座 → D 既有目录接入 → T 持久下载与恢复 → I 实
 不在 C1 内冒称完成：全部旧版 Minecraft、旧 Forge、历史资产格式及所有 ARM 旧 native。
 
 ### C2. 历史官方元数据与参数
+
+状态：已研究、已设计、已实现、已构建/交付；回归与真实历史游戏验证未运行。继承仅限官方固定摘要链的原版；未知补丁及继承型客户端叠加 loader 尚不开放，详见第19节。
 
 - 支持明确范围内的 minecraftArguments，并将其规范化为受控参数模型，不拼 shell。
 - 对没有明确 Java 要求的历史官方版本建立可追溯兼容规则，不能仅凭任意版本名猜测。
@@ -252,7 +254,16 @@ C1 实现/构建小闭环（验证状态单独保留）：
 - [x] 更新本 Plan 并单独提交 C1，再开始 C2；不将本项标为历史整合包全兼容。
 - [ ] 获得验证授权后执行离线回归和显式 Java8 协议/真实游戏验收。此项待验证，不伪造通过记录。
 
-下一项 C2：先明确 minecraftArguments 的词法/占位符边界、无 Java 要求的历史官方文档身份与继承来源，再接规范化参数和受限继承链；C3/C4 及后续 D–P 均未实施。
+C2 实现/构建闭环：
+
+- [x] 旧参数有界词法解析，先分词再替换；转换为现有受控参数模型，不拼 shell。
+- [x] Mojang 固定摘要/ID/包路径核验后规范化；明确缺 Java 要求的历史 release 兼容表，不猜快照或任意第三方版本名。
+- [x] 固定父清单快照、最多8层/循环检测、逐文档摘要与身份、主类/条件库/参数/客户端JAR合并；拒绝未知 patches/任意 jar 引用。
+- [x] 补 auth_session、旧 Log4j 文件参数、平台条件默认 JVM 参数及历史资产缺口的明确错误。
+- [x] 补离线回归源码并完成生产/Windows和Linux amd64编译、macOS arm64体验包，更新 Plan 后单独提交。
+- [ ] 授权后执行新增离线回归及真实1.12.2/1.16.5与继承样本验收；不把合成文档当官方历史版本已验证。
+
+下一项 C3：历史 virtual/assets、map-to-resources、具名资源映射所有权与取消恢复、旧 native classifier/排除项和架构匹配。C4 及后续 D–P 未实施。
 
 ## 17. 具体如何参考我们的参考仓库
 
@@ -419,7 +430,7 @@ C1 实现/构建小闭环（验证状态单独保留）：
 - 参考基线已实际核对为 d5b109e0abb42460a8fd665c58ca4b0cc9982182。静态阅读 launch/commands.rs 的 select_suitable_jre/launch_game、helpers/jre_selector.rs 的 select_java_runtime/get_minimum_java_version_by_game，以及 command_generator.rs 的 generate_launch_command。
 - 参考将 class_paths 与 args 分离，移除 -cp 后以进程 CLASSPATH 环境变量传递；自动选择同主版本，否则允许更高版本，并合并客户端/loader/客户端 JSON 的最低要求。mcl 不采用更高主版本回退，不采用 wrapper/脚本/Agent、完整含凭据命令导出或静默优先级失败。
 - 比较三方案：直接完整 -cp 会遇到 Windows 32767 UTF-16 命令长度；CLASSPATH 环境有单值长度/继承注入边界；标准 manifest-only JAR 可把有序本地类路径放入百分号编码 file URL，不把令牌放磁盘。本轮选后者，仅 Java8 使用；Java9+ 保留原 JVM argfile。
-- JAR 仅有 META-INF/MANIFEST.MF，无 Main-Class、类文件、Agent 或补丁。路径按 URL 编码，CRLF 与续行折叠不超过70字节；Class-Path 值限1MiB。Windows8 仅接本地盘绝对路径，UNC/设备路径明确拒绝；剩余真实参数按 os/exec 转义后的 UTF-16 长度检查，超限明确失败，不改 shell、不把游戏令牌改写到磁盘。
+- JAR 仅有 META-INF/MANIFEST.MF，无 Main-Class、类文件、Agent 或补丁。路径按 URL 编码，CRLF 与续行折叠不超过70字节；Class-Path 值限1MiB。Windows 上的 Java8 仅接本地盘绝对路径，UNC/设备路径明确拒绝；剩余真实参数按 os/exec 转义后的 UTF-16 长度检查，超限明确失败，不改 shell、不把游戏令牌改写到磁盘。
 
 ### 实现落点与精确范围
 
@@ -438,3 +449,29 @@ C1 实现/构建小闭环（验证状态单独保留）：
 - java8_integration_test.go 为显式 integration 源码，必须指定 MCL_INTEGRATION_JAVA8 的本机稳定同架构 Java8 JDK，才会编译自建探针，覆盖真实 JVM manifest 读取、Unicode/长类路径、参数脱敏与登记身份/重开保护。未执行此源码，未发现/下载/执行任何 Java 或游戏。
 - 所有新增/修改回归均未运行，生产 build 也不代表测试源码已编译。Windows Java8 的系统编码、真实类加载行为、各平台退出/崩溃/竞争清理仍待授权验收；交叉编译不等于实机兼容。
 - 用户指定的本 Plan 单独纳入版本控制以随逐项 commit 保存进度；其余原有私有文档与 .repo/.tools/build/凭据忽略规则保持，不批量公开。
+
+## 19. C2 实施记录（2026-11-08）
+
+### 参考与独立设计
+
+- 参考提交仍为 d5b109e0abb42460a8fd665c58ca4b0cc9982182，实际静态阅读 launch/helpers/command_generator.rs 的 generate_launch_command：旧模板按空格拆分，补 JVM/native/品牌参数后替换；instance/helpers/client_json.rs 的 McClientInfo/reset_fields_from_patches：补丁库收集、主类/现代参数合并与旧参数替换；jre_selector.rs 的历史 Java 下限用于对照，不移植其任意更高 major 回退。
+- mcl 不照搬字符串简单切空格、第三方 patches/OptiFine/脚本/注入。独立有界词法支持引号分组与有限反斜杠，先分词再替换玩家名、目录和令牌，不对替换值二次分词，不做 shell 展开。16KiB/256项；合并后最多4096库、2048个参数值/256KiB。无新依赖、无UI功能扩张。
+- 官方规范化必须先核验 HTTPS Mojang piston-meta/launchermeta 精确主机、v1/packages/<SHA1>/<ID>.json 路径、内容SHA1、文档ID和类型。一般/原有缓存不能仅凭同名/同摘要晋升为官方来源；官方原文独立存 versions/mojang-v1，保留旧缓存，不把规范化后的JSON写回原文摘要键。允许下载适配注入但实际仍须匹配固定摘要。
+- 缺失 javaVersion 时，仅官方已核验release且位于显式1.6.1–1.16.5已列出的正式版表内使用稳定Java8兼容策略；表不按前缀/字符串大小判断，不覆盖旧alpha/beta、快照、未知/第三方名称。显式无效/null要求不回退。这是mcl兼容决策，不声称每个旧游戏官方原始最低要求都是8，也不是实测兼容表。
+
+### 实现闭环与限制
+
+- core/meta/client.go/resolve.go/legacy.go：原文读取与内存规范化分离，所有调用现有VersionCatalog.Version的创建/导入/安装/准备链共用结果。原始 ParseVersion 允许有合法父ID的部分文档被解码，但 ValidateVanilla 不让未解析继承、旧参数或未知补丁直接进入安装。
+- 父文档只从单次固定官方清单快照中选择，最多8个文档，检测循环；每层核验摘要/ID/来源。保留Sources内存证据，Java取父子更高要求，子主类/资产/日志显式覆盖，参数父→子追加，旧游戏模板替换。库按Maven模块组覆盖，同时保留组内全部条件变体和规则顺序；深拷贝避免父状态别名。显式null/空模板、未核验jar、未知patches、超限和缺失父文档失败。
+- core/install/plan.go：ClientVersion跟随实际继承的客户端文件来源，不能把父JAR重命名为子版本冒充身份；子声明完整客户端则用子ID。显示/游戏版本仍是子ID。
+- core/launch/plan.go：补auth_session（在线token:<token>:<uuid>、离线0），仍只交游戏参数/exec、沿用脱敏与C1支持文件隔离。旧日志允许-Dlog4j.configuration=，新旧日志均必须精确指向经过下载计划核验的本地文件，不能把远端地址或额外尾缀带进日志加载参数。旧默认JVM含macOS首线程规则和受控classpath/native目录。
+- game_assets明确指出C3历史具名布局缺口，不错误映射为散列对象目录；virtual/map-to-resources仍未开放。既有native按架构/摘要保护不弱化，因此旧资源或ARM缺库的版本仍可能拒绝安装/启动。
+- 继承型官方客户端目前只接原版；app/loader.go明确拒绝多文档Sources进入只固定单一base摘要的loader缓存，避免跨父文档变化误复用处理器代际。现有单文档官方base + 已支持Fabric/Quilt/现代Forge路径保持；更广第三方继承和loader代际放C4，不能把任意inheritsFrom当已兼容。
+- 当前未登记任何新的真实MC/Java可运行组合。回归中的1.12.2/child等文档为从现有现代fixture构造的合成格式案例，不是下载的历史官方fixture，也不证明公共官方清单实际存在这些继承样本。
+
+### 构建与验证状态
+
+- gofmt、git diff --check；CGO_ENABLED=0 ./scripts/go.sh build ./...；Windows/Linux amd64主程序交叉编译均返回0。Go1.27.3/MyGo0.7.4，未变go.mod/go.sum。
+- CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize成功编译/临时签名/DMG；build/darwin-arm64/mcl-0.0.2-legacy-metadata-preview-arm64.dmg约8.5MB，未公证、未发布Release。
+- 新增meta/legacy_test.go、resolve_test.go与launch/legacy_test.go，覆盖词法/Unicode/引用边界、官方来源/摘要/独立原文缓存、父链循环/深度/取消、null/未知补丁/客户端引用拒绝、条件变体/深拷贝、组合规模、旧在线/离线会话/令牌隐私、继承客户端安装和启动计划、旧日志。全部仅回归源码，未执行、未编译测试目标。
+- 没有运行go test/vet/race、UI自动化、网络验收、Java或Minecraft；不将生产/交叉编译称为历史版本实机通过。下一项为C3。

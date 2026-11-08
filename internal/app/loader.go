@@ -42,6 +42,11 @@ func (s *LoaderService) resolve(ctx context.Context, value instance.Instance, ba
 	if !ok {
 		return resolvedVersion{version: base}, nil
 	}
+	// Loader caches currently pin a single official base digest. Do not reuse
+	// a processor generation against a mutable multi-document base chain.
+	if len(base.Sources) > 1 {
+		return resolvedVersion{}, fmt.Errorf("继承型官方客户端的加载器缓存身份尚未接入；当前仅支持其原版启动")
+	}
 	request := loader.Request{Type: required.Type, Version: required.Version, GameVersion: value.Version.ID, BaseSHA1: strings.ToLower(value.Version.SHA1)}
 	if err := request.Validate(); err != nil {
 		return resolvedVersion{}, err
