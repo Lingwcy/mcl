@@ -38,7 +38,7 @@ func (r Receipt) Validate() error {
 		return errors.New("invalid installation platform")
 	}
 	if r.Loader != nil {
-		if (r.Loader.Type != "fabric" && r.Loader.Type != "quilt") || !meta.ValidID(r.Loader.Version) || len(r.LoaderFingerprint) != 64 {
+		if (r.Loader.Type != "fabric" && r.Loader.Type != "quilt" && r.Loader.Type != "forge" && r.Loader.Type != "neoforge") || !meta.ValidID(r.Loader.Version) || len(r.LoaderFingerprint) != 64 {
 			return errors.New("invalid installed loader identity")
 		}
 		if _, err := hex.DecodeString(r.LoaderFingerprint); err != nil {

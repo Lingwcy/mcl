@@ -38,25 +38,12 @@ func NewForgeInstaller(catalog *Client, downloads *download.Client, run Processo
 func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta.Version, executable string, platform meta.Platform, report func(string, download.Progress)) (Profile, error) {
 	ctx, cancel := context.WithTimeout(ctx, 25*time.Minute)
 	defer cancel()
-	if s.run == nil {
-		return Profile{}, errors.New("Java 安装处理器未配置")
-	}
-	if executable == "" {
-		return Profile{}, errors.New("安装 Forge 系运行环境前，请选择本机 Java")
-	}
 	coordinate, origin, versionID, err := forgeInstaller(request)
 	if err != nil {
 		return Profile{}, err
 	}
 	if base.ID != request.GameVersion {
 		return Profile{}, errors.New("安装处理器的 Minecraft 版本不匹配")
-	}
-	javaRuntime, err := java.Probe(ctx, executable)
-	if err != nil {
-		return Profile{}, err
-	}
-	if err := javaRuntime.Check(max(9, base.Java.Major), platform); err != nil {
-		return Profile{}, err
 	}
 	relative := coordinate.Path()
 	installer, err := s.catalog.mavenMetadata(ctx, origin+"/"+relative, relative)
@@ -110,6 +97,45 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	z, err := archive.Open(bundleFile, bundle.Size)
 	if err != nil {
 		return Profile{}, err
+	}
+	legacy, isLegacy, err := readLegacyForgeSpec(ctx, z, request, base)
+	if err != nil {
+		return Profile{}, err
+	}
+	if isLegacy {
+		profile, err := s.prepareLegacyForge(ctx, z, request, base, legacy, stage, "ready-"+nonce, bundle.SHA1, progress("loader-download"))
+		if err != nil {
+			return Profile{}, err
+		}
+		if err := bundleFile.Close(); err != nil {
+			return Profile{}, err
+		}
+		if err := stage.RemoveAll("work"); err != nil {
+			return Profile{}, err
+		}
+		if err := ctx.Err(); err != nil {
+			return Profile{}, err
+		}
+		if err := stage.Close(); err != nil {
+			return Profile{}, err
+		}
+		if err := fileio.PublishDirectory(parent, temporary, profile.Generation); err != nil {
+			return Profile{}, err
+		}
+		return profile, nil
+	}
+	if s.run == nil {
+		return Profile{}, errors.New("Java 安装处理器未配置")
+	}
+	if executable == "" {
+		return Profile{}, errors.New("此现代安装器需要单独可用的 Java 9+ 处理器环境")
+	}
+	javaRuntime, err := java.Probe(ctx, executable)
+	if err != nil {
+		return Profile{}, err
+	}
+	if err := javaRuntime.Check(max(9, base.Java.Major), platform); err != nil {
+		return Profile{}, fmt.Errorf("现代安装处理器环境不兼容（游戏 Java 与处理器 Java 尚需独立选择）: %w", err)
 	}
 	spec, version, err := readForgeSpec(ctx, z, request, versionID)
 	if err != nil {

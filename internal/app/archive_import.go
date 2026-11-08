@@ -182,6 +182,9 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 		return plan, err
 	}
 	plan.Instance = value
+	if required, ok := value.RequiredLoader(); ok && required.Type == "forge" && game.Java.Major == 8 {
+		plan.Warnings = append(plan.Warnings, "Forge 安装器将在导入后核验；文件可导入不代表游戏已可运行。")
+	}
 	var total int64
 	for _, f := range manifest.Files {
 		if err := ctx.Err(); err != nil {

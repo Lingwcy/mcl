@@ -1,7 +1,7 @@
 # mcl 能力补齐与参考对齐 Plan
 
 日期：2026-11-08
-状态：逐项实施中。C1–C3 已完成各自实现/构建交付；新增回归及真实 JVM/游戏验证待授权。下一项 C4 旧 Forge 与 loader 兼容。每项先更新本 Plan，再单独 commit。
+状态：逐项实施中。C1–C3及C4a首批旧Forge格式已实现/构建交付；新增回归及真实JVM/游戏验证待授权。C4整体未完成，下一项C4b为处理器Java分离及新版安装器的旧启动模板。每项先更新本Plan，再单独commit。
 主要参考：SJMCL，基线 d5b109e0abb42460a8fd665c58ca4b0cc9982182。
 
 ## 1. 目标与现状
@@ -93,6 +93,8 @@ C 兼容性底座 → D 既有目录接入 → T 持久下载与恢复 → I 实
 - 保留摘要、路径/链接、展开大小和跨实例写入协调。
 
 ### C4. 旧 Forge 与 loader 兼容
+
+状态：进行中，不标整体完成。C4a仅接1.12.2的install/versionInfo无processors格式，已构建未验证；C4b及后续代际尚待推进。细分矩阵、采用范围和证据见第21节。
 
 - 按安装器/配置代际列出支持范围，逐类补旧 Forge、缺失 processor/客户端后处理。
 - 固定官方安装器与依赖身份；工具执行有界、可取消、使用经过检查的 Java。
@@ -274,7 +276,14 @@ C3 实现/构建闭环：
 - [x] 补回归源码，生产/Windows和Linux amd64编译及macOS arm64体验包，更新Plan后单独提交。
 - [ ] 授权后执行离线回归、真实历史版本/native与外部目录/取消/竞争/崩溃验收；本轮未执行。
 
-下一项 C4：按Forge安装器代际、处理器Java与客户端后处理逐类扩展；明确导入/安装/可运行状态。D–P仍未实施。
+C4分批状态：
+
+- [x] C4a：识别1.12.2旧install/versionInfo无processors格式，内嵌Universal及依赖固定身份、LaunchWrapper完整模板替换、独立运行库发布/缓存校验/安装收据/启动计划贯通。已构建，未运行回归或真实游戏。
+- [ ] C4b：游戏Java与安装处理器Java独立解析；现代spec1配合旧minecraftArguments/LaunchWrapper，受支持处理器及客户端后处理。
+- [ ] C4c：更早1.7.10等安装器代际、其余处理器与明确的继承base缓存身份，不放行未知补丁。
+- [ ] 授权后执行各代际固定官方fixture、依赖缺失/摘要错误/取消恢复、实际Java/游戏/平台验收；无验证证据不勾通过。
+
+下一项C4b，不跳到D；D–P仍未实施。
 
 ## 17. 具体如何参考我们的参考仓库
 
@@ -515,3 +524,34 @@ C3 实现/构建闭环：
 - CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize成功编译/临时签名/DMG；交付build/darwin-arm64/mcl-0.0.2-legacy-assets-preview-arm64.dmg约8.5MB，app约18.8MB，未公证、未发布Release。
 - 新增asset_plan_test.go、legacy_assets_test.go、legacy_execute_test.go并补natives/plan/launch回归，覆盖旗标/去重/路径别名、实际副本/共享隔离/冲突保留、取消重试/遗留标记、链接拒绝、摘要或路径替换、离线缓存执行链、game_assets路由和native架构/排除项。全部未执行、未编译测试目标；格式整理和生产build不等于回归通过。
 - 未运行测试/vet/race、Java/游戏、公网/原生/文件系统自动化或用户目录操作。未增加任何真实历史MC/Java/OS组合“已验收”证据。pre-1.6缺摘要/旧元数据及缺ARM native等边界仍拒绝；不宣称所有历史整合包可运行。下一项C4。
+
+## 21. C4a 首批旧 Forge 格式（2026-11-08）
+
+### 代际矩阵（实现不等于验收）
+
+| 格式/运行条件 | 本轮状态 | 明确边界 |
+| --- | --- | --- |
+| Forge 1.12.2 install/versionInfo、内嵌Universal、无processors | C4a已实现/构建，未验证 | 仅两个明确版本ID形式、匹配父ID/坐标、LaunchWrapper 1.12/FMLTweaker、固定依赖身份；缺摘要失败 |
+| 同为1.12.2但新版spec1/version.json且minecraftArguments/LaunchWrapper | 仍待C4b | 不能凭游戏版本或同一Forge构建号承诺走旧分支 |
+| 现代spec1 + arguments + 已有受支持processor | 保留既有实现，修正收据身份 | 游戏Java8时仍缺独立处理器Java选择，明确错误，不把高major拿来冒充游戏Java |
+| 1.7.10及其他更早旧安装器/主类/工具 | 待C4c | 即使有install/versionInfo也暂拒绝，不直接放开旧入口 |
+| NeoForge、其他loader或未知Tweaker伪装旧格式 | 拒绝 | 不借旧标记绕过现代校验 |
+| 多文档官方继承base叠加loader | 仍待后续身份设计 | C2的单base摘要缓存守卫保留 |
+
+### 参考、取舍和链路
+
+- 静态阅读固定参考d5b109e0的instance/helpers/loader/forge.rs：现代version.json与旧install/versionInfo分支、install.path/filePath、旧模板替换；postprocess.rs/common.rs的准备/处理阶段。参考旧格式可先按name/url下载而缺固定大小/SHA；mcl不采用未固定下载、不复制参考Maven替换/覆盖策略或执行任意旧工具。
+- core/loader/forge_install.go先固定官方安装包SHA1/大小并复制私有stage，再识别格式；无processors旧分支不要求Java9+、不Probe/执行Java。现代分支仍保留真实Probe、主版本最低要求和ProcessorRunner，不简单删除Java校验。
+- forge_legacy.go只接受Forge1.12.2、单文档Java8官方base、匹配版本ID/父ID/install坐标、无新旧混合字段、无覆盖客户端/资源/patches。内嵌Universal从固定安装包安全提取，核对FMLTweaker类条目；LaunchWrapper必须为1.12且包含Launch入口。条目存在只是格式检查，不把它当字节码运行验收。
+- 库最多128项，只接JAR、不替换native。内嵌文件摘要继承安装包信任并核算实际大小/SHA；额外artifact声明必须一致，旧checksums列表最多16条且实际摘要必须匹配其中一条，不能用后来读取的Maven身份静默绕过原清单约束。其他库优先使用完整声明或同坐标官方base的固定身份，否则仅从明确官方/公共Maven根读取.sha1和HEAD大小再下载。只有Forge自有旧files.minecraftforge.net/maven根可规范化为https://maven.minecraftforge.net；无摘要/大小、未知仓库、坐标/路径冲突即失败，禁止猜CDN或无校验兜底。
+- 独立运行库代际仍私有stage、逐文件校验和非覆盖发布，原游戏目录/来源记录不改。Profile新增可选Legacy标记（false省略，原现代缓存字段指纹不变），严格校验旧代际/main/Java8/Universal/LaunchWrapper与完整游戏模板。旧模板替换原版game参数而不是重复追加，保留原版JVM/native、客户端/assets与C1私有传输。只允许已知身份/路径占位符和唯一固定FMLTweaker，不接Agent、自定义Tweaker或脚本。
+- LoaderStore沿原有指纹/VerifyRuntime校验实际代际，缺失/损坏重建，不以缓存标记冒充完整。安装收据原本只接受Fabric/Quilt导致Forge/NeoForge成功产物也无法保存，本轮修正为四类已支持loader身份，仍要求固定版本/64字符十六进制指纹和实例/平台匹配。
+- 旧Java8 Forge整合包确认沿既有Warnings显示“安装器将在导入后核验；文件可导入不代表游戏已可运行”。Imported/RuntimeReady与真实游戏会话继续分开，失败保留导入实例可续装，实际启动仍走Prepared.Start/StartTracked，不放低级exec捷径。
+
+### 构建与未验证
+
+- gofmt、git diff --check；CGO_ENABLED=0 ./scripts/go.sh build ./...及Windows/Linux amd64主程序交叉编译返回0。Go1.27.3/MyGo0.7.4，未升级依赖。
+- CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize成功编译/临时签名/DMG；build/darwin-arm64/mcl-0.0.2-legacy-forge-preview-arm64.dmg约8.6MB，app约18.8MB，未公证、未发布Release。
+- forge_legacy_test.go为合成JSON/JAR/内存HTTP适配源码：安装器完整无Java分支、固定文件身份/代际、缓存序列化/损坏、旧模板到私有启动计划、未知格式/父ID/坐标/Tweaker/URL拒绝、现代格式隔离和取消。receipt_test.go补四类loader收据匹配。全部未执行、未编译测试目标。
+- 用例中的14.23.5.2860字符串和1.12.2仅标识合成结构；安装包字节/摘要/类内容都是合成，不是该官方构建的真实样本。没有下载或运行真实Forge，不能宣称该构建实际使用旧格式、所有1.12.2已支持或已进入游戏。
+- 未运行test/vet/race、Java/处理器/游戏、公网/原生自动化/实机验收。C4整体仍未完成，下一项C4b继续处理器Java分离和现代安装器的旧参数；不跳到D。

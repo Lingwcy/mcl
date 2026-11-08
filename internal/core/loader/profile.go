@@ -46,6 +46,7 @@ type Profile struct {
 	Arguments     meta.Arguments
 	Generation    string          `json:",omitempty"`
 	InstallerSHA1 string          `json:",omitempty"`
+	Legacy        bool            `json:",omitempty"`
 	Outputs       []meta.Download `json:",omitempty"`
 }
 
@@ -76,16 +77,24 @@ func (p Profile) Validate() error {
 	if p.Request.Type == "quilt" && p.MainClass != "org.quiltmc.loader.impl.launch.knot.KnotClient" {
 		return errors.New("Quilt 客户端主类不受支持")
 	}
+	if p.Legacy {
+		if err := validateLegacyForgeProfile(p); err != nil {
+			return err
+		}
+	}
 	if prepared {
 		_, _, versionID, err := forgeInstaller(p.Request)
 		if err != nil {
 			return err
 		}
-		if p.ID != versionID || !validGeneration(p.Generation) || !meta.ValidSHA1(p.InstallerSHA1) ||
-			len(p.Outputs) == 0 || len(p.Outputs) > 256 || !forgeMainClass(p.MainClass) {
+		validIdentity := p.ID == versionID && forgeMainClass(p.MainClass) && len(p.Outputs) > 0
+		if p.Legacy {
+			validIdentity = legacyForgeID(p.Request, p.ID) && p.MainClass == legacyForgeMain
+		}
+		if !validIdentity || !validGeneration(p.Generation) || !meta.ValidSHA1(p.InstallerSHA1) || len(p.Outputs) > 256 {
 			return errors.New("Forge 系加载器运行环境信息无效")
 		}
-	} else if p.Generation != "" || p.InstallerSHA1 != "" || len(p.Outputs) != 0 {
+	} else if p.Generation != "" || p.InstallerSHA1 != "" || len(p.Outputs) != 0 || p.Legacy {
 		return errors.New("加载器包含非预期的生成文件")
 	}
 	found := prepared
@@ -170,6 +179,13 @@ func (p Profile) Merge(base meta.Version) (meta.Version, error) {
 	effective.Java.Major = max(base.Java.Major, p.JavaMajor)
 	args := *base.Arguments
 	args.Game = append(slices.Clone(args.Game), p.Arguments.Game...)
+	if p.Legacy {
+		if base.Java.Major != 8 {
+			return meta.Version{}, errors.New("旧 Forge 配置要求稳定 Java 8 的官方客户端")
+		}
+		// The old profile owns a complete game template, not incremental flags.
+		args.Game = slices.Clone(p.Arguments.Game)
+	}
 	args.JVM = append(slices.Clone(args.JVM), p.Arguments.JVM...)
 	if UsesProcessors(p.Request.Type) {
 		for index, argument := range args.JVM {
