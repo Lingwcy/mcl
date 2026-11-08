@@ -35,6 +35,7 @@ type Session struct {
 	readDone, done       chan struct{}
 	root                 *os.Root
 	argumentPath         string
+	argumentIdentity     os.FileInfo
 	redact               func(string) string
 	mu                   sync.Mutex
 	control              controller
@@ -51,8 +52,9 @@ type controller interface {
 	close()
 }
 
-// Start writes only JVM options to a private argument file. Game arguments,
-// including the access token, are passed directly to exec, never a shell.
+// Start writes non-secret JVM support data to a private file (an argument
+// file for Java 9+, a manifest-only classpath JAR for Java 8). Game arguments
+// including the access token are passed directly to exec, never a shell.
 func Start(plan launch.Plan) (*Session, error) {
 	return start(plan, nil)
 }
@@ -71,7 +73,7 @@ func start(plan launch.Plan, register func(launch.ProcessIdentity) error, direct
 	if register == nil && plan.Priority() != launch.PriorityNormal {
 		return nil, errors.New("自定义游戏优先级需要受控身份交接")
 	}
-	data, err := plan.JVMArgumentFile()
+	extension, data, err := plan.SupportFile()
 	if err != nil {
 		return nil, err
 	}
@@ -86,10 +88,11 @@ func start(plan launch.Plan, register func(launch.ProcessIdentity) error, direct
 		return nil, fmt.Errorf("open launch data: %w", err)
 	}
 	committed := false
-	argumentPath := path.Join(plan.InstancePath(), "runtime", "jvm-"+rand.Text()+".args")
+	var argumentIdentity os.FileInfo
+	argumentPath := path.Join(plan.InstancePath(), "runtime", "jvm-"+rand.Text()+extension)
 	defer func() {
 		if !committed {
-			root.Remove(argumentPath)
+			removeSupportFile(root, argumentPath, argumentIdentity)
 			root.Close()
 		}
 	}()
@@ -128,6 +131,11 @@ func start(plan launch.Plan, register func(launch.ProcessIdentity) error, direct
 	if err != nil {
 		return nil, err
 	}
+	argumentIdentity, err = f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
 	if _, err := f.Write(data); err != nil {
 		f.Close()
 		return nil, err
@@ -138,6 +146,9 @@ func start(plan launch.Plan, register func(launch.ProcessIdentity) error, direct
 	args := plan.ProcessArguments(filepath.Join(plan.DataRoot(), filepath.FromSlash(argumentPath)))
 	if len(args) == 0 {
 		return nil, errors.New("empty process arguments")
+	}
+	if err := validateCommandSize(plan.Executable(), args); err != nil {
+		return nil, err
 	}
 	cmd, resume, closeGate, err := startCommand(plan.Executable(), args, register != nil)
 	if err != nil {
@@ -155,7 +166,7 @@ func start(plan launch.Plan, register func(launch.ProcessIdentity) error, direct
 	}
 	cmd.Env = environment
 	configure(cmd)
-	s := &Session{cmd: cmd, root: root, argumentPath: argumentPath, output: plan.NewOutput(), redact: plan.Redact, readDone: make(chan struct{}), done: make(chan struct{})}
+	s := &Session{cmd: cmd, root: root, argumentPath: argumentPath, argumentIdentity: argumentIdentity, output: plan.NewOutput(), redact: plan.Redact, readDone: make(chan struct{}), done: make(chan struct{})}
 	var writes [2]*os.File
 	for i := range 2 {
 		r, w, err := os.Pipe()
@@ -272,7 +283,7 @@ func (s *Session) wait() {
 	}
 	s.exit.FinishedAt, s.exit.Stopped, s.exit.Detached, s.exit.OutputIncomplete = time.Now().UTC(), s.stopping, s.detached, incomplete || s.detached || s.readFailed.Load()
 	s.mu.Unlock()
-	s.root.Remove(s.argumentPath)
+	removeSupportFile(s.root, s.argumentPath, s.argumentIdentity)
 	s.root.Close()
 	close(s.done)
 }

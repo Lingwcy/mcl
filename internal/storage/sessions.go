@@ -242,7 +242,22 @@ func cleanupJVMFiles(root *os.Root, id string) error {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if !entry.IsDir() && strings.HasPrefix(name, "jvm-") && strings.HasSuffix(name, ".args") && len(name) == len("jvm-")+26+len(".args") {
+		extension := ".args"
+		if strings.HasSuffix(name, ".jar") {
+			extension = ".jar"
+		}
+		if !strings.HasPrefix(name, "jvm-") || !strings.HasSuffix(name, extension) || len(name) != len("jvm-")+26+len(extension) {
+			continue
+		}
+		nonce := strings.TrimSuffix(strings.TrimPrefix(name, "jvm-"), extension)
+		if strings.ContainsFunc(nonce, func(r rune) bool { return !(r >= 'A' && r <= 'Z' || r >= '2' && r <= '7') }) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode().IsRegular() {
 			if err := root.Remove(path.Join(directory, name)); err != nil {
 				return err
 			}

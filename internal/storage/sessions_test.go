@@ -42,6 +42,10 @@ func TestSessionReopenPIDReuseAndStaleFileCleanup(t *testing.T) {
 	if err := os.WriteFile(argumentFile, []byte("JVM options"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	classpathFile := strings.TrimSuffix(argumentFile, ".args") + ".jar"
+	if err := os.WriteFile(classpathFile, []byte("manifest-only support"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	notes := filepath.Join(filepath.Dir(argumentFile), "notes.args")
 	if err := os.WriteFile(notes, []byte("user file"), 0o600); err != nil {
 		t.Fatal(err)
@@ -53,8 +57,10 @@ func TestSessionReopenPIDReuseAndStaleFileCleanup(t *testing.T) {
 	if _, err := reopened.Reserve(t.Context(), record.InstanceID); err == nil {
 		t.Fatal("live session was overwritten")
 	}
-	if _, err := os.Stat(argumentFile); err != nil {
-		t.Fatal("live session runtime file removed")
+	for _, name := range []string{argumentFile, classpathFile} {
+		if _, err := os.Stat(name); err != nil {
+			t.Fatal("live session runtime file removed")
+		}
 	}
 	active, err := reopened.Active(t.Context())
 	if err != nil || len(active) != 1 || active[0].ID != record.ID {
@@ -68,8 +74,10 @@ func TestSessionReopenPIDReuseAndStaleFileCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer lease.Close()
-	if _, err := os.Stat(argumentFile); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("abandoned JVM file retained")
+	for _, name := range []string{argumentFile, classpathFile} {
+		if _, err := os.Stat(name); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("abandoned JVM support file retained")
+		}
 	}
 	if _, err := os.Stat(notes); err != nil {
 		t.Fatal("nonmanaged file removed")

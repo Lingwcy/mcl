@@ -94,7 +94,7 @@ type Plan struct {
 	priority                                ProcessPriority
 	executable, directory, root, instanceID string
 	arguments, secrets                      []string
-	mainIndex                               int
+	mainIndex, javaMajor                    int
 	target                                  meta.Platform
 }
 
@@ -114,7 +114,7 @@ func Build(options Options, session Session) (Plan, error) {
 		return Plan{}, err
 	}
 	index := slices.Index(preview.Arguments, options.Version.MainClass)
-	return Plan{priority: options.Game.Priority, executable: preview.Executable, directory: preview.Directory, root: options.Root, instanceID: options.InstanceID, arguments: preview.Arguments, mainIndex: index, secrets: []string{session.token}, target: meta.Platform{OS: options.Platform.OS, Arch: meta.NormalizeArch(options.Platform.Arch)}}, nil
+	return Plan{priority: options.Game.Priority, executable: preview.Executable, directory: preview.Directory, root: options.Root, instanceID: options.InstanceID, arguments: preview.Arguments, mainIndex: index, javaMajor: options.Java.Major, secrets: []string{session.token}, target: meta.Platform{OS: options.Platform.OS, Arch: meta.NormalizeArch(options.Platform.Arch)}}, nil
 }
 
 // PreviewOptions produces a reviewable command with explicit unresolved login
@@ -151,14 +151,28 @@ func (p Plan) Target() meta.Platform { return p.target }
 
 // ProcessArguments is sensitive and must only be passed to os/exec. Keeping
 // game arguments on the command line avoids writing access tokens to disk.
-func (p Plan) ProcessArguments(argumentFile string) []string {
-	if p.mainIndex < 1 || p.mainIndex >= len(p.arguments) {
+// Java 8 receives JVM options directly, with only its classpath replaced by a
+// manifest-only JAR. Java 9+ retains its JVM argument-file transport.
+func (p Plan) ProcessArguments(supportFile string) []string {
+	if p.mainIndex < 1 || p.mainIndex >= len(p.arguments) || p.javaMajor < 8 {
 		return nil
 	}
-	return append([]string{"@" + argumentFile}, p.arguments[p.mainIndex:]...)
+	if p.javaMajor == 8 {
+		index, err := p.classpathIndex()
+		if err != nil {
+			return nil
+		}
+		args := slices.Clone(p.arguments)
+		args[index] = supportFile
+		return args
+	}
+	return append([]string{"@" + supportFile}, p.arguments[p.mainIndex:]...)
 }
 
 func (p Plan) JVMArgumentFile() ([]byte, error) {
+	if p.javaMajor < 9 {
+		return nil, errors.New("此 Java 不支持 JVM 参数文件")
+	}
 	if p.mainIndex < 1 || p.mainIndex >= len(p.arguments) {
 		return nil, errors.New("invalid launch plan")
 	}
@@ -194,8 +208,11 @@ func build(o Options, s *Session) (Preview, error) {
 	if err := o.Java.Check(o.Version.Java.Major, o.Platform); err != nil {
 		return Preview{}, err
 	}
-	if o.Java.Major < 9 {
-		return Preview{}, errors.New("当前启动管线需要支持参数文件的 Java 9 或更高版本")
+	if o.Java.Major < 8 {
+		return Preview{}, errors.New("当前启动管线需要 Java 8 或更高版本")
+	}
+	if o.Version.Java.Major == 8 && o.Java.Major != 8 {
+		return Preview{}, errors.New("此版本需要稳定的 Java 8，不能使用更高主版本替代")
 	}
 	parent := path.Join("instances", o.InstanceID, "natives")
 	if !meta.ValidPath(o.NativeDirectory) || path.Dir(o.NativeDirectory) != parent || !strings.HasPrefix(path.Base(o.NativeDirectory), "ready-") || len(path.Base(o.NativeDirectory)) != len("ready-")+26 {
@@ -219,6 +236,11 @@ func build(o Options, s *Session) (Preview, error) {
 		full := absolute(relative)
 		if strings.Contains(full, separator) {
 			return Preview{}, errors.New("游戏路径包含 classpath 分隔符，请更换数据目录")
+		}
+		if o.Java.Major == 8 {
+			if _, err := classpathURL(full, o.Platform.OS); err != nil {
+				return Preview{}, err
+			}
 		}
 		classpath = append(classpath, full)
 	}
@@ -305,6 +327,16 @@ func build(o Options, s *Session) (Preview, error) {
 	gameArgs, err := gameArguments(game, values, o.Game, quickPlay)
 	if err != nil {
 		return Preview{}, err
+	}
+	if o.Java.Major == 8 {
+		p := Plan{arguments: args, mainIndex: len(args)}
+		index, err := p.classpathIndex()
+		if err != nil {
+			return Preview{}, err
+		}
+		if args[index] != values["classpath"] {
+			return Preview{}, errors.New("Java 8 classpath 必须使用已校验的运行库计划")
+		}
 	}
 	args = append(args, o.Version.MainClass)
 	args = append(args, gameArgs...)
