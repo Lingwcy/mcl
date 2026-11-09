@@ -34,14 +34,18 @@ func NewSessionStore(dir string, running ProcessRunning) *SessionStore {
 }
 
 func (s *SessionStore) Reserve(ctx context.Context, id string) (app.SessionLease, error) {
-	return s.reserve(ctx, id, false)
+	return s.reserve(ctx, id, false, false)
+}
+
+func (s *SessionStore) ReserveForDeletion(ctx context.Context, id string) (app.SessionLease, error) {
+	return s.reserve(ctx, id, false, true)
 }
 
 func (s *SessionStore) ReserveForRecovery(ctx context.Context, id string) (app.SessionLease, error) {
-	return s.reserve(ctx, id, true)
+	return s.reserve(ctx, id, true, false)
 }
 
-func (s *SessionStore) reserve(ctx context.Context, id string, recovery bool) (app.SessionLease, error) {
+func (s *SessionStore) reserve(ctx context.Context, id string, recovery, deleting bool) (app.SessionLease, error) {
 	if !instance.ValidID(id) {
 		return nil, errors.New("invalid instance ID")
 	}
@@ -61,6 +65,13 @@ func (s *SessionStore) reserve(ctx context.Context, id string, recovery bool) (a
 		return nil, fmt.Errorf("实例正被其他启动器操作占用: %w", err)
 	}
 	fail := func(err error) (app.SessionLease, error) { lock.Close(); root.Close(); return nil, err }
+	if !deleting {
+		if _, err := root.Lstat(path.Join("instances", id, instanceDeleteMarker)); err == nil {
+			return fail(errors.New("此实例有未完成的删除，请在实例设置中继续删除"))
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fail(err)
+		}
+	}
 	if !recovery {
 		if _, err := root.Lstat(path.Join("instances", id, updatePendingFile)); err == nil {
 			return fail(errors.New("此实例有未完成的资产更新，请先在实例页恢复"))
@@ -231,7 +242,22 @@ func cleanupJVMFiles(root *os.Root, id string) error {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if !entry.IsDir() && strings.HasPrefix(name, "jvm-") && strings.HasSuffix(name, ".args") && len(name) == len("jvm-")+26+len(".args") {
+		extension := ".args"
+		if strings.HasSuffix(name, ".jar") {
+			extension = ".jar"
+		}
+		if !strings.HasPrefix(name, "jvm-") || !strings.HasSuffix(name, extension) || len(name) != len("jvm-")+26+len(extension) {
+			continue
+		}
+		nonce := strings.TrimSuffix(strings.TrimPrefix(name, "jvm-"), extension)
+		if strings.ContainsFunc(nonce, func(r rune) bool { return !(r >= 'A' && r <= 'Z' || r >= '2' && r <= '7') }) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode().IsRegular() {
 			if err := root.Remove(path.Join(directory, name)); err != nil {
 				return err
 			}

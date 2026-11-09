@@ -7,11 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"mcl/internal/core/java"
 	"mcl/internal/core/launch"
+	"mcl/internal/core/meta"
 )
 
 // RunLoaderProcessor owns a short-lived process tree entirely separate from
@@ -20,11 +22,32 @@ func RunLoaderProcessor(ctx context.Context, executable, work string, args []str
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 	defer cancel()
 	args = append([]string{"-Duser.home=" + work, "-Djava.io.tmpdir=" + work}, args...)
-	data, err := java.EncodeArgumentFile(args)
+	runtime, err := java.Probe(ctx, executable)
 	if err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(work, "processor-*.args")
+	if runtime.Major > 25 {
+		return errors.New("安装工具Java超过已支持范围")
+	}
+	if err := runtime.Check(8, meta.CurrentPlatform()); err != nil {
+		return err
+	}
+	var data []byte
+	extension := ".args"
+	if runtime.Major == 8 {
+		index := slices.Index(args, "-cp")
+		if index < 0 || index+1 >= len(args) {
+			return errors.New("Java8安装工具缺少唯一classpath")
+		}
+		data, err = launch.ClasspathSupportJAR(strings.Split(args[index+1], string(os.PathListSeparator)), meta.CurrentPlatform().OS)
+		extension = ".jar"
+	} else {
+		data, err = java.EncodeArgumentFile(args)
+	}
+	if err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(work, "processor-*"+extension)
 	if err != nil {
 		return err
 	}
@@ -36,7 +59,15 @@ func RunLoaderProcessor(ctx context.Context, executable, work string, args []str
 	if err := f.Close(); err != nil {
 		return err
 	}
-	cmd := exec.Command(executable, "@"+filepath.Base(f.Name()))
+	commandArgs := []string{"@" + filepath.Base(f.Name())}
+	if runtime.Major == 8 {
+		commandArgs = slices.Clone(args)
+		commandArgs[slices.Index(commandArgs, "-cp")+1] = f.Name()
+	}
+	if err := validateCommandSize(executable, commandArgs); err != nil {
+		return err
+	}
+	cmd := exec.Command(executable, commandArgs...)
 	cmd.Dir = work
 	cmd.Env = processorEnvironment()
 	cmd.WaitDelay = 2 * time.Second

@@ -74,31 +74,36 @@ func (s Session) MarshalJSON() ([]byte, error) {
 }
 
 type Options struct {
-	Root            string
-	InstanceID      string
-	Version         meta.Version
-	Platform        meta.Platform
-	Java            java.Runtime
-	NativeDirectory string
-	MaxMemoryMiB    int
-	MinMemoryMiB    int
-	GCMode          GCMode
-	JVMArguments    []string
+	Root                  string
+	GameDirectory         string
+	InstanceID            string
+	Version               meta.Version
+	Platform              meta.Platform
+	Java                  java.Runtime
+	LegacyAssetsDirectory string
+	NativeDirectory       string
+	MaxMemoryMiB          int
+	MinMemoryMiB          int
+	GCMode                GCMode
+	JVMArguments          []string
+	Game                  GameSettings
 }
 
 // Plan keeps executable arguments private so common formatting and JSON
 // diagnostics cannot accidentally disclose the session token.
 type Plan struct {
+	priority                                ProcessPriority
 	executable, directory, root, instanceID string
 	arguments, secrets                      []string
-	mainIndex                               int
+	mainIndex, javaMajor                    int
 	target                                  meta.Platform
 }
 
 type Preview struct {
-	Executable string   `json:"executable"`
-	Directory  string   `json:"directory"`
-	Arguments  []string `json:"arguments"`
+	Priority   ProcessPriority `json:"process_priority,omitempty"`
+	Executable string          `json:"executable"`
+	Directory  string          `json:"directory"`
+	Arguments  []string        `json:"arguments"`
 }
 
 func Build(options Options, session Session) (Plan, error) {
@@ -110,7 +115,7 @@ func Build(options Options, session Session) (Plan, error) {
 		return Plan{}, err
 	}
 	index := slices.Index(preview.Arguments, options.Version.MainClass)
-	return Plan{executable: preview.Executable, directory: preview.Directory, root: options.Root, instanceID: options.InstanceID, arguments: preview.Arguments, mainIndex: index, secrets: []string{session.token}, target: meta.Platform{OS: options.Platform.OS, Arch: meta.NormalizeArch(options.Platform.Arch)}}, nil
+	return Plan{priority: options.Game.Priority, executable: preview.Executable, directory: preview.Directory, root: options.Root, instanceID: options.InstanceID, arguments: preview.Arguments, mainIndex: index, javaMajor: options.Java.Major, secrets: []string{session.token}, target: meta.Platform{OS: options.Platform.OS, Arch: meta.NormalizeArch(options.Platform.Arch)}}, nil
 }
 
 // PreviewOptions produces a reviewable command with explicit unresolved login
@@ -122,7 +127,7 @@ func (p Plan) Preview() Preview {
 	for i, arg := range args {
 		args[i] = p.Redact(arg)
 	}
-	return Preview{Executable: p.Redact(p.executable), Directory: p.Redact(p.directory), Arguments: args}
+	return Preview{Priority: p.priority, Executable: p.Redact(p.executable), Directory: p.Redact(p.directory), Arguments: args}
 }
 func (p Plan) Redact(text string) string {
 	for _, secret := range p.secrets {
@@ -136,23 +141,39 @@ func (p Plan) String() string               { data, _ := p.MarshalJSON(); return
 func (p Plan) GoString() string             { return p.String() }
 func (p Plan) MarshalJSON() ([]byte, error) { return json.Marshal(p.Preview()) }
 
-func (p Plan) Executable() string   { return p.executable }
-func (p Plan) Directory() string    { return p.directory }
-func (p Plan) DataRoot() string     { return p.root }
-func (p Plan) InstancePath() string { return path.Join("instances", p.instanceID) }
+func (p Plan) Executable() string        { return p.executable }
+func (p Plan) Priority() ProcessPriority { return p.priority }
+func (p Plan) Directory() string         { return p.directory }
+func (p Plan) DataRoot() string          { return p.root }
+func (p Plan) InstanceID() string        { return p.instanceID }
+func (p Plan) InstancePath() string      { return path.Join("instances", p.instanceID) }
 
 func (p Plan) Target() meta.Platform { return p.target }
 
 // ProcessArguments is sensitive and must only be passed to os/exec. Keeping
 // game arguments on the command line avoids writing access tokens to disk.
-func (p Plan) ProcessArguments(argumentFile string) []string {
-	if p.mainIndex < 1 || p.mainIndex >= len(p.arguments) {
+// Java 8 receives JVM options directly, with only its classpath replaced by a
+// manifest-only JAR. Java 9+ retains its JVM argument-file transport.
+func (p Plan) ProcessArguments(supportFile string) []string {
+	if p.mainIndex < 1 || p.mainIndex >= len(p.arguments) || p.javaMajor < 8 {
 		return nil
 	}
-	return append([]string{"@" + argumentFile}, p.arguments[p.mainIndex:]...)
+	if p.javaMajor == 8 {
+		index, err := p.classpathIndex()
+		if err != nil {
+			return nil
+		}
+		args := slices.Clone(p.arguments)
+		args[index] = supportFile
+		return args
+	}
+	return append([]string{"@" + supportFile}, p.arguments[p.mainIndex:]...)
 }
 
 func (p Plan) JVMArgumentFile() ([]byte, error) {
+	if p.javaMajor < 9 {
+		return nil, errors.New("此 Java 不支持 JVM 参数文件")
+	}
 	if p.mainIndex < 1 || p.mainIndex >= len(p.arguments) {
 		return nil, errors.New("invalid launch plan")
 	}
@@ -167,8 +188,14 @@ func (p Plan) JVMArgumentFile() ([]byte, error) {
 }
 
 func build(o Options, s *Session) (Preview, error) {
+	if err := o.Game.Validate(); err != nil {
+		return Preview{}, err
+	}
 	if !filepath.IsAbs(o.Root) || !filepath.IsAbs(o.Java.Executable) || !safeText(o.Root) || !safeText(o.Java.Executable) || !instance.ValidID(o.InstanceID) {
 		return Preview{}, errors.New("启动目录、Java 路径或实例 ID 无效")
+	}
+	if o.GameDirectory != "" && (!filepath.IsAbs(o.GameDirectory) || !safeText(o.GameDirectory) || filepath.Clean(o.GameDirectory) != o.GameDirectory) {
+		return Preview{}, errors.New("游戏工作目录无效")
 	}
 	if o.MaxMemoryMiB < 512 || o.MaxMemoryMiB > 65536 || o.Java.Arch == "386" && o.MaxMemoryMiB > 1536 {
 		return Preview{}, errors.New("游戏内存超出当前 JVM 可用范围")
@@ -182,8 +209,11 @@ func build(o Options, s *Session) (Preview, error) {
 	if err := o.Java.Check(o.Version.Java.Major, o.Platform); err != nil {
 		return Preview{}, err
 	}
-	if o.Java.Major < 9 {
-		return Preview{}, errors.New("当前启动管线需要支持参数文件的 Java 9 或更高版本")
+	if o.Java.Major < 8 {
+		return Preview{}, errors.New("当前启动管线需要 Java 8 或更高版本")
+	}
+	if o.Version.Java.Major == 8 && o.Java.Major != 8 {
+		return Preview{}, errors.New("此版本需要稳定的 Java 8，不能使用更高主版本替代")
 	}
 	parent := path.Join("instances", o.InstanceID, "natives")
 	if !meta.ValidPath(o.NativeDirectory) || path.Dir(o.NativeDirectory) != parent || !strings.HasPrefix(path.Base(o.NativeDirectory), "ready-") || len(path.Base(o.NativeDirectory)) != len("ready-")+26 {
@@ -208,14 +238,32 @@ func build(o Options, s *Session) (Preview, error) {
 		if strings.Contains(full, separator) {
 			return Preview{}, errors.New("游戏路径包含 classpath 分隔符，请更换数据目录")
 		}
+		if o.Java.Major == 8 {
+			if _, err := classpathURL(full, o.Platform.OS); err != nil {
+				return Preview{}, err
+			}
+		}
 		classpath = append(classpath, full)
 	}
+	gameDirectory := o.GameDirectory
+	if gameDirectory == "" {
+		gameDirectory = absolute(path.Join("instances", o.InstanceID, "game"))
+	}
+	if o.LegacyAssetsDirectory != "" {
+		parent := path.Join("instances", o.InstanceID, "legacy-assets")
+		if !install.ValidLegacyAssetsDirectory(parent, o.LegacyAssetsDirectory) {
+			return Preview{}, errors.New("历史资源目录不属于当前实例")
+		}
+	}
 	values := map[string]string{
-		"auth_player_name": "<登录后提供>", "auth_uuid": "<登录后提供>", "auth_access_token": "<登录后提供>", "clientid": "<登录后提供>", "auth_xuid": "<登录后提供>",
+		"auth_player_name": "<登录后提供>", "auth_uuid": "<登录后提供>", "auth_access_token": "<登录后提供>", "auth_session": "<登录后提供>", "clientid": "<登录后提供>", "auth_xuid": "<登录后提供>",
 		"user_type": "msa", "user_properties": "{}", "version_name": o.Version.ID, "version_type": o.Version.Type,
-		"game_directory": absolute(path.Join("instances", o.InstanceID, "game")), "assets_root": absolute("cache/assets"), "assets_index_name": o.Version.AssetIndex.ID,
+		"game_directory": gameDirectory, "assets_root": absolute("cache/assets"), "assets_index_name": o.Version.AssetIndex.ID,
 		"natives_directory": absolute(o.NativeDirectory), "launcher_name": "mcl", "launcher_version": "0.1.0", "classpath": strings.Join(classpath, separator),
 		"classpath_separator": separator, "library_directory": absolute("cache/libraries"),
+	}
+	if o.LegacyAssetsDirectory != "" {
+		values["game_assets"] = absolute(path.Join(o.LegacyAssetsDirectory, "files"))
 	}
 	if o.Version.LibraryDirectory != "" {
 		values["library_directory"] = absolute(o.Version.LibraryDirectory)
@@ -228,19 +276,26 @@ func build(o Options, s *Session) (Preview, error) {
 	}
 	if s != nil {
 		values["auth_player_name"], values["auth_uuid"], values["auth_access_token"], values["clientid"], values["auth_xuid"] = s.Name, s.UUID, s.token, s.ClientID, s.XUID
+		values["auth_session"] = "token:" + s.token + ":" + s.UUID
 		if s.offline {
-			values["user_type"], values["auth_access_token"] = "legacy", "0"
+			values["user_type"], values["auth_access_token"], values["auth_session"] = "legacy", "0", "0"
 		}
 	}
 	platform := o.Platform
-	// First-version launching has no demo, custom-resolution or quick-play
-	// option. Never inherit arbitrary feature flags from caller/UI state.
+	// Only structured, validated settings may enable official feature rules.
+	// In particular, never inherit arbitrary caller demo/quick-play flags.
 	platform.Features = nil
+	quickPlay := o.Game.AutoJoinServer && supportsQuickPlay(o.Version.Arguments.Game)
+	gamePlatform := platform
+	gamePlatform.Features = map[string]bool{
+		"has_custom_resolution":     o.Game.Width != 0 && o.Game.Height != 0,
+		"is_quick_play_multiplayer": quickPlay,
+	}
 	jvm, err := meta.SelectArguments(o.Version.Arguments.JVM, platform)
 	if err != nil {
 		return Preview{}, err
 	}
-	game, err := meta.SelectArguments(o.Version.Arguments.Game, platform)
+	game, err := meta.SelectArguments(o.Version.Arguments.Game, gamePlatform)
 	if err != nil {
 		return Preview{}, err
 	}
@@ -275,20 +330,28 @@ func build(o Options, s *Session) (Preview, error) {
 		if err != nil {
 			return Preview{}, err
 		}
-		if !strings.HasPrefix(arg, "-Dlog4j.configurationFile=") {
+		if arg != "-Dlog4j.configurationFile="+absolute(plan.LoggingPath) && arg != "-Dlog4j.configuration="+absolute(plan.LoggingPath) {
 			return Preview{}, errors.New("当前管线不支持该日志参数")
 		}
 		args = append(args, arg)
 	}
-	args = append(args, o.Version.MainClass)
-	for _, arg := range game {
-		value, err := substitute(arg, values)
+	gameArgs, err := gameArguments(game, values, o.Game, quickPlay)
+	if err != nil {
+		return Preview{}, err
+	}
+	if o.Java.Major == 8 {
+		p := Plan{arguments: args, mainIndex: len(args)}
+		index, err := p.classpathIndex()
 		if err != nil {
 			return Preview{}, err
 		}
-		args = append(args, value)
+		if args[index] != values["classpath"] {
+			return Preview{}, errors.New("Java 8 classpath 必须使用已校验的运行库计划")
+		}
 	}
-	return Preview{Executable: o.Java.Executable, Directory: values["game_directory"], Arguments: args}, nil
+	args = append(args, o.Version.MainClass)
+	args = append(args, gameArgs...)
+	return Preview{Priority: o.Game.Priority, Executable: o.Java.Executable, Directory: values["game_directory"], Arguments: args}, nil
 }
 
 func substitute(value string, values map[string]string) (string, error) {
@@ -304,6 +367,9 @@ func substitute(value string, values map[string]string) (string, error) {
 		}
 		key, suffix, closed := strings.Cut(rest, "}")
 		replacement, known := values[key]
+		if key == "game_assets" && !known {
+			return "", errors.New("此版本要求已准备的历史 game_assets 具名目录，不能用散列对象目录替代")
+		}
 		if !closed || !known {
 			return "", fmt.Errorf("不支持的启动参数占位符 %q", key)
 		}

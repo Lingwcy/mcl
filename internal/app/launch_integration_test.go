@@ -45,7 +45,7 @@ func TestRealPreparation(t *testing.T) {
 	catalog := meta.NewClient(filepath.Join(root, "cache/metadata"))
 	installer := app.NewInstallationService(catalog, instances, storage.NewInstallationStore(root), download.NewClient(root), meta.CurrentPlatform(), storage.NewSessionStore(root, process.Running), nil)
 	javas := app.NewJavaService(storage.NewJavaStore(root), platform.JavaCandidates, &java.Installer{Directory: filepath.Join(root, "java")}, java.NewCatalogClient())
-	service := app.NewLaunchService(installer, javas.Ensure, platform.PhysicalMemory, nil, nil)
+	service := app.NewLaunchService(installer, javas.Ensure, platform.NewMemoryProbe(), nil, nil)
 	settings := app.DefaultSettings()
 	settings.JavaPath = executable
 	var files, assets download.Progress

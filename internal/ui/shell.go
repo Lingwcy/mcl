@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"path/filepath"
 	"strings"
 
 	"mcl/internal/app"
@@ -20,13 +21,14 @@ const (
 	launchPage           page = "launch"
 	settingsPage         page = "settings"
 	gameSettingsPage     page = "game-settings"
+	downloadSettingsPage page = "download-settings"
 	newInstancePage      page = "new-instance"
 	instanceSettingsPage page = "instance-settings"
 	marketPage           page = "market"
 )
 
 func (p page) inSettings() bool {
-	return p == settingsPage || p == gameSettingsPage || p == accountsPage || p == settingsActivityPage
+	return p == settingsPage || p == gameSettingsPage || p == downloadSettingsPage || p == accountsPage || p == settingsActivityPage
 }
 
 const (
@@ -44,7 +46,10 @@ type SaveSettings func(app.Settings, func(error))
 
 // Shell owns persistent view data on the UI thread, never build-scoped elements.
 type Shell struct {
+	deletedInstances map[string]bool
 	window           *mygo.Window
+	toasts           toastState
+	memory           memoryState
 	creation         creationState
 	instanceEditor   *instanceSettingsState
 	page             page
@@ -52,6 +57,9 @@ type Shell struct {
 	applyAppearance  func(bool)
 	settings         app.Settings
 	gameSettings     gameSettingsState
+	downloadSettings downloadSettingsState
+	downloadTools    downloadToolsState
+	gameDirectories  gameDirectoriesState
 	dataDir          string
 	loadErr          error
 	save             SaveSettings
@@ -71,15 +79,20 @@ type Shell struct {
 
 func NewShell(settings app.Settings, dataDir string, loadErr error, save SaveSettings) *Shell {
 	return &Shell{
-		creation: creationState{installNow: true},
-		page:     libraryPage, theme: compactTheme(false), settings: settings,
+		creation:        creationState{installNow: true},
+		gameDirectories: gameDirectoriesState{rows: []app.GameDirectory{{Name: "内置目录", Path: filepath.Join(dataDir, "instances")}}},
+		page:            libraryPage, theme: compactTheme(false), settings: settings,
 		dataDir: dataDir, loadErr: loadErr, save: save,
-		gameSettings: gameSettingsState{gc: settings.GCMode, arguments: settings.JVMArguments},
+		gameSettings:     newGameSettingsState(settings),
+		downloadSettings: newDownloadSettingsState(settings.Download),
 	}
 }
 
 func (s *Shell) BindWindow(window *mygo.Window) {
 	s.window = window
+	window.OnFocus(func() { s.memory.blurred = false; s.syncMemoryObservation(); window.Invalidate() })
+	window.OnBlur(func() { s.memory.blurred = true; s.syncMemoryObservation(); window.Invalidate() })
+	window.OnClosed(func() { s.memory.blurred = true; s.syncMemoryObservation() })
 	window.OnMaximize(window.Invalidate)
 	window.OnUnmaximize(window.Invalidate)
 	window.Invalidate()
@@ -100,6 +113,16 @@ func (s *Shell) toggleAppearance() {
 }
 
 func (s *Shell) View(c *ui.Context) {
+	s.syncMemoryObservation()
+	if s.page != downloadSettingsPage && s.downloadTools.operation != "" {
+		clearing := s.downloadTools.operation == "clear"
+		s.cancelDownloadTools()
+		s.downloadTools.message = "操作已取消"
+		if clearing {
+			s.Notify(ToastWarning, "清理已中断，可能已处理部分缓存")
+		}
+
+	}
 	t := s.theme
 	if c.Preferences().HighContrast {
 		contrast := *t
@@ -146,9 +169,6 @@ func (s *Shell) View(c *ui.Context) {
 					})
 				}
 				ui.Column(c.Key("main-panel")).Grow(1).MinWidth(0).FillHeight().Background(t.Background).Children(func() {
-					if s.loadErr != nil {
-						ui.Text(c, "无法读取设置，原文件已保留").FontSize(11).TextColor(t.Danger).Margin(12, 24, 0)
-					}
 					ui.Column(c.Key(s.contentIdentity())).Grow(1).MinHeight(0).FillWidth().Transition(motionPage).Children(func() {
 						switch s.page {
 						case libraryPage:
@@ -163,6 +183,8 @@ func (s *Shell) View(c *ui.Context) {
 							s.javaView(c)
 						case gameSettingsPage:
 							s.gameSettingsView(c)
+						case downloadSettingsPage:
+							s.downloadSettingsView(c)
 						case accountsPage:
 							s.accountsView(c)
 						case activityPage, settingsActivityPage:
@@ -176,6 +198,7 @@ func (s *Shell) View(c *ui.Context) {
 		})
 	})
 	s.instanceSearchDialog(c)
+	s.feedbackToasts(c)
 }
 
 func (s *Shell) empty(c *ui.Context, heading, title string) {
@@ -200,8 +223,20 @@ func (s *Shell) saveSettings() {
 		return
 	}
 	s.savePending = false
+	game, err := s.gameSettings.preferences()
+	if err != nil {
+		s.notice, s.noticeFail = err.Error(), true
+		return
+	}
+	downloads, err := s.downloadSettings.preferences()
+	if err != nil {
+		s.notice, s.noticeFail = err.Error(), true
+		return
+	}
 	snapshot := s.settings
 	snapshot.GCMode, snapshot.JVMArguments = s.gameSettings.gc, strings.TrimSpace(s.gameSettings.arguments)
+	snapshot.Game, snapshot.Download = game, downloads
+	snapshot.GameDirectoryID = s.gameSettings.directoryID
 	if err := snapshot.Validate(); err != nil {
 		s.notice, s.noticeFail = err.Error(), true
 		return
@@ -215,6 +250,9 @@ func (s *Shell) saveSettings() {
 		if err != nil {
 			s.notice, s.noticeFail = err.Error(), true
 		} else {
+			if s.settings.Download != snapshot.Download {
+				s.downloadPreferencesCommitted()
+			}
 			s.settings = snapshot
 		}
 		if s.savePending {

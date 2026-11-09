@@ -18,8 +18,8 @@ import (
 type JavaResolver func(context.Context, int, meta.Platform, []string, func(java.Progress)) (java.Runtime, error)
 
 func (s *JavaService) Ensure(ctx context.Context, major int, target meta.Platform, preferred []string, report func(java.Progress)) (java.Runtime, error) {
-	if major < 9 {
-		return java.Runtime{}, errors.New("此旧版本需要 Java 8，当前参数文件启动管线尚不支持，未自动下载不适用的运行环境")
+	if major < 8 {
+		return java.Runtime{}, errors.New("当前启动管线不支持 Java 8 之前的运行环境")
 	}
 	emit := func(stage string) {
 		if report != nil {

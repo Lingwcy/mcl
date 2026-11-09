@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"syscall"
 )
 
@@ -43,5 +44,12 @@ func startCommand(executable string, args []string, tracked bool) (*exec.Cmd, fu
 }
 
 func gateExec(executable string, args []string) error {
+	// Linux nice is per native thread. Keep the exec goroutine on one OS
+	// thread and copy the parent's verified leader setting to that thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	if err := inheritGatePriority(); err != nil {
+		return err
+	}
 	return syscall.Exec(executable, append([]string{executable}, args...), os.Environ())
 }

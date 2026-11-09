@@ -21,6 +21,10 @@ func Inspect(pid int) (launch.ProcessIdentity, error) {
 		return launch.ProcessIdentity{}, err
 	}
 	defer windows.CloseHandle(h)
+	return inspectProcessHandle(pid, h)
+}
+
+func inspectProcessHandle(pid int, h windows.Handle) (launch.ProcessIdentity, error) {
 	status, err := windows.WaitForSingleObject(h, 0)
 	if err != nil {
 		return launch.ProcessIdentity{}, err

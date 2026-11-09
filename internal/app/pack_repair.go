@@ -141,7 +141,7 @@ func (s *ArchiveImporter) RestorePack(ctx context.Context, plan PackRepairPlan, 
 		if value.Pack.Local && original.Size == 0 {
 			return 0, errors.New("本地整合包原始缓存已缺失，请先从本地补齐原包")
 		}
-		if source == market.CurseForge && (original.Size == 0 || original.URL != "") {
+		if !value.Pack.Local && source == market.CurseForge && (original.Size == 0 || original.URL != "") {
 			project, err := client.ProjectInfo(ctx, source, value.Pack.ProjectID, "")
 			if err != nil {
 				return 0, fmt.Errorf("读取原始整合包分发设置: %w", err)

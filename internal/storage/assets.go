@@ -14,7 +14,6 @@ import (
 
 	"mcl/internal/app"
 	"mcl/internal/core/archive"
-	"mcl/internal/core/instance"
 	"mcl/internal/core/market"
 )
 
@@ -26,37 +25,46 @@ type AssetStore struct{ dir string }
 
 func NewAssetStore(instancesDir string) *AssetStore { return &AssetStore{dir: instancesDir} }
 
-func (s *AssetStore) openGame(ctx context.Context, id string) (*os.Root, error) {
-	if err := ctx.Err(); err != nil {
+// OpenGame validates the immutable location and ownership before yielding a
+// game root. Callers own the handle; no symlink is used as directory routing.
+func (s *AssetStore) OpenGame(ctx context.Context, id string) (*os.Root, error) {
+	payload, err := s.openPayload(ctx, id)
+	if err != nil {
 		return nil, err
 	}
-	if !instance.ValidID(id) {
-		return nil, errors.New("invalid instance ID")
+	defer payload.Close()
+	return openRealDirectory(payload, "game")
+}
+func (s *AssetStore) openGame(ctx context.Context, id string) (*os.Root, error) {
+	return s.OpenGame(ctx, id)
+}
+func (s *AssetStore) openPayload(ctx context.Context, id string) (*os.Root, error) {
+	value, err := NewInstanceStore(s.dir).Get(ctx, id)
+	if err != nil {
+		return nil, err
 	}
-	root, err := os.OpenRoot(s.dir)
+	if value.GameDirectoryID == "" {
+		root, err := os.OpenRoot(s.dir)
+		if err != nil {
+			return nil, err
+		}
+		defer root.Close()
+		return openRealDirectory(root, id)
+	}
+	root, err := NewGameDirectoryStore(filepath.Dir(s.dir)).open(ctx, value.GameDirectoryID)
 	if err != nil {
 		return nil, err
 	}
 	defer root.Close()
-	for _, name := range []string{id, path.Join(id, "game")} {
-		info, err := root.Lstat(name)
-		if err != nil {
-			return nil, err
-		}
-		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return nil, errors.New("实例游戏目录不是受管的本地目录")
-		}
-	}
-	return root.OpenRoot(path.Join(id, "game"))
+	return openRealDirectory(root, id)
 }
-
 func (s *AssetStore) Directory(ctx context.Context, id string) (string, error) {
 	root, err := s.openGame(ctx, id)
 	if err != nil {
 		return "", err
 	}
 	defer root.Close()
-	return filepath.Join(s.dir, id, "game"), ctx.Err()
+	return root.Name(), ctx.Err()
 }
 
 func (s *AssetStore) List(ctx context.Context, id string) (app.AssetSnapshot, error) {

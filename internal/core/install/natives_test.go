@@ -29,6 +29,17 @@ func TestCleanupNativeGenerationsPreservesCurrentAndUserFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	for _, name := range []string{keep, old, temporary} {
+		child, err := root.OpenRoot(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		nonce := strings.TrimPrefix(strings.TrimPrefix(name, "natives/ready-"), "natives/.prepare-")
+		if err := writeAssetOwner(t.Context(), child, assetOwner{1, "native", "natives", nonce, strings.Repeat("a", 40)}); err != nil {
+			t.Fatal(err)
+		}
+		child.Close()
+	}
 	if err := CleanupNatives(root, "natives", keep); err != nil {
 		t.Fatal(err)
 	}
@@ -149,5 +160,52 @@ func TestCanceledOrCorruptNativesNeverPublish(t *testing.T) {
 	}
 	if _, err := PrepareNatives(t.Context(), root, "natives", []NativeArchive{archive}); err == nil {
 		t.Fatal("corrupted archive accepted")
+	}
+}
+
+func TestNativeRecoveryPreservesUnmarkedNamesAndLinks(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	unknown := "natives/ready-" + rand.Text()
+	if err := root.MkdirAll(unknown, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.WriteFile(unknown+"/user.txt", []byte("user"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := CleanupNatives(root, "natives", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := root.Stat(unknown + "/user.txt"); err != nil {
+		t.Fatal("unmarked native directory removed")
+	}
+	if err := root.Mkdir("foreign", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.Symlink("foreign", "linked-natives"); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := CleanupNatives(root, "linked-natives", ""); err == nil {
+		t.Fatal("native cleanup accepted redirected parent")
+	}
+}
+
+func TestNativeUnicodeAliasesAndUnsafeExclusionsFail(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	archive := nativeFixture(t, root, map[string]string{"é.so": "first", "é.so": "second"}, false)
+	if _, err := PrepareNatives(t.Context(), root, "natives", []NativeArchive{archive}); err == nil {
+		t.Fatal("Unicode aliased native files extracted")
+	}
+	archive = nativeFixture(t, root, map[string]string{"native.so": "data"}, false)
+	archive.Exclude = []string{"../"}
+	if _, err := PrepareNatives(t.Context(), root, "natives", []NativeArchive{archive}); err == nil {
+		t.Fatal("unsafe exclusions accepted")
 	}
 }

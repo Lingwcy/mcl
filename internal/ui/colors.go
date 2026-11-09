@@ -18,10 +18,12 @@ type interfaceColors struct {
 	LaunchGlint, LaunchParticle                              ui.Color
 	Focus, TextSelection                                     ui.Color
 	Success, Warning, Danger                                 ui.Color
+	MemoryUsed, MemoryPlanned, MemoryTrack                   ui.Color
 	Inverse, InverseText, Scrollbar, Shadow, Skeleton        ui.Color
 }
 
 var lightColors = interfaceColors{
+	MemoryUsed: ui.Hex("#357FC1"), MemoryPlanned: ui.Hex("#80B6DF"), MemoryTrack: ui.Hex("#E2E7EF"),
 	Chrome: ui.Hex("#E6E6E6"), Sidebar: ui.Hex("#F1F1F1"), Canvas: ui.Hex("#FDFDFD"),
 	Control: ui.Hex("#F6F6F6"), Hover: ui.Hex("#E2E2E2"), Pressed: ui.Hex("#D8D8D8"), Raised: ui.Hex("#FFFFFF"),
 	Text: ui.Hex("#242424"), Secondary: ui.Hex("#626262"), Metadata: ui.Hex("#717171"),
@@ -40,6 +42,7 @@ var lightColors = interfaceColors{
 }
 
 var darkColors = interfaceColors{
+	MemoryUsed: ui.Hex("#4C8BBD"), MemoryPlanned: ui.Hex("#8BB9CC"), MemoryTrack: ui.Hex("#323E4B"),
 	Chrome: ui.Hex("#15181D"), Sidebar: ui.Hex("#1B1F25"), Canvas: ui.Hex("#20252C"),
 	Control: ui.Hex("#292F38"), Hover: ui.Hex("#333C47"), Pressed: ui.Hex("#3C4754"), Raised: ui.Hex("#2C333D"),
 	Text: ui.Hex("#EBF0F6"), Secondary: ui.Hex("#AFBBC9"), Metadata: ui.Hex("#8B9AAC"),

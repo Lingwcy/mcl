@@ -142,6 +142,26 @@ func (z *Zip) Read(ctx context.Context, name string, limit int64) ([]byte, error
 	return data, ctx.Err()
 }
 
+// ReadPrefix reads at most 64 KiB without allocating the whole entry. It does
+// not drain the entry to verify its CRC. Callers must first independently
+// authenticate the complete archive (for example, a pinned JAR digest).
+func (z *Zip) ReadPrefix(ctx context.Context, name string, size int) ([]byte, error) {
+	f, ok := z.files[name]
+	if !ok || f.FileInfo().IsDir() || size <= 0 || size > 64<<10 || uint64(size) > f.UncompressedSize64 {
+		return nil, errors.New("归档头部读取范围无效")
+	}
+	r, err := f.Open()
+	if err != nil {
+		return nil, err
+	}
+	data := make([]byte, size)
+	_, readErr := io.ReadFull(&contextReader{ctx, r}, data)
+	if err := errors.Join(readErr, r.Close(), ctx.Err()); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 type Mapping struct{ Source, Target string }
 
 // Extract writes only the explicitly mapped files, into a fresh staging root.

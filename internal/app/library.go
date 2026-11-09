@@ -156,7 +156,7 @@ func (s *LibraryService) Create(ctx context.Context, request CreateInstance) (in
 	}
 	value := instance.Instance{
 		ID: instance.NewID(), Name: request.Name, Version: entry, RequiredJava: version.Java.Major,
-		JavaPath: request.Settings.JavaPath, CreatedAt: time.Now().UTC(),
+		JavaPath: request.Settings.JavaPath, GameDirectoryID: request.Settings.GameDirectoryID, CreatedAt: time.Now().UTC(),
 	}
 	value.Icon, value.IconStyle = icon, request.IconStyle
 	if request.Loader != nil {

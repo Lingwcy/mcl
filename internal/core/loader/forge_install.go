@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"mcl/internal/core/archive"
 	"mcl/internal/core/download"
@@ -25,24 +24,42 @@ import (
 
 type ProcessorRunner func(context.Context, string, string, []string) error
 
+// ProcessorJavaResolver returns a probed stable runtime for this tool minimum.
+// It is deliberately separate from the game runtime and cannot change its major.
+type ProcessorJavaResolver func(context.Context, int, meta.Platform, []string, func(java.Progress)) (java.Runtime, error)
+
 type ForgeInstaller struct {
-	catalog   *Client
-	downloads *download.Client
-	run       ProcessorRunner
+	catalog     *Client
+	downloads   *download.Client
+	run         ProcessorRunner
+	resolveJava ProcessorJavaResolver
 }
 
 func NewForgeInstaller(catalog *Client, downloads *download.Client, run ProcessorRunner) *ForgeInstaller {
 	return &ForgeInstaller{catalog: catalog, downloads: downloads, run: run}
 }
 
+func NewForgeInstallerWithJava(catalog *Client, downloads *download.Client, run ProcessorRunner, resolve ProcessorJavaResolver) *ForgeInstaller {
+	s := NewForgeInstaller(catalog, downloads, run)
+	s.resolveJava = resolve
+	return s
+}
+
 func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta.Version, executable string, platform meta.Platform, report func(string, download.Progress)) (Profile, error) {
-	ctx, cancel := context.WithTimeout(ctx, 25*time.Minute)
-	defer cancel()
-	if s.run == nil {
-		return Profile{}, errors.New("Java 安装处理器未配置")
+	// Downloads retain their active-network budgets; user rate-limit waits and
+	// automatic tool-Java installation are not charged to one wall-clock timer.
+	// The production processor adapter bounds each actual child separately.
+	if err := ctx.Err(); err != nil {
+		return Profile{}, err
 	}
-	if executable == "" {
-		return Profile{}, errors.New("安装 Forge 系运行环境前，请选择本机 Java")
+	if request.TargetOS != "" && (request.TargetOS != platform.OS || request.TargetArch != meta.NormalizeArch(platform.Arch)) {
+		return Profile{}, errors.New("安装器目标平台与缓存身份不符")
+	}
+	if err := request.ValidateBase(base); err != nil {
+		return Profile{}, err
+	}
+	if err := base.ValidateVanilla(); err != nil {
+		return Profile{}, err
 	}
 	coordinate, origin, versionID, err := forgeInstaller(request)
 	if err != nil {
@@ -50,13 +67,6 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	}
 	if base.ID != request.GameVersion {
 		return Profile{}, errors.New("安装处理器的 Minecraft 版本不匹配")
-	}
-	javaRuntime, err := java.Probe(ctx, executable)
-	if err != nil {
-		return Profile{}, err
-	}
-	if err := javaRuntime.Check(max(9, base.Java.Major), platform); err != nil {
-		return Profile{}, err
 	}
 	relative := coordinate.Path()
 	installer, err := s.catalog.mavenMetadata(ctx, origin+"/"+relative, relative)
@@ -111,12 +121,41 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err != nil {
 		return Profile{}, err
 	}
+	legacy, isLegacy, err := readLegacyForgeSpec(ctx, z, request, base)
+	if err != nil {
+		return Profile{}, err
+	}
+	if isLegacy {
+		profile, err := s.prepareLegacyForge(ctx, z, request, base, legacy, stage, "ready-"+nonce, bundle.SHA1, progress("loader-download"))
+		if err != nil {
+			return Profile{}, err
+		}
+		if err := bundleFile.Close(); err != nil {
+			return Profile{}, err
+		}
+		if err := stage.RemoveAll("work"); err != nil {
+			return Profile{}, err
+		}
+		if err := ctx.Err(); err != nil {
+			return Profile{}, err
+		}
+		if err := stage.Close(); err != nil {
+			return Profile{}, err
+		}
+		if err := fileio.PublishDirectory(parent, temporary, profile.Generation); err != nil {
+			return Profile{}, err
+		}
+		return profile, nil
+	}
 	spec, version, err := readForgeSpec(ctx, z, request, versionID)
 	if err != nil {
 		return Profile{}, err
 	}
-	if err := javaRuntime.Check(max(base.Java.Major, version.Java.Major), platform); err != nil {
-		return Profile{}, err
+	if _, declared := spec.Data["BINPATCH"]; !declared && z.Has("data/client.lzma") {
+		if spec.Data == nil {
+			spec.Data = make(map[string]struct{ Client string })
+		}
+		spec.Data["BINPATCH"] = struct{ Client string }{Client: "/data/client.lzma"}
 	}
 	values, resources, err := forgeData(spec)
 	if err != nil {
@@ -138,7 +177,14 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err != nil {
 		return Profile{}, err
 	}
-	client := download.File{Path: path.Join("cache/versions", base.ID, base.ID+".jar"), Download: base.Downloads["client"]}
+	if err := validateProcessorPaths(libraries, processors); err != nil {
+		return Profile{}, err
+	}
+	clientID := base.ID
+	if base.ClientVersion != "" {
+		clientID = base.ClientVersion
+	}
+	client := download.File{Path: path.Join("cache/versions", clientID, clientID+".jar"), Download: base.Downloads["client"]}
 	inputs, copies, err := planForgeInputs(z, libraries, processors, base, client)
 	if err != nil {
 		return Profile{}, err
@@ -171,10 +217,23 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 		}
 		known[target] = identity
 	}
+	known["work/installer.jar"] = installer
+	known["work/client.jar"] = client.Download
+	for _, resource := range resources {
+		identity, err := hashForgeFile(ctx, stage, resource.Target, "", 0)
+		if err != nil {
+			return Profile{}, err
+		}
+		known[resource.Target] = identity
+	}
 	if err := bundleFile.Close(); err != nil {
 		return Profile{}, err
 	}
-	if err := s.runProcessors(ctx, cache, stage, stagePath, javaRuntime.Executable, base, processors, known, progress("loader-processors")); err != nil {
+	if err := s.runProcessors(ctx, cache, stage, stagePath, executable, platform, base, processors, known, progress("loader-processors"), func(p java.Progress) {
+		if report != nil {
+			report(p.Stage, download.Progress{Bytes: p.Bytes, TotalBytes: p.Total})
+		}
+	}); err != nil {
 		return Profile{}, err
 	}
 	if patched, ok := values["PATCHED"]; ok {
@@ -188,11 +247,14 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 			return Profile{}, err
 		}
 	}
-	profile, err := completedForgeProfile(request, version, known, "ready-"+nonce, bundle.SHA1)
+	profile, err := completedForgeProfile(request, version, known, "ready-"+nonce, bundle.SHA1, spec.LegacyGame)
 	if err != nil {
 		return Profile{}, err
 	}
 	if _, err := profile.Merge(base); err != nil {
+		return Profile{}, err
+	}
+	if err := verifyProcessedLegacyEntrypoints(ctx, stage, profile); err != nil {
 		return Profile{}, err
 	}
 	if err := stage.RemoveAll("work"); err != nil {
@@ -250,44 +312,83 @@ func planForgeInputs(z *archive.Zip, libraries map[string]forgeLibrary, processo
 	return inputs, mappings, nil
 }
 
-func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Root, stagePath, executable string, base meta.Version, processors []preparedProcessor, known map[string]meta.Download, report func(download.Progress)) error {
+func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Root, stagePath, executable string, platform meta.Platform, base meta.Version, processors []preparedProcessor, known map[string]meta.Download, report func(download.Progress), javaReport func(java.Progress)) error {
+	classes := 0
+	runtimes := make(map[int]java.Runtime)
 	progress := download.Progress{TotalFiles: len(processors)}
 	report(progress)
 	for index, p := range processors {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		for _, target := range slices.Sorted(maps.Keys(p.outputs)) {
-			if _, err := stage.Lstat(target); !errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("安装处理器的输出已存在或不可写 %s", target)
-			}
-			if err := stage.MkdirAll(path.Dir(target), 0o700); err != nil {
-				return err
-			}
+		if err := verifyProcessorInputs(ctx, stage, known, p.inputs); err != nil {
+			return err
+		}
+		reused, err := prepareProcessorOutputs(ctx, stage, known, p)
+		if err != nil {
+			return err
+		}
+		if reused {
+			progress.Files++
+			report(progress)
+			continue
 		}
 		if p.copyMappings != "" {
-			if err := copyForgeInput(ctx, cache, forgeMappings(base), stage, p.copyMappings); err != nil {
+			if err := prepareForgeMappings(ctx, cache, stage, base, p); err != nil {
+				return err
+			}
+		} else if p.nativeTask != "" {
+			if err := runNativeProcessor(ctx, stage, known, p); err != nil {
 				return err
 			}
 		} else {
+			if s.run == nil {
+				return errors.New("Java 安装处理器未配置")
+			}
+			main, err := forgeJarMain(ctx, stage, p.jar, p.classpath)
+			if err != nil {
+				return err
+			}
+			minimum := 8
 			var classpath []string
 			for _, relative := range p.classpath {
 				file, ok := known[relative]
 				if !ok {
 					return fmt.Errorf("安装处理器缺少已校验依赖 %s", relative)
 				}
+				entry := ""
+				if relative == p.jar {
+					entry = main
+				}
+				required, err := processorJarMinimum(ctx, stage, relative, file, entry, &classes, p.classpath)
+				if err != nil {
+					return fmt.Errorf("分析安装工具Java要求 %s: %w", relative, err)
+				}
+				minimum = max(minimum, required)
+				classpath = append(classpath, filepath.Join(stagePath, filepath.FromSlash(relative)))
+			}
+			runtime, found := runtimes[minimum]
+			if !found {
+				runtime, err = s.processorRuntime(ctx, minimum, platform, []string{executable}, javaReport)
+				if err != nil {
+					return err
+				}
+				runtimes[minimum] = runtime
+			}
+			// Java installation may take time; recheck the fixed tools immediately
+			// before handing their paths to the process adapter.
+			for _, relative := range p.classpath {
+				file := known[relative]
 				if _, err := hashForgeFile(ctx, stage, relative, file.SHA1, file.Size); err != nil {
 					return err
 				}
-				classpath = append(classpath, filepath.Join(stagePath, filepath.FromSlash(relative)))
 			}
-			main, err := forgeJarMain(ctx, stage, p.jar)
-			if err != nil {
+			if err := verifyProcessorInputs(ctx, stage, known, p.inputs); err != nil {
 				return err
 			}
 			args := append([]string{"-Xmx1024m", "-Dfile.encoding=UTF-8", "-Djava.net.preferIPv4Stack=true", "-cp",
 				strings.Join(classpath, string(os.PathListSeparator)), main}, p.args...)
-			if err := s.run(ctx, executable, filepath.Join(stagePath, "work"), args); err != nil {
+			if err := s.run(ctx, runtime.Executable, filepath.Join(stagePath, "work"), args); err != nil {
 				return fmt.Errorf("安装处理器 %d (%s): %w", index+1, path.Base(p.jar), err)
 			}
 		}
@@ -298,15 +399,22 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 			}
 			known[target] = identity
 		}
+		var generatedBytes int64
+		for _, identity := range known {
+			generatedBytes += identity.Size
+			if generatedBytes > 4<<30 {
+				return errors.New("处理器输入及生成文件累计超过4GiB")
+			}
+		}
 		progress.Files++
 		report(progress)
 	}
 	return nil
 }
 
-func completedForgeProfile(request Request, version meta.Version, known map[string]meta.Download, generation, installerSHA1 string) (Profile, error) {
+func completedForgeProfile(request Request, version meta.Version, known map[string]meta.Download, generation, installerSHA1 string, legacyGame bool) (Profile, error) {
 	profile := Profile{Request: request, ID: version.ID, MainClass: version.MainClass, JavaMajor: version.Java.Major,
-		Arguments: *version.Arguments, Generation: generation, InstallerSHA1: installerSHA1}
+		Arguments: *version.Arguments, Generation: generation, InstallerSHA1: installerSHA1, LegacyGame: legacyGame}
 	seen := make(map[string]bool)
 	for _, library := range version.Libraries {
 		coordinate, err := meta.ParseCoordinate(library.Name)
@@ -314,16 +422,13 @@ func completedForgeProfile(request Request, version meta.Version, known map[stri
 			return Profile{}, err
 		}
 		target := path.Join("libraries", coordinate.Path())
-		if seen[target] {
-			continue
-		}
 		seen[target] = true
 		identity, ok := known[target]
 		if !ok {
 			return Profile{}, fmt.Errorf("启动所需库缺少安装产物 %s", library.Name)
 		}
 		if expected := library.Downloads.Artifact; expected != nil && expected.SHA1 != "" &&
-			(!strings.EqualFold(expected.SHA1, identity.SHA1) || expected.Size != identity.Size) {
+			(!strings.EqualFold(expected.SHA1, identity.SHA1) || expected.Size > 0 && expected.Size != identity.Size) {
 			return Profile{}, fmt.Errorf("启动库与固定摘要不匹配 %s", library.Name)
 		}
 		identity.Path = coordinate.Path()
@@ -331,7 +436,7 @@ func completedForgeProfile(request Request, version meta.Version, known map[stri
 		profile.Libraries = append(profile.Libraries, library)
 	}
 	for _, target := range slices.Sorted(maps.Keys(known)) {
-		if !seen[target] {
+		if !seen[target] && strings.HasPrefix(target, "libraries/") {
 			identity := known[target]
 			identity.Path = strings.TrimPrefix(target, "libraries/")
 			profile.Outputs = append(profile.Outputs, identity)

@@ -30,7 +30,7 @@ func NewArchiveStore(root string) *ArchiveStore {
 	return &ArchiveStore{dir: root, assets: NewAssetStore(filepath.Join(root, "instances"))}
 }
 func (s *ArchiveStore) open(ctx context.Context, expected market.File) (*os.File, *archive.Zip, error) {
-	if expected.Size <= 0 || expected.Size > 512<<20 {
+	if expected.Size <= 0 || expected.Size > modpack.MaxArchiveSize {
 		return nil, nil, errors.New("压缩包大小无效")
 	}
 	root, err := os.OpenRoot(s.dir)
@@ -147,6 +147,9 @@ func (s *ArchiveStore) CommitArchive(ctx context.Context, plan app.ArchiveImport
 	if plan.Request.Kind != market.Modpack || plan.Instance.Pack == nil {
 		return errors.New("无效整合包提交")
 	}
+	if plan.Request.GameDirectoryID != nil && *plan.Request.GameDirectoryID != plan.Instance.GameDirectoryID {
+		return errors.New("整合包目录与固定导入计划不匹配")
+	}
 	if err := plan.Instance.Validate(); err != nil {
 		return err
 	}
@@ -190,10 +193,41 @@ func (s *ArchiveStore) CommitArchive(ctx context.Context, plan app.ArchiveImport
 		return err
 	}
 	defer stage.Close()
-	if err := stage.Mkdir("game", 0o700); err != nil {
+	payload := stage
+	var external *os.Root
+	externalTemporary := ""
+	externalPublished := false
+	if plan.Instance.GameDirectoryID != "" {
+		location, release, err := lockGameLocation(ctx, s.dir, plan.Instance.GameDirectoryID)
+		if err != nil {
+			return err
+		}
+		defer release()
+		external = location
+		if _, err := location.Lstat(plan.Instance.ID); err == nil {
+			return errors.New("所选游戏位置已有相同实例 ID，未覆盖")
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		externalTemporary = ".mcl-import-" + rand.Text()
+		if err := location.Mkdir(externalTemporary, 0700); err != nil {
+			return err
+		}
+		defer func() {
+			if !externalPublished {
+				location.RemoveAll(externalTemporary)
+			}
+		}()
+		payload, err = openRealDirectory(location, externalTemporary)
+		if err != nil {
+			return err
+		}
+		defer payload.Close()
+	}
+	if err := payload.Mkdir("game", 0o700); err != nil {
 		return err
 	}
-	game, err := stage.OpenRoot("game")
+	game, err := payload.OpenRoot("game")
 	if err != nil {
 		return err
 	}
@@ -221,7 +255,7 @@ func (s *ArchiveStore) CommitArchive(ctx context.Context, plan app.ArchiveImport
 	if err := guardStagedPackMods(ctx, game, plan.Instance); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(instanceDocument{Version: 1, Instance: plan.Instance}, "", "  ")
+	data, err := json.MarshalIndent(instanceDocument{Version: instanceDocumentVersion(plan.Instance), Instance: plan.Instance}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -247,8 +281,23 @@ func (s *ArchiveStore) CommitArchive(ctx context.Context, plan app.ArchiveImport
 	}
 	// Close stage handles before rename for Windows sharing semantics.
 	game.Close()
+	if payload != stage {
+		payload.Close()
+	}
 	stage.Close()
-	return fileio.PublishDirectory(parent, temporary, plan.Instance.ID)
+	if external != nil {
+		if err := fileio.PublishDirectory(external, externalTemporary, plan.Instance.ID); err != nil {
+			return err
+		}
+		externalPublished = true
+	}
+	if err := fileio.PublishDirectory(parent, temporary, plan.Instance.ID); err != nil {
+		if externalPublished {
+			return fmt.Errorf("实例登记失败，新游戏目录已保留 %s: %w", filepath.Join(external.Name(), plan.Instance.ID), err)
+		}
+		return err
+	}
+	return nil
 }
 
 func checkPackManifestFiles(manifest modpack.Manifest, files []modpack.File) error {
@@ -323,4 +372,16 @@ func (s *ArchiveStore) commitWorld(ctx context.Context, z *archive.Zip, plan app
 	}
 	stage.Close()
 	return fileio.PublishDirectory(parent, temporary, plan.Request.World)
+}
+
+func (s *ArchiveStore) CheckGameDirectory(ctx context.Context, id string) error {
+	if id == "" {
+		return ctx.Err()
+	}
+	root, err := NewGameDirectoryStore(s.dir).open(ctx, id)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return ctx.Err()
 }

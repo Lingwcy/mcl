@@ -30,7 +30,11 @@ func TestSessionOwnerHelper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan := launchPlan(t, executable, root)
+	major := 17
+	if os.Getenv("MCL_TEST_OWNER_JAVA_MAJOR") == "8" {
+		major = 8
+	}
+	plan := launchPlanWithMajor(t, major, executable, root)
 	id := filepath.Base(plan.InstancePath())
 	registry := storage.NewSessionStore(root, process.Running)
 	lease, err := registry.Reserve(t.Context(), id)
@@ -64,7 +68,7 @@ func TestSessionOwnerHelper(t *testing.T) {
 	os.Exit(0)
 }
 
-func owner(t *testing.T, action string) (string, *exec.Cmd) {
+func owner(t *testing.T, action string, javaMajor ...int) (string, *exec.Cmd) {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "owner data")
 	executable, err := os.Executable()
@@ -75,6 +79,9 @@ func owner(t *testing.T, action string) (string, *exec.Cmd) {
 	t.Cleanup(cancel)
 	cmd := exec.CommandContext(ctx, executable, "-test.run=^TestSessionOwnerHelper$")
 	cmd.Env = append(os.Environ(), "MCL_TEST_OWNER_ACTION="+action, "MCL_TEST_OWNER_ROOT="+root, "MCL_TEST_PROCESS_MODE=")
+	if len(javaMajor) > 0 && javaMajor[0] == 8 {
+		cmd.Env = append(cmd.Env, "MCL_TEST_OWNER_JAVA_MAJOR=8")
+	}
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -176,5 +183,63 @@ func TestOwnerExitPreservesLiveSessionUntilItsNaturalExit(t *testing.T) {
 	lease.Close()
 	if _, err := os.Stat(filepath.Join(root, "instances", record.InstanceID, "session.json")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("finished session record retained")
+	}
+}
+
+func TestJava8OwnerCrashPreservesLiveSupportAndReclaimsDeadSupport(t *testing.T) {
+	for _, action := range []string{"before-handoff", "after-handoff"} {
+		t.Run(action, func(t *testing.T) {
+			root, command := owner(t, action, 8)
+			if err := command.Wait(); err != nil {
+				t.Fatal(err)
+			}
+			id, err := os.ReadFile(filepath.Join(root, "owner.ready"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			registry := storage.NewSessionStore(root, process.Running)
+			directory := filepath.Join(root, "instances", string(id), "runtime")
+			hasSupport := func() bool {
+				entries, err := os.ReadDir(directory)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, entry := range entries {
+					if strings.HasSuffix(entry.Name(), ".jar") {
+						return true
+					}
+				}
+				return false
+			}
+			if !hasSupport() {
+				t.Fatal("owner exit lost support JAR")
+			}
+			if action == "after-handoff" {
+				records, err := registry.Active(t.Context())
+				if err != nil || len(records) != 1 {
+					t.Fatalf("missing live Java 8 helper: %v", err)
+				}
+				if _, err := registry.Reserve(t.Context(), string(id)); err == nil {
+					t.Fatal("live game allowed cleanup")
+				}
+				if !hasSupport() {
+					t.Fatal("live support removed")
+				}
+				if err := os.WriteFile(filepath.Join(root, "release"), []byte("release"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				waitFor(t, func() bool { alive, err := process.Running(records[0].Process); return err == nil && !alive })
+			} else {
+				waitFor(t, func() bool { records, err := registry.Active(t.Context()); return err == nil && len(records) == 0 })
+			}
+			lease, err := registry.Reserve(t.Context(), string(id))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer lease.Close()
+			if hasSupport() {
+				t.Fatal("abandoned support JAR retained")
+			}
+		})
 	}
 }

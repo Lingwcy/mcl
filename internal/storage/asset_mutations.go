@@ -116,7 +116,7 @@ func (s *AssetStore) Change(ctx context.Context, request app.AssetMutation) (app
 		if err := confirmAssetEntry(parent, path.Base(file.Path), info); err != nil {
 			return app.AssetChange{}, err
 		}
-		return s.removeAsset(ctx, root, request.InstanceID, parent, path.Base(file.Path), removedAsset{Schema: 1, Path: file.Path, Size: info.Size(), ModifiedAt: info.ModTime(), SHA1: hash, URL: address, RemovedAt: time.Now().UTC()})
+		return s.removeAsset(ctx, request.InstanceID, parent, path.Base(file.Path), removedAsset{Schema: 1, Path: file.Path, Size: info.Size(), ModifiedAt: info.ModTime(), SHA1: hash, URL: address, RemovedAt: time.Now().UTC()})
 	}
 	enabled := !strings.HasSuffix(file.Path, ".disabled")
 	wantEnabled := request.Action == app.AssetEnable
@@ -142,9 +142,9 @@ func (s *AssetStore) Change(ctx context.Context, request app.AssetMutation) (app
 	return app.AssetChange{}, nil
 }
 
-func (s *AssetStore) removeAsset(ctx context.Context, root *os.Root, id string, source *os.Root, name string, record removedAsset) (app.AssetChange, error) {
+func (s *AssetStore) removeAsset(ctx context.Context, id string, source *os.Root, name string, record removedAsset) (app.AssetChange, error) {
 	backup := instance.NewID()
-	parent, err := removedAssetsRoot(root, id, true)
+	parent, err := s.removedAssetsRoot(ctx, id, true)
 	if err != nil {
 		return app.AssetChange{}, err
 	}
@@ -196,7 +196,7 @@ func (s *AssetStore) Restore(ctx context.Context, id, backup string) error {
 		return err
 	}
 	defer root.Close()
-	parent, err := removedAssetsRoot(root, id, false)
+	parent, err := s.removedAssetsRoot(ctx, id, false)
 	if err != nil {
 		return err
 	}
@@ -292,8 +292,8 @@ func confirmAssetEntry(root *os.Root, name string, expected os.FileInfo) error {
 	return nil
 }
 
-func removedAssetsRoot(root *os.Root, id string, create bool) (*os.Root, error) {
-	managed, err := root.OpenRoot(id)
+func (s *AssetStore) removedAssetsRoot(ctx context.Context, id string, create bool) (*os.Root, error) {
+	managed, err := s.openPayload(ctx, id)
 	if err != nil {
 		return nil, err
 	}

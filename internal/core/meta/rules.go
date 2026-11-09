@@ -17,6 +17,9 @@ type Platform struct {
 	Features map[string]bool
 }
 
+// CurrentPlatform returns the compiled OS/CPU identity only. The entry point
+// must inject a native OS version for metadata containing os.version rules;
+// keeping that I/O in platform avoids probing while core plans are evaluated.
 func CurrentPlatform() Platform {
 	os := runtime.GOOS
 	if os == "darwin" {
@@ -104,7 +107,7 @@ func (r Rule) matches(p Platform) (bool, error) {
 		}
 		if r.OS.Version != "" {
 			if p.Version == "" {
-				return false, errors.New("OS version is required to evaluate this rule")
+				return false, errors.New("无法判断系统版本规则：未读取到当前操作系统版本")
 			}
 			matched, err := regexp.MatchString(r.OS.Version, p.Version)
 			if err != nil || !matched {

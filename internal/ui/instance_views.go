@@ -10,13 +10,7 @@ func (s *Shell) libraryStatus(c *ui.Context) {
 			ui.Text(c, "正在处理…").FontSize(11).TextColor(s.theme.TextMuted)
 		})
 	}
-	if l.message != "" {
-		color := s.theme.TextMuted
-		if l.failed {
-			color = s.theme.Danger
-		}
-		ui.Text(c, l.message).FontSize(11).TextColor(color).MaxLines(3)
-	}
+
 }
 
 func (s *Shell) instanceSettingsView(c *ui.Context) {
@@ -27,7 +21,7 @@ func (s *Shell) instanceSettingsView(c *ui.Context) {
 		return
 	}
 	reason := s.instanceEditBlockReason(state.id)
-	disabled := !state.loaded || state.loading || state.conflict || reason != "" || s.library.actions.SavePreferences == nil
+	disabled := state.deleting || !state.loaded || state.loading || state.conflict || reason != "" || s.library.actions.SavePreferences == nil
 	ui.Scroll(c.Key("instance-settings-"+state.id)).Grow(1).MinHeight(0).FillWidth().Padding(18, 24, 24).Gap(16).Children(func() {
 		ui.Row(c.Key("instance-settings-header")).FillWidth().Height(26).Gap(8).Children(func() {
 			iconButton(c, "back-instance", "返回实例", iconBack, s.openHome)
@@ -35,7 +29,7 @@ func (s *Shell) instanceSettingsView(c *ui.Context) {
 			if state.saving {
 				busyIndicator(c, 12)
 			}
-			iconButton(c, "reload-instance-settings", "重新读取并放弃未保存修改", iconRefresh, func() { s.loadInstanceSettings(value) }).Disabled(state.loading || state.saving || s.library.actions.LoadInstance == nil)
+			iconButton(c, "reload-instance-settings", "重新读取并放弃未保存修改", iconRefresh, func() { s.loadInstanceSettings(value) }).Disabled(state.deleting || state.loading || state.saving || s.library.actions.LoadInstance == nil)
 		})
 		if state.loading {
 			loadingStatus(c, "正在读取实例…")
@@ -65,6 +59,27 @@ func (s *Shell) instanceSettingsView(c *ui.Context) {
 						OnChange(func() { s.saveInstancePreferences(state) }).OnSubmit(func() { s.saveInstancePreferences(state) })
 				})
 				gameSettingsDivider(c)
+				gameSettingRow(c, "game-directory", "游戏目录", func() {
+					path := s.instanceGamePath(state.value)
+					if path == "" {
+						path = "目录未登记"
+					}
+					services := c.Services()
+					ui.Text(c, path).FontSize(11).TextColor(colors(t).Metadata).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…").ContextMenu(func(menu *ui.Menu) {
+						if menu.Item("复制路径").Chosen() {
+							services.WriteClipboard(path)
+						}
+					})
+					iconButton(c, "open-instance-location", "打开游戏目录", iconFolder, func() { s.openInstanceGameDirectory(state.id) }).Disabled(s.gameDirectories.busy || s.gameDirectories.actions.OpenInstance == nil)
+				})
+				gameSettingsDivider(c)
+				if state.value.Description != "" {
+					ui.Row(c.Key("instance-description")).FillWidth().MinHeight(44).Padding(10, 14).Gap(10).Children(func() {
+						ui.Text(c, "描述").FontSize(12).Width(84).Shrink(0)
+						ui.Text(c, state.value.Description).FontSize(12).TextColor(t.TextMuted).Grow(1).MinWidth(0).MaxLines(4)
+					})
+					gameSettingsDivider(c)
+				}
 				gameSettingRow(c, "game-version", "Minecraft", func() {
 					instanceSettingValue(c, state.value.Version.ID)
 				})
@@ -103,18 +118,17 @@ func (s *Shell) instanceSettingsView(c *ui.Context) {
 				gameSettingRow(c, "memory", "游戏内存", func() { instanceSettingValue(c, "自动分配") })
 			})
 		})
-		message := state.validation
-		if message == "" {
-			message = state.saveError
-		}
-		if message != "" {
-			ui.Row(c.Key("instance-settings-error")).FillWidth().Gap(10).Children(func() {
-				ui.Text(c, message).FontSize(12).TextColor(t.Danger).Grow(1).MinWidth(0).MaxLines(4)
-				if state.saveError != "" && !state.conflict {
-					ui.Button(c.Key("retry-instance-settings"), "重试").Height(26).Shrink(0).Disabled(state.saving || disabled).OnClick(func() { s.saveInstancePreferences(state) })
-				}
+		ui.Row(c.Key("delete-instance-row")).FillWidth().Height(38).Gap(8).Children(func() {
+			ui.Spacer(c)
+			if state.deleting {
+				busyIndicator(c, 12)
+			}
+			ui.ButtonBase(c.Key("delete-instance")).Label("删除实例及其全部数据").Height(28).Padding(0, 10).Gap(7).Radius(6).Disabled(!state.loaded || state.loading || state.saving || state.deleting || state.iconBusy || reason != "" || s.library.actions.DeleteInstance == nil).OnClick(s.deleteSelectedInstance).Children(func() {
+				ui.Icon(c, iconTrash).Size(14, 14).TextColor(t.Danger)
+				ui.Text(c, "删除实例…").FontSize(12).TextColor(t.Danger)
 			})
-		} else if reason != "" {
+		})
+		if reason != "" {
 			ui.Text(c, reason).FontSize(12).TextColor(t.TextMuted).MaxLines(3)
 		}
 	})

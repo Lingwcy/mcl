@@ -67,6 +67,8 @@ type Client struct {
 	HTTP        *http.Client
 	Concurrency int
 	Attempts    int
+	Transfers   *TransferControl
+	Cache       ObjectCache
 	mu          sync.Mutex
 	locks       map[string]*gate
 }
@@ -143,6 +145,14 @@ func (c *Client) Run(ctx context.Context, files []File, report func(Progress)) e
 		return err
 	}
 	defer root.Close()
+	var cache CacheLease
+	if c.Cache != nil {
+		cache, err = c.Cache.Acquire(ctx)
+		if err != nil {
+			return err
+		}
+		defer cache.Close()
+	}
 	work, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	jobs := make(chan File)
@@ -151,10 +161,14 @@ func (c *Client) Run(ctx context.Context, files []File, report func(Progress)) e
 	if report != nil {
 		report(p)
 	}
-	for range c.Concurrency {
+	concurrency := c.Concurrency
+	if c.Transfers != nil {
+		concurrency = c.Transfers.Limit()
+	}
+	for range concurrency {
 		wg.Go(func() {
 			for f := range jobs {
-				reused, err := c.get(work, root, f)
+				reused, err := c.get(work, root, f, cache)
 				if err != nil {
 					cancel(fmt.Errorf("%s: %w", f.Path, err))
 					return
@@ -187,7 +201,7 @@ dispatch:
 	return context.Cause(work)
 }
 
-func (c *Client) get(ctx context.Context, root *os.Root, f File) (bool, error) {
+func (c *Client) get(ctx context.Context, root *os.Root, f File, cache CacheLease) (bool, error) {
 	unlock, err := c.lock(ctx, strings.ToLower(f.Path))
 	if err != nil {
 		return false, err
@@ -202,9 +216,29 @@ func (c *Client) get(ctx context.Context, root *os.Root, f File) (bool, error) {
 	if err := root.MkdirAll(path.Dir(f.Path), 0o700); err != nil {
 		return false, err
 	}
+	if cache != nil {
+		reused, err := restoreCachedFile(ctx, cache, root, f)
+		if err != nil || reused {
+			return reused, err
+		}
+	}
+	sources := c.Transfers.candidates(f.URL)
 	for attempt := range c.Attempts {
-		retry, delay, err := c.transfer(ctx, root, f)
+		address := sources[attempt%len(sources)]
+		retry, delay, err := c.transfer(ctx, root, f, address, len(sources) > 1)
 		if err == nil {
+			c.Transfers.rememberSource(f.URL, address)
+			if cache != nil {
+				source, openErr := root.Open(f.Path)
+				if openErr != nil {
+					return false, openErr
+				}
+				cacheErr := cache.Store(ctx, objectForFile(f), source)
+				source.Close()
+				if cacheErr != nil {
+					return false, fmt.Errorf("保存下载副本: %w", cacheErr)
+				}
+			}
 			return false, nil
 		}
 		if ctx.Err() != nil {
@@ -263,26 +297,27 @@ func Verify(ctx context.Context, root *os.Root, f File) error {
 	return ctx.Err()
 }
 
-func (c *Client) transfer(ctx context.Context, root *os.Root, f File) (bool, time.Duration, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.URL, nil)
+func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address string, alternate bool) (bool, time.Duration, error) {
+	if c.Transfers != nil {
+		release, err := c.Transfers.Acquire(ctx)
+		if err != nil {
+			return false, 0, err
+		}
+		defer release()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		return false, 0, err
 	}
 	req.Header.Set("User-Agent", "mcl/0.1.0")
 	req.Header.Set("Accept-Encoding", "identity")
-	client := c.HTTP
-	if len(f.AllowedHosts) > 0 {
-		client = &http.Client{Transport: c.HTTP.Transport, Jar: c.HTTP.Jar, Timeout: c.HTTP.Timeout, CheckRedirect: func(r *http.Request, via []*http.Request) error {
-			if len(via) >= 5 || !allowedFileURL(r.URL.String(), f.AllowedHosts) {
-				return errors.New("download redirect host is not permitted")
-			}
-			if c.HTTP.CheckRedirect != nil {
-				return c.HTTP.CheckRedirect(r, via)
-			}
-			return nil
-		}}
+	client := c.requestClient(f.URL, f.AllowedHosts, address != f.URL)
+	var response *http.Response
+	if c.Transfers != nil {
+		response, err = c.Transfers.Do(client, req)
+	} else {
+		response, err = client.Do(req)
 	}
-	response, err := client.Do(req)
 	if err != nil {
 		var urlErr *url.Error
 		if errors.As(err, &urlErr) {
@@ -292,7 +327,7 @@ func (c *Client) transfer(ctx context.Context, root *os.Root, f File) (bool, tim
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		retry := response.StatusCode == 408 || response.StatusCode == 429 || response.StatusCode == 500 || response.StatusCode == 502 || response.StatusCode == 503 || response.StatusCode == 504
+		retry := response.StatusCode == 408 || response.StatusCode == 429 || response.StatusCode == 500 || response.StatusCode == 502 || response.StatusCode == 503 || response.StatusCode == 504 || alternate && (response.StatusCode == 403 || response.StatusCode == 404)
 		delay, acceptable := retryDelay(response.Header.Get("Retry-After"), time.Now())
 		return retry && acceptable, delay, fmt.Errorf("server returned HTTP %d", response.StatusCode)
 	}

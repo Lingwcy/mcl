@@ -291,13 +291,6 @@ func (s *Shell) instanceView(c *ui.Context) {
 			})
 			iconButton(c, "refresh-assets", "刷新资产", iconRefresh, s.refreshAssets)
 		})
-		if a.message != "" {
-			color := t.TextMuted
-			if a.failed {
-				color = t.Danger
-			}
-			ui.Text(c, a.message).FontSize(11).TextColor(color).MaxLines(2)
-		}
 		ui.Column(c.Key("asset-content-" + string(a.kind))).Grow(1).MinHeight(0).FillWidth().Transition(motionReveal).Children(func() {
 			if a.busy {
 				loadingList(c, false)
@@ -542,9 +535,6 @@ func (s *Shell) welcomeView(c *ui.Context) {
 	ui.Column(c.Key("welcome")).Grow(1).FillWidth().Center().Gap(12).Padding(24).Children(func() {
 		ui.Icon(c, iconCube).Size(30, 30).TextColor(colors(t).IconMuted)
 		ui.Button(c.Key("welcome-create"), "新建实例").Height(28).OnClick(s.openNewInstance)
-		if s.library.failed {
-			ui.Text(c, s.library.message).FontSize(11).TextColor(t.Danger).MaxLines(3)
-		}
 	})
 }
 

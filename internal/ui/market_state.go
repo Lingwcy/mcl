@@ -7,7 +7,7 @@ import (
 
 	"mcl/internal/app"
 	"mcl/internal/core/download"
-	"mcl/internal/core/instance"
+	"mcl/internal/core/install"
 	"mcl/internal/core/market"
 
 	"github.com/egoist/mygo/ui"
@@ -27,14 +27,16 @@ type MarketActions struct {
 	SupplyFiles         func(market.InstallPlan, func(app.LocalFileSupply, error)) func()
 	Install             func(market.InstallPlan, func(download.Progress), func(error)) func()
 	Worlds              func(string, func([]string, error)) func()
-	InspectArchive      func(app.ArchiveImportRequest, app.Settings, func(app.ArchiveImportPlan, error)) func()
+	InspectArchive      func(app.ArchiveImportRequest, app.Settings, func(download.Progress), func(app.ArchiveImportPlan, error)) func()
 	SupplyArchive       func(app.ArchiveImportPlan, func(app.LocalFileSupply, error)) func()
-	ImportArchive       func(app.ArchiveImportPlan, func(download.Progress), func(instance.Instance, error)) func()
+	ImportArchive       func(app.ArchiveImportPlan, func(install.Progress), func(app.PackImportResult, error)) func()
+	ResumePackImport    func(string, func(install.Progress), func(app.PackImportResult, error)) func()
 	InspectPackRepair   func(string, func(app.PackRepairPlan, error)) func()
 	SupplyPackRepair    func(app.PackRepairPlan, func(app.LocalFileSupply, error)) func()
 	RestorePack         func(app.PackRepairPlan, []string, func(download.Progress), func(int, error)) func()
 }
 type marketState struct {
+	importDirectoryID                                *string
 	actions                                          MarketActions
 	kind                                             app.AssetKind
 	source                                           market.Source

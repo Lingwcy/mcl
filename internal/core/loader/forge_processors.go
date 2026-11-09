@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -21,11 +22,16 @@ type forgeValue struct {
 }
 
 type preparedProcessor struct {
-	jar          string
-	classpath    []string
-	args         []string
-	outputs      map[string]string
-	copyMappings string
+	jar              string
+	classpath        []string
+	args             []string
+	outputs          map[string]string
+	copyMappings     string
+	sanitizeMappings bool
+	mappingFormat    string
+	nativeTask       string
+	inputs           []string
+	nativeValues     []forgeValue
 }
 
 func forgeMaven(value string) (string, error) {
@@ -43,39 +49,91 @@ func forgeData(spec forgeSpec) (map[string]forgeValue, []archive.Mapping, error)
 		"INSTALLER": {"work/installer.jar", true}, "MINECRAFT_JAR": {"work/client.jar", true},
 	}
 	var resources []archive.Mapping
-	for key, side := range spec.Data {
-		if _, reserved := values[key]; reserved || !meta.ValidID(key) || len(side.Client) > 4096 {
-			return nil, nil, errors.New("安装配置变量无效")
+	visiting := make(map[string]bool)
+	var resolve func(string, int) (forgeValue, error)
+	resolve = func(key string, depth int) (forgeValue, error) {
+		if value, ok := values[key]; ok {
+			return value, nil
 		}
-		value := side.Client
+		entry, ok := spec.Data[key]
+		if !ok || !meta.ValidID(key) || len(entry.Client) > 4096 || depth > 16 || visiting[key] {
+			return forgeValue{}, errors.New("安装变量未知、循环或超过边界")
+		}
+		visiting[key] = true
+		defer delete(visiting, key)
+		text := entry.Client
+		if len(text) > 1 && text[0] == 39 && text[len(text)-1] == 39 {
+			text = text[1 : len(text)-1]
+		}
+		for pos := 0; pos < len(text); {
+			start := strings.IndexByte(text[pos:], '{')
+			if start < 0 {
+				break
+			}
+			start += pos
+			end := strings.IndexByte(text[start+1:], '}')
+			if end < 0 {
+				return forgeValue{}, errors.New("安装变量未闭合")
+			}
+			end += start + 1
+			if _, err := resolve(text[start+1:end], depth+1); err != nil {
+				return forgeValue{}, err
+			}
+			pos = end + 1
+		}
+		expanded, err := expandForgeScalars(text, values)
+		if err != nil {
+			return forgeValue{}, err
+		}
+		var value forgeValue
 		switch {
-		case strings.HasPrefix(value, "[") && strings.HasSuffix(value, "]"):
-			relative, err := forgeMaven(value[1 : len(value)-1])
+		case strings.HasPrefix(expanded, "[") && strings.HasSuffix(expanded, "]"):
+			relative, err := forgeMaven(expanded[1 : len(expanded)-1])
 			if err != nil {
-				return nil, nil, err
+				return value, err
 			}
-			values[key] = forgeValue{relative, true}
-		case strings.HasPrefix(value, "/data/"):
-			source := strings.TrimPrefix(value, "/")
+			value = forgeValue{relative, true}
+		case strings.HasPrefix(expanded, "/"):
+			source := strings.TrimPrefix(expanded, "/")
 			if !archive.SafePath(source) {
-				return nil, nil, errors.New("安装包资源路径无效")
+				return value, errors.New("安装包资源路径无效")
 			}
-			target := path.Join("work", source)
-			values[key] = forgeValue{target, true}
+			target := path.Join("work/embedded", source)
+			value = forgeValue{target, true}
 			if !slices.ContainsFunc(resources, func(m archive.Mapping) bool { return m.Target == target }) {
 				resources = append(resources, archive.Mapping{Source: source, Target: target})
 			}
 		default:
-			if strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'") && len(value) > 1 {
-				value = value[1 : len(value)-1]
+			value, err = forgeArg(expanded, values)
+			if err != nil {
+				return value, err
 			}
-			values[key] = forgeValue{value, false}
+		}
+		values[key] = value
+		return value, nil
+	}
+	for key := range spec.Data {
+		if _, reserved := values[key]; reserved {
+			return nil, nil, errors.New("安装清单不能重定义保留变量")
+		}
+	}
+	for key := range spec.Data {
+		if _, err := resolve(key, 0); err != nil {
+			return nil, nil, err
 		}
 	}
 	return values, resources, nil
 }
 
 func forgeArg(input string, values map[string]forgeValue) (forgeValue, error) {
+	if len(input) >= 2 && input[0] == 39 && input[len(input)-1] == 39 {
+		input = input[1 : len(input)-1]
+	}
+	var err error
+	input, err = expandForgeScalars(input, values)
+	if err != nil {
+		return forgeValue{}, err
+	}
 	if len(input) > 4096 || strings.ContainsAny(input, "\x00\r\n") {
 		return forgeValue{}, errors.New("安装处理器参数无效")
 	}
@@ -135,7 +193,9 @@ func prepareForgeProcessor(spec forgeProcessor, values map[string]forgeValue, st
 		if err != nil {
 			return result, err
 		}
-		result.classpath = append(result.classpath, p)
+		if !slices.Contains(result.classpath, p) {
+			result.classpath = append(result.classpath, p)
+		}
 	}
 	result.outputs = make(map[string]string)
 	for target, hash := range spec.Outputs {
@@ -156,12 +216,22 @@ func prepareForgeProcessor(spec forgeProcessor, values map[string]forgeValue, st
 		result.outputs[p.text] = digest.text
 	}
 	var task, mappingTarget, mappingVersion, mappingSide string
+	mappingFormat := "TSRG"
+	var nativeValues []forgeValue
 	sanitize := slices.Contains(spec.Args, "--sanitize")
 	for index, input := range spec.Args {
 		arg, err := forgeArg(input, values)
+		if index > 0 && spec.Args[index-1] == "--from" && coordinate.Artifact == "installertools" {
+			source := strings.TrimPrefix(strings.Trim(input, "'"), "/")
+			if !archive.SafePath(source) {
+				return result, errors.New("归档内部提取路径无效")
+			}
+			arg, err = forgeValue{source, false}, nil
+		}
 		if err != nil {
 			return result, err
 		}
+		nativeValues = append(nativeValues, arg)
 		if index > 0 {
 			switch spec.Args[index-1] {
 			case "--task":
@@ -170,7 +240,9 @@ func prepareForgeProcessor(spec forgeProcessor, values map[string]forgeValue, st
 				mappingVersion = arg.text
 			case "--side":
 				mappingSide = arg.text
-			case "--output", "--out", "--slim", "--extra", "--out-jar", "--outJar", "--outputFile":
+			case "--format":
+				mappingFormat = arg.text
+			case "--output", "--out", "--slim", "--extra", "--out-jar", "--outJar", "--outputFile", "--to":
 				if !forgeOutput(arg) {
 					return result, errors.New("安装处理器输出必须位于私有库目录")
 				}
@@ -183,29 +255,57 @@ func prepareForgeProcessor(spec forgeProcessor, values map[string]forgeValue, st
 			}
 		}
 		if arg.file {
+			writeFlag := index > 0 && slices.Contains([]string{"--output", "--out", "--slim", "--extra", "--out-jar", "--outJar", "--outputFile", "--to", "--optional"}, spec.Args[index-1])
+			if !writeFlag {
+				result.inputs = append(result.inputs, arg.text)
+			}
 			arg.text = filepath.Join(stage, filepath.FromSlash(arg.text))
 		}
 		result.args = append(result.args, arg.text)
 	}
 	if coordinate.Artifact == "installertools" {
 		switch task {
-		case "MCP_DATA", "MERGE_MAPPING":
+		case "MCP_DATA", "EXTRACT_FILES", "CREATE_DIR", "CREATE_PARENTS", "BUNDLER_EXTRACT":
+			result.nativeTask = task
+			result.nativeValues = nativeValues
+		case "MERGE_MAPPING", "CHAIN_MAPPING", "EXTRACT_INHERITANCE", "SRG_TO_MCP", "MAPPINGS_CSV":
 		case "DOWNLOAD_MOJMAPS":
+			if err := validateMappingTask(nativeValues); err != nil {
+				return result, err
+			}
 			if mappingTarget == "" || mappingVersion != values["MINECRAFT_VERSION"].text || mappingSide != "client" {
 				return result, errors.New("映射处理器的版本、用途或输出无效")
 			}
-			if !sanitize {
-				result.copyMappings = mappingTarget
-			} else if result.outputs[mappingTarget] == "" {
-				return result, errors.New("转换后的映射缺少上游摘要")
+			result.copyMappings = mappingTarget
+			result.sanitizeMappings = sanitize
+			result.mappingFormat = mappingFormat
+			if sanitize && result.outputs[mappingTarget] == "" {
+				return result, errors.New("转换后的映射缺少固定输出摘要")
+			}
+			if sanitize && mappingFormat != "TSRG" && mappingFormat != "TSRG2" {
+				return result, errors.New("映射规范化仅支持TSRG/TSRG2")
 			}
 		default:
 			return result, fmt.Errorf("不支持的客户端安装任务 %q", task)
 		}
 	}
-	if len(result.outputs) == 0 {
+	if result.nativeTask != "" {
+		if err := validateNativeTask(&result); err != nil {
+			return result, err
+		}
+	}
+	if len(result.outputs) == 0 && result.nativeTask != "CREATE_DIR" && result.nativeTask != "CREATE_PARENTS" {
 		return result, errors.New("安装处理器缺少可核验输出")
 	}
+	result.inputs = slices.DeleteFunc(result.inputs, func(name string) bool {
+		if name == "." || name == "libraries" {
+			return true
+		}
+		if result.nativeTask == "CREATE_DIR" || result.nativeTask == "CREATE_PARENTS" {
+			return true
+		}
+		return false
+	})
 	return result, nil
 }
 
@@ -213,7 +313,7 @@ func forgeOutput(value forgeValue) bool {
 	return value.file && strings.HasPrefix(value.text, "libraries/") && archive.SafePath(value.text)
 }
 
-func forgeJarMain(ctx context.Context, stage *os.Root, relative string) (string, error) {
+func forgeJarMain(ctx context.Context, stage *os.Root, relative string, approved []string) (string, error) {
 	jar, err := stage.Open(relative)
 	if err != nil {
 		return "", err
@@ -231,6 +331,19 @@ func forgeJarMain(ctx context.Context, stage *os.Root, relative string) (string,
 	if err != nil {
 		return "", err
 	}
+	main, err := processorManifest(data, relative, approved)
+	if err != nil {
+		return "", err
+	}
+	if main == "" {
+		return "", errors.New("安装处理器缺少有效主类")
+	}
+	return main, nil
+}
+
+// A manifest may only name dependencies already pinned in the explicit
+// processor classpath. It cannot add local/remote code or broaden its scope.
+func processorManifest(data []byte, relative string, approved []string) (string, error) {
 	scanner := bufio.NewScanner(strings.NewReader(string(data)))
 	var fields []string
 	for scanner.Scan() {
@@ -247,14 +360,34 @@ func forgeJarMain(ctx context.Context, stage *os.Root, relative string) (string,
 	if err := scanner.Err(); err != nil {
 		return "", err
 	}
+	main := ""
 	for _, line := range fields {
 		key, class, found := strings.Cut(line, ": ")
-		if found && strings.EqualFold(key, "Main-Class") && class != "" && !strings.HasPrefix(class, "-") &&
+		if !found {
+			continue
+		}
+		if strings.EqualFold(key, "Class-Path") {
+			for _, reference := range strings.Fields(class) {
+				u, err := url.Parse(reference)
+				if err != nil || u.IsAbs() || u.Host != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.HasPrefix(u.Path, "/") || strings.Contains(u.Path, string(byte(92))) {
+					return "", errors.New("安装工具清单不能使用外部依赖")
+				}
+				target := path.Clean(path.Join(path.Dir(relative), u.Path))
+				if !archive.SafePath(target) || !strings.HasPrefix(target, "libraries/") || !slices.Contains(approved, target) {
+					return "", errors.New("清单依赖不在已固定的显式classpath内")
+				}
+			}
+		}
+		if !strings.EqualFold(key, "Main-Class") {
+			continue
+		}
+		if main != "" || class == "" || strings.HasPrefix(class, "-") ||
 			strings.IndexFunc(class, func(r rune) bool {
 				return r != '.' && r != '_' && r != '$' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9')
-			}) == -1 {
-			return class, nil
+			}) != -1 {
+			return "", errors.New("安装工具清单主类无效或重复")
 		}
+		main = class
 	}
-	return "", errors.New("安装处理器缺少有效主类")
+	return main, nil
 }

@@ -141,6 +141,11 @@ type Logging struct {
 }
 
 type Version struct {
+	fields           map[string]json.RawMessage
+	Sources          []ManifestEntry     `json:"-"`
+	ClientVersion    string              `json:"-"`
+	Jar              string              `json:"jar,omitempty"`
+	Patches          []json.RawMessage   `json:"patches,omitempty"`
 	LibraryDirectory string              `json:"-"`
 	LaunchName       string              `json:"-"`
 	ID               string              `json:"id"`
@@ -162,12 +167,19 @@ type Version struct {
 }
 
 func ParseVersion(data []byte) (Version, error) {
+	if len(data) > maxMetadataSize {
+		return Version{}, errors.New("版本文档超过16MiB")
+	}
 	var version Version
 	if err := json.Unmarshal(data, &version); err != nil {
 		return Version{}, fmt.Errorf("parse version: %w", err)
 	}
-	if !ValidID(version.ID) || version.Type == "" || version.MainClass == "" {
-		return Version{}, errors.New("version is missing its ID, type or main class")
+	if err := json.Unmarshal(data, &version.fields); err != nil {
+		return Version{}, err
+	}
+	partial := version.InheritsFrom != ""
+	if !ValidID(version.ID) || (!partial && (version.Type == "" || version.MainClass == "")) || (partial && !ValidID(version.InheritsFrom)) {
+		return Version{}, errors.New("version is missing its ID, type or main class, or has an unsafe parent ID")
 	}
 	return version, nil
 }
@@ -175,8 +187,20 @@ func ParseVersion(data []byte) (Version, error) {
 // ValidateVanilla defines the currently implemented version format. Legacy and
 // inherited documents are decoded but cannot silently enter the modern pipeline.
 func (v Version) ValidateVanilla() error {
-	if v.Type != "release" || v.InheritsFrom != "" || v.Arguments == nil {
-		return errors.New("目前仅支持带现代参数格式的原版正式版；旧版与继承版本尚未开放")
+	if v.LegacyArguments != "" && v.Arguments != nil {
+		return errors.New("新旧参数模板冲突，必须先规范化")
+	}
+	if len(v.Patches) != 0 || v.Jar != "" {
+		return errors.New("未知运行补丁或客户端引用尚未经过官方继承解析")
+	}
+	if strings.TrimSpace(v.MainClass) == "" {
+		return errors.New("版本缺少有效主类")
+	}
+	if v.ClientVersion != "" && !ValidID(v.ClientVersion) {
+		return errors.New("客户端 JAR 版本身份无效")
+	}
+	if (v.Type != "release" && v.Type != "snapshot") || v.InheritsFrom != "" || v.Arguments == nil {
+		return errors.New("旧版参数与继承文档须先经官方身份核验及规范化，仅接受 release 或 snapshot")
 	}
 	if v.Java.Major <= 0 || len(v.Arguments.Game) == 0 || len(v.Arguments.JVM) == 0 {
 		return errors.New("版本缺少 Java 要求或启动参数")

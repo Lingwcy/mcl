@@ -14,6 +14,15 @@ import (
 )
 
 type marketInstallState struct {
+	archiveEdited                         bool
+	archiveImported, archiveRuntimeReady  bool
+	archiveStage                          string
+	archiveDescription, archiveIconStyle  string
+	archiveIcon                           []byte
+	archiveBitmap                         *ui.Bitmap
+	archiveIconOpen, archiveIconBusy      bool
+	archiveIconCancel                     func()
+	archiveDirectoryID                    *string
 	project                               market.Project
 	version                               market.Version
 	request                               market.InstallRequest
@@ -63,6 +72,10 @@ func (s *Shell) selectMarketInstall(project market.Project, version market.Versi
 	m.install = &marketInstallState{project: project, version: version, request: market.InstallRequest{Source: project.Source, Kind: project.Kind, ProjectID: project.ID, VersionID: version.ID, InstanceID: id, Loader: loader}}
 	m.showInstall, m.showKey, m.message = true, false, ""
 	m.install.archiveName = project.Title
+	if project.Kind == market.Modpack && m.importDirectoryID != nil {
+		id := *m.importDirectoryID
+		m.install.archiveDirectoryID = &id
+	}
 	if project.Kind == market.World {
 		m.install.request.World = project.Slug
 		if m.install.request.World == "" {

@@ -22,6 +22,7 @@ const (
 // GameSnapshot contains only public process state and already-redacted output.
 // Completed snapshots remain bounded; no UI object or credential is retained.
 type GameSnapshot struct {
+	Warnings                  []string
 	ID, InstanceID, VersionID string
 	PID                       int
 	StartedAt                 time.Time
@@ -47,7 +48,7 @@ func (s *LaunchService) notify() {
 }
 
 func (s *LaunchService) manage(record launch.Record, game launch.Game, release func(), redact func(string) string) {
-	snapshot := GameSnapshot{ID: record.ID, InstanceID: record.InstanceID, VersionID: record.VersionID, PID: game.PID(), StartedAt: time.Now().UTC(), Running: true}
+	snapshot := GameSnapshot{Warnings: launch.StartupWarnings(game), ID: record.ID, InstanceID: record.InstanceID, VersionID: record.VersionID, PID: game.PID(), StartedAt: time.Now().UTC(), Running: true}
 	if s.windowVisible != nil {
 		snapshot.Window = GameWindowPending
 	}
@@ -118,6 +119,7 @@ func (s *LaunchService) Sessions() []GameSnapshot {
 	result := make([]GameSnapshot, 0, len(s.games))
 	for _, entry := range s.games {
 		value := entry.snapshot
+		value.Warnings = slices.Clone(value.Warnings)
 		if entry.game != nil {
 			value.Output = entry.game.Output()
 		} else {

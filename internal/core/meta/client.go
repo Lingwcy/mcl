@@ -31,11 +31,12 @@ type Catalog struct {
 // Client caches mutable manifests by age and immutable version documents by
 // their official SHA-1. HTTP is injectable so ordinary tests never need a network.
 type Client struct {
-	HTTP        *http.Client
-	CacheDir    string
-	ManifestURL string
-	MaxAge      time.Duration
-	manifestMu  sync.Mutex
+	HTTP          *http.Client
+	CacheDir      string
+	ManifestURL   string
+	MaxAge        time.Duration
+	VerifiedFetch func(context.Context, string, string, int64) ([]byte, error)
+	manifestMu    sync.Mutex
 }
 
 func NewClient(cacheDir string) *Client {
@@ -83,11 +84,20 @@ func (c *Client) Manifest(ctx context.Context, refresh bool) (Catalog, error) {
 	return Catalog{Manifest: manifest, Warning: cacheErr}, nil
 }
 
-func (c *Client) Version(ctx context.Context, entry ManifestEntry) (Version, error) {
+func (c *Client) versionDocument(ctx context.Context, entry ManifestEntry) (Version, error) {
+	if err := ctx.Err(); err != nil {
+		return Version{}, err
+	}
 	if err := entry.Validate(); err != nil {
 		return Version{}, err
 	}
-	cachePath := filepath.Join(c.CacheDir, "versions", strings.ToLower(entry.SHA1)+".json")
+	directory := filepath.Join(c.CacheDir, "versions")
+	if officialPackage(entry) {
+		// Do not promote same-hash documents previously fetched from an arbitrary
+		// endpoint into official provenance. Old/general cache entries stay intact.
+		directory = filepath.Join(directory, "mojang-v1")
+	}
+	cachePath := filepath.Join(directory, strings.ToLower(entry.SHA1)+".json")
 	parse := func(data []byte) (Version, error) {
 		digest := sha1.Sum(data)
 		if !strings.EqualFold(hex.EncodeToString(digest[:]), entry.SHA1) {
@@ -107,7 +117,13 @@ func (c *Client) Version(ctx context.Context, entry ManifestEntry) (Version, err
 			return version, nil
 		}
 	}
-	data, err := c.fetch(ctx, entry.URL)
+	var data []byte
+	var err error
+	if c.VerifiedFetch != nil {
+		data, err = c.VerifiedFetch(ctx, entry.URL, entry.SHA1, maxMetadataSize)
+	} else {
+		data, err = c.fetch(ctx, entry.URL)
+	}
 	if err != nil {
 		return Version{}, err
 	}

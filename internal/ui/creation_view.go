@@ -5,6 +5,7 @@ import (
 
 	"mcl/internal/app"
 	"mcl/internal/core/loader"
+	"mcl/internal/core/market"
 	"mcl/internal/core/meta"
 
 	"github.com/egoist/mygo/ui"
@@ -25,6 +26,7 @@ func (s *Shell) newInstanceView(c *ui.Context) {
 						fill = t.SurfaceHover
 					}
 					rowMotion(c, button, fill).OnClick(func() {
+						s.gameDirectories.pickerOpen = false
 						d.mode = index
 						d.err = ""
 						d.versionOpen, d.loaderOpen, d.iconOpen, d.kindOpen = false, false, false, false
@@ -57,7 +59,11 @@ func (s *Shell) creationForm(c *ui.Context) {
 		ui.Column(c.Key("creation-fields")).FillWidth().MaxWidth(480).AlignSelf(ui.Center).Shrink(0).Gap(20).Children(func() {
 			ui.Row(c.Key("creation-identity")).FillWidth().Height(56).Shrink(0).Gap(14).Children(func() {
 				button := ui.ButtonBase(c.Key("creation-icon")).Label("选择实例图标").Tooltip("更换图标").Size(48, 48).Shrink(0).Radius(11).Center().Disabled(l.busy || d.iconBusy)
-				controlMotion(c, button, ui.Transparent, !l.busy && !d.iconBusy).OnClick(func() { d.iconOpen = !d.iconOpen; d.kindOpen, d.versionOpen, d.loaderOpen = false, false, false }).Children(func() { drawInstanceArtwork(c, s.creationArtworkStyle(), d.bitmap, 48) })
+				controlMotion(c, button, ui.Transparent, !l.busy && !d.iconBusy).OnClick(func() {
+					s.gameDirectories.pickerOpen = false
+					d.iconOpen = !d.iconOpen
+					d.kindOpen, d.versionOpen, d.loaderOpen = false, false, false
+				}).Children(func() { drawInstanceArtwork(c, s.creationArtworkStyle(), d.bitmap, 48) })
 				creationPopover(c.Key("creation-icon-popover"), button, &d.iconOpen, 270, func() { s.creationIconPicker(c) })
 				ui.Column(c).Grow(1).MinWidth(0).Gap(5).Children(func() {
 					ui.Text(c, "名称").FontSize(10).TextColor(colors(t).Metadata)
@@ -65,12 +71,19 @@ func (s *Shell) creationForm(c *ui.Context) {
 				})
 			})
 			ui.Column(c.Key("creation-settings")).FillWidth().Shrink(0).Radius(10).Background(t.Surface).Padding(0, 10).Children(func() {
+				creationSettingRow(c, "directory", "游戏目录", true, func() {
+					s.gameDirectoryMenu(c, "creation-game-directory", s.creationGameDirectoryID(), l.busy, s.chooseCreationGameDirectory)
+				})
 				creationSettingRow(c, "runtime", "运行环境", true, func() {
 					label := "Vanilla"
 					if d.kind != "" {
 						label = marketLoaderLabel(d.kind)
 					}
-					anchor := s.creationSelect(c, "creation-runtime", label, s.creationLoaderStyle(d.kind), func() { d.kindOpen = !d.kindOpen; d.versionOpen, d.loaderOpen, d.iconOpen = false, false, false }, l.busy)
+					anchor := s.creationSelect(c, "creation-runtime", label, s.creationLoaderStyle(d.kind), func() {
+						s.gameDirectories.pickerOpen = false
+						d.kindOpen = !d.kindOpen
+						d.versionOpen, d.loaderOpen, d.iconOpen = false, false, false
+					}, l.busy)
 					creationPopover(c.Key("creation-runtime-popover"), anchor, &d.kindOpen, 220, func() { s.creationRuntimePicker(c) })
 				})
 				creationSettingRow(c, "game", "游戏版本", d.kind != "", func() {
@@ -78,7 +91,11 @@ func (s *Shell) creationForm(c *ui.Context) {
 					if label == "" {
 						label = "选择版本"
 					}
-					anchor := s.creationSelect(c, "creation-game-version", label, "", func() { d.versionOpen = !d.versionOpen; d.kindOpen, d.loaderOpen, d.iconOpen = false, false, false }, l.busy)
+					anchor := s.creationSelect(c, "creation-game-version", label, "", func() {
+						s.gameDirectories.pickerOpen = false
+						d.versionOpen = !d.versionOpen
+						d.kindOpen, d.loaderOpen, d.iconOpen = false, false, false
+					}, l.busy)
 					creationPopover(c.Key("creation-game-popover"), anchor, &d.versionOpen, 350, func() { s.creationGamePicker(c) })
 				})
 				if d.kind != "" {
@@ -93,7 +110,11 @@ func (s *Shell) creationForm(c *ui.Context) {
 						if d.busy {
 							label = "正在读取…"
 						}
-						anchor := s.creationSelect(c, "creation-loader-version", label, "", func() { d.loaderOpen = !d.loaderOpen; d.versionOpen, d.kindOpen, d.iconOpen = false, false, false }, l.busy || d.busy || len(d.releases) == 0)
+						anchor := s.creationSelect(c, "creation-loader-version", label, "", func() {
+							s.gameDirectories.pickerOpen = false
+							d.loaderOpen = !d.loaderOpen
+							d.versionOpen, d.kindOpen, d.iconOpen = false, false, false
+						}, l.busy || d.busy || len(d.releases) == 0)
 						creationPopover(c.Key("creation-loader-popover"), anchor, &d.loaderOpen, 300, func() { s.creationLoaderPicker(c) })
 						iconButton(c, "reload-creation-loader", "刷新加载器版本", iconRefresh, func() { delete(d.cache, d.kind+":"+l.selected); s.loadCreationReleases() })
 					})
@@ -303,12 +324,42 @@ func (s *Shell) creationImportView(c *ui.Context) {
 		})
 		return
 	}
-	ui.Column(c).Grow(1).FillWidth().Center().Gap(12).Children(func() {
-		ui.Box(c).Size(56, 56).Radius(14).Background(s.theme.Surface).Center().Children(func() { ui.Icon(c, iconArchive).Size(25, 25).TextColor(colors(s.theme).AccentInk) })
-		ui.Text(c, "导入整合包").FontSize(16).FontWeight(600)
-		ui.Text(c, "MRPack · CurseForge ZIP").FontSize(11).TextColor(s.theme.TextMuted)
-		ui.PrimaryButton(c.Key("choose-local-modpack"), "选择文件…").Height(30).OnClick(s.pickCreationArchive)
+	ui.Row(c.Key("local-pack-location")).FillWidth().MaxWidth(480).AlignSelf(ui.Center).Height(40).Shrink(0).Gap(8).Children(func() {
+		ui.Text(c, "游戏目录").FontSize(12).Width(84)
+		s.gameDirectoryMenu(c, "local-pack-directory", s.creationGameDirectoryID(), false, s.chooseCreationGameDirectory)
 	})
+	ui.Column(c.Key("pack-import-methods")).FillWidth().MaxWidth(480).AlignSelf(ui.Center).Radius(10).Border(.5, colors(s.theme).ListDivider).Clip().Children(func() {
+		for index, method := range []struct {
+			key, label string
+			icon       *ui.SVG
+			action     func()
+		}{{"local", "从本地文件导入", iconFolder, s.pickCreationArchive}, {"download", "下载整合包", iconDownload, func() { s.openCreationPackDownloads(market.Modrinth) }}} {
+			if index > 0 {
+				gameSettingsDivider(c)
+			}
+			button := ui.ButtonBase(c.Key(method.key)).Label(method.label).FillWidth().Height(48).Padding(0, 14).Gap(10)
+			fill := ui.Transparent
+			if button.Hovered() {
+				fill = s.theme.SurfaceHover
+			}
+			rowMotion(c, button, fill).OnClick(method.action).Children(func() {
+				ui.Icon(c, method.icon).Size(16, 16).TextColor(colors(s.theme).Icon)
+				ui.Text(c, method.label).FontSize(12).Grow(1)
+				ui.Icon(c, iconChevron).Size(12, 12).TextColor(colors(s.theme).Metadata)
+			})
+		}
+	})
+	ui.Text(c, "CurseForge · Modrinth · MultiMC / Prism").FontSize(11).TextColor(colors(s.theme).Metadata).MaxWidth(480).AlignSelf(ui.Center)
+}
+func (s *Shell) openCreationPackDownloads(source market.Source) {
+	s.market.source = source
+	s.market.loaded = false
+	s.market.resetFilters()
+	s.market.sort = "downloads"
+	s.market.targetID, s.market.gameVersion = "", ""
+	directory := s.creationGameDirectoryID()
+	s.openMarket(app.AssetModpack)
+	s.market.importDirectoryID = &directory
 }
 
 func (s *Shell) creationDownloadView(c *ui.Context) {
@@ -322,17 +373,11 @@ func (s *Shell) creationDownloadView(c *ui.Context) {
 		}{{"Modrinth", iconModrinth, false}, {"CurseForge", iconCurseForge, true}} {
 			button := ui.ButtonBase(c.Key(source.label)).Label("从 "+source.label+" 下载整合包").Width(240).Height(42).Padding(0, 12).Gap(10).Radius(9).Border(1, s.theme.Border)
 			rowMotion(c, button, s.theme.Surface).OnClick(func() {
+				selected := market.Modrinth
 				if source.cf {
-					s.market.source = "curseforge"
-				} else {
-					s.market.source = "modrinth"
+					selected = market.CurseForge
 				}
-				s.market.loaded = false
-				s.market.resetFilters()
-				s.market.sort = "downloads"
-				s.market.targetID = ""
-				s.market.gameVersion = ""
-				s.openMarket(app.AssetModpack)
+				s.openCreationPackDownloads(selected)
 			}).Children(func() {
 				ui.Icon(c, source.icon).Size(18, 18).TextColor(colors(s.theme).Icon)
 				ui.Text(c, source.label).FontSize(12).Grow(1)

@@ -96,6 +96,11 @@ func TestMain(m *testing.M) {
 
 func launchPlan(t *testing.T, selected ...string) launch.Plan {
 	t.Helper()
+	return launchPlanWithMajor(t, 17, selected...)
+}
+
+func launchPlanWithMajor(t *testing.T, major int, selected ...string) launch.Plan {
+	t.Helper()
 	data, err := os.ReadFile("../../core/meta/testdata/1.20.4.json")
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +129,8 @@ func launchPlan(t *testing.T, selected ...string) launch.Plan {
 	if len(selected) > 0 {
 		executable = selected[0]
 	}
-	runtime := java.Runtime{Executable: executable, Version: "17.0.1", Major: 17, Arch: meta.CurrentPlatform().Arch}
+	v.Java.Major = major
+	runtime := java.Runtime{Executable: executable, Version: fmt.Sprint(major), Major: major, Arch: meta.CurrentPlatform().Arch}
 	session, err := launch.NewSession("Player", strings.Repeat("a", 32), syntheticToken, "test-client", "12345", time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)

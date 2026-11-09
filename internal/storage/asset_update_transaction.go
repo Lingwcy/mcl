@@ -109,7 +109,12 @@ func (s *AssetUpdateStore) CommitUpdate(ctx context.Context, plan market.UpdateP
 		return result, err
 	}
 	defer game.Close()
-	parent, err := updatesRoot(managed, true)
+	payload, err := s.assets.openPayload(ctx, id)
+	if err != nil {
+		return result, err
+	}
+	defer payload.Close()
+	parent, err := updatesRoot(payload, true)
 	if err != nil {
 		return result, err
 	}
@@ -428,7 +433,12 @@ func (s *AssetUpdateStore) RecoverUpdate(ctx context.Context, id, transactionID 
 	if pending.ID != transactionID {
 		return result, errors.New("待恢复事务已改变")
 	}
-	parent, err := updatesRoot(managed, false)
+	payload, err := s.assets.openPayload(ctx, id)
+	if err != nil {
+		return result, err
+	}
+	defer payload.Close()
+	parent, err := updatesRoot(payload, false)
 	if err != nil {
 		return result, err
 	}

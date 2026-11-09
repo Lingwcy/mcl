@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"mcl/internal/core/download"
 	"mcl/internal/fileio"
 )
 
@@ -24,7 +25,12 @@ type Progress struct {
 }
 
 // Installer publishes a verified private runtime without changing system Java.
-type Installer struct{ Directory string }
+type Installer struct {
+	Directory string
+	Transfers *download.TransferControl
+	Transport http.RoundTripper
+	Cache     download.ObjectCache
+}
 
 func (i *Installer) Install(ctx context.Context, p Package, report func(Progress)) (Runtime, error) {
 	if err := p.Validate(); err != nil {
@@ -72,15 +78,46 @@ func (i *Installer) Install(ctx context.Context, p Package, report func(Progress
 	}
 	defer os.Remove(archive.Name())
 	defer archive.Close()
-	task, cancel := context.WithTimeout(ctx, 20*time.Minute)
+	task, cancel := context.WithCancel(ctx)
 	defer cancel()
-	if err := downloadPackage(task, archive, p, report); err != nil {
+	var cache download.CacheLease
+	if i.Cache != nil {
+		cache, err = i.Cache.Acquire(task)
+		if err != nil {
+			return Runtime{}, err
+		}
+		defer cache.Close()
+	}
+	object := download.Object{SHA256: p.SHA256, Size: p.Size}
+	reused := false
+	if cache != nil {
+		reused, err = cache.Restore(task, object, archive)
+		if err != nil {
+			return Runtime{}, err
+		}
+	}
+	if !reused {
+		if err := downloadPackage(task, archive, p, report, i.Transfers, i.Transport); err != nil {
+			return Runtime{}, err
+		}
+		if cache != nil {
+			if _, err = archive.Seek(0, io.SeekStart); err != nil {
+				return Runtime{}, err
+			}
+			if err = cache.Store(task, object, archive); err != nil {
+				return Runtime{}, fmt.Errorf("保存 Java 下载副本: %w", err)
+			}
+		}
+	}
+	if _, err = archive.Seek(0, io.SeekStart); err != nil {
 		return Runtime{}, err
 	}
 	if report != nil {
 		report(Progress{Stage: "解压并检查 Java", Bytes: p.Size, Total: p.Size})
 	}
-	if err := extractPackage(task, archive, stage, p.OS == "windows"); err != nil {
+	extraction, finishExtraction := context.WithTimeout(task, 5*time.Minute)
+	defer finishExtraction()
+	if err := extractPackage(extraction, archive, stage, p.OS == "windows"); err != nil {
 		return Runtime{}, err
 	}
 	runtime, err := inspect(stage)
@@ -108,13 +145,26 @@ func (i *Installer) Install(ctx context.Context, p Package, report func(Progress
 	return runtime, nil
 }
 
-func downloadPackage(ctx context.Context, file *os.File, p Package, report func(Progress)) error {
+func downloadPackage(ctx context.Context, file *os.File, p Package, report func(Progress), transfers *download.TransferControl, transport http.RoundTripper) error {
+	if transfers != nil {
+		release, err := transfers.Acquire(ctx)
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
 	client := &http.Client{
-		Timeout: 15 * time.Minute,
+		Timeout:   15 * time.Minute,
+		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) > 5 || !officialJavaDownload(req.URL) {
 				return errors.New("Java 下载重定向不是官方发行地址")
 			}
+			req.Header.Del("Authorization")
+			req.Header.Del("Proxy-Authorization")
+			req.Header.Del("Cookie")
+			req.Header.Del("X-API-Key")
+			req.Header.Del("Referer")
 			return nil
 		},
 	}
@@ -123,9 +173,21 @@ func downloadPackage(ctx context.Context, file *os.File, p Package, report func(
 		return err
 	}
 	req.Header.Set("User-Agent", "mcl/0.1 (Meow Craft Launcher)")
-	response, err := client.Do(req)
+	req.Header.Set("Accept-Encoding", "identity")
+	var response *http.Response
+	if transfers != nil {
+		response, err = transfers.Do(client, req)
+	} else {
+		response, err = client.Do(req)
+	}
 	if err != nil {
-		return fmt.Errorf("下载 Java: %w", err)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if errors.Is(err, download.ErrTransferStalled) || errors.Is(err, context.DeadlineExceeded) {
+			return errors.New("下载 Java 连接超时，请稍后重试")
+		}
+		return errors.New("下载 Java 请求失败，请检查网络及代理设置")
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {

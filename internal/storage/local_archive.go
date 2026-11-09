@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"mcl/internal/core/market"
+	"mcl/internal/core/modpack"
 )
 
 func (s *ArchiveStore) CacheLocalArchive(ctx context.Context, name string) (market.File, error) {
@@ -24,8 +25,8 @@ func (s *ArchiveStore) CacheLocalArchive(ctx context.Context, name string) (mark
 	if err != nil {
 		return result, err
 	}
-	if !before.Mode().IsRegular() || before.Size() <= 0 || before.Size() > 512<<20 {
-		return result, errors.New("请选择 512 MiB 以内的整合包文件")
+	if !before.Mode().IsRegular() || before.Size() <= 0 || before.Size() > modpack.MaxArchiveSize {
+		return result, errors.New("请选择 2 GiB 以内的整合包文件")
 	}
 	file, err := os.Open(name)
 	if err != nil {

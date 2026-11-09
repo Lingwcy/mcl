@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"image"
@@ -68,30 +69,68 @@ func run() error {
 	catalog := meta.NewClient(paths.Metadata)
 	instances := storage.NewInstanceStore(paths.Instances)
 	loaderCatalog := loader.NewClient()
-	library := app.NewLibraryServiceWithLoaders(catalog, instances, meta.CurrentPlatform(), loaderCatalog)
+	host, hostErr := platform.HostPlatform()
+	if hostErr != nil {
+		// Modern versions without an OS-version predicate can still be managed.
+		// Rules requiring the unavailable version continue to fail closed.
+		slog.Warn("OS version could not be read; version-sensitive rules will fail", "error", hostErr)
+	}
+	library := app.NewLibraryServiceWithLoaders(catalog, instances, host, loaderCatalog)
 	sessions := storage.NewSessionStore(paths.Root, process.Running)
 	assetStore := storage.NewAssetStore(paths.Instances)
 	assets := app.NewAssetsService(instances, assetStore, sessions)
+	transfers, err := download.NewTransferControl(settings.Download)
+	if err != nil {
+		return err
+	}
 	sharedDownloads := download.NewClient(paths.Root)
+	sharedDownloads.Transfers = transfers
+	downloadCache := storage.NewDownloadCache(paths.Root, settings.Download.CacheDirectory)
+	sharedDownloads.Cache = downloadCache
+	network, err := platform.NewDownloadNetwork(settings.Download.Proxy)
+	if err != nil {
+		return err
+	}
+	defer network.CloseIdleConnections()
+	downloadService := app.NewDownloadService(downloadCache, network.Snapshot)
+	sharedDownloads.HTTP.Transport = network
+	catalog.HTTP.Transport = network
+	catalog.VerifiedFetch = sharedDownloads.FetchMetadata
+	loaderCatalog.HTTP.Transport = network
 	key := os.Getenv("MCL_CURSEFORGE_API_KEY")
 	if key == "" {
 		key = os.Getenv("GRUN_CURSEFORGE_API_KEY")
 	}
-	marketService := app.NewMarketService(market.NewClient(key))
+	marketClient := market.NewClient(key)
+	marketClient.HTTP.Transport = network
+	marketService := app.NewMarketService(marketClient)
 	assetIdentity := app.NewAssetIdentityService(instances, sessions, assetStore, marketService)
 	assetUpdates := app.NewAssetUpdateService(instances, sessions, storage.NewAssetUpdateStore(paths.Root), marketService, sharedDownloads)
 	assetDiagnostics := app.NewAssetDiagnosticService(instances, sessions, assetStore, java.Probe)
 	marketInstaller := app.NewMarketInstaller(marketService, instances, sessions, storage.NewMarketStore(paths.Root), sharedDownloads)
 	archiveImporter := app.NewArchiveImporter(marketService, catalog, instances, sessions, storage.NewArchiveStore(paths.Root), sharedDownloads)
-	forgeInstaller := loader.NewForgeInstaller(loaderCatalog, sharedDownloads, process.RunLoaderProcessor)
-	loaders := app.NewLoaderService(loaderCatalog, storage.NewLoaderStore(paths.Root), forgeInstaller)
-	installations := app.NewInstallationService(catalog, instances, storage.NewInstallationStore(paths.Root), sharedDownloads, meta.CurrentPlatform(), sessions, loaders)
-	instanceSettings := app.NewInstanceSettingsService(instances, sessions)
+	javaCatalog := java.NewCatalogClient()
+	javaCatalog.HTTP.Transport = network
 	javaService := app.NewJavaService(storage.NewJavaStore(paths.Root), platform.JavaCandidates,
-		&java.Installer{Directory: filepath.Join(paths.Root, "java")}, java.NewCatalogClient())
-	launcher := app.NewLaunchService(installations, javaService.Ensure, platform.PhysicalMemory, func(plan launch.Plan, register func(launch.ProcessIdentity) error) (launch.Game, error) {
-		return process.StartTracked(plan, register)
-	}, process.GameWindowProbe())
+		&java.Installer{Directory: filepath.Join(paths.Root, "java"), Transfers: transfers, Transport: network, Cache: downloadCache}, javaCatalog)
+	forgeInstaller := loader.NewForgeInstallerWithJava(loaderCatalog, sharedDownloads, process.RunLoaderProcessor, javaService.EnsureProcessor)
+	loaders := app.NewLoaderService(loaderCatalog, storage.NewLoaderStore(paths.Root), forgeInstaller)
+	installations := app.NewInstallationServiceWithGameDirectory(catalog, instances, storage.NewInstallationStore(paths.Root), sharedDownloads, host, sessions, loaders, assetStore.Directory, assetStore.OpenGame)
+	instanceSettings := app.NewInstanceSettingsService(instances, sessions)
+	instanceDeletion := app.NewInstanceDeletionService(storage.NewInstanceDeletionStore(paths.Root), sessions, mygo.Shell.TrashItem)
+	memoryProbe := platform.NewMemoryProbe()
+	memoryService := app.NewMemoryService(memoryProbe, host.Arch)
+	launcher := app.NewLaunchService(installations, javaService.Ensure, memoryProbe, func(plan launch.Plan, register func(launch.ProcessIdentity) error) (launch.Game, error) {
+		game, err := assetStore.OpenGame(ctx, plan.InstanceID())
+		if err != nil {
+			return nil, err
+		}
+		defer game.Close()
+		if filepath.Clean(game.Name()) != filepath.Clean(plan.Directory()) {
+			return nil, errors.New("实例游戏目录与启动计划不一致")
+		}
+		return process.StartTracked(plan, register, game)
+	}, process.GameWindowProbe(), assetStore.Directory)
 	detachGames = launcher.DetachAll
 	clientID, configErr := platform.MicrosoftClientID(ctx, paths.Root)
 	if configErr != nil {
@@ -102,11 +141,27 @@ func run() error {
 
 	mygo.App.SetName(branding.Name)
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { cancel() })
+	bindImportIntents := importFileIntents()
 	mygo.App.WhenReady(func() {
 		var window *mygo.Window
 		save := func(snapshot app.Settings, done func(error)) {
 			workers.Go(func() {
-				err := service.Save(ctx, snapshot)
+				var err error
+				if downloadCache.DirectoryFor(snapshot.Download.CacheDirectory) != downloadCache.Directory() {
+					err = downloadCache.Prepare(ctx, snapshot.Download.CacheDirectory)
+				}
+				if err == nil {
+					err = service.Save(ctx, snapshot)
+				}
+				if err == nil {
+					err = network.SetProxy(snapshot.Download.Proxy)
+				}
+				if err == nil {
+					err = transfers.SetPreferences(snapshot.Download)
+					if err == nil {
+						downloadCache.SetDirectory(snapshot.Download.CacheDirectory)
+					}
+				}
 				window.Update(func() {
 					if ctx.Err() == nil {
 						done(err)
@@ -130,6 +185,9 @@ func run() error {
 		})
 		shell.BindWindow(window)
 		connectJava(ctx, &workers, window, shell, javaService)
+		connectDownloads(ctx, &workers, window, shell, downloadService, downloadCache)
+		connectGameDirectories(ctx, &workers, window, shell, app.NewGameDirectoryService(storage.NewGameDirectoryStore(paths.Root)), assetStore)
+		connectMemory(ctx, &workers, window, shell, memoryService)
 		connectAccounts(ctx, &workers, window, shell, accounts, microsoftErr == nil)
 		// This subscription has the application's lifetime, like its single window.
 		mygo.Theme.OnUpdated(func() {
@@ -139,7 +197,7 @@ func run() error {
 				}
 			})
 		})
-		connectMarket(ctx, &workers, window, shell, marketService, marketInstaller, archiveImporter)
+		connectMarket(ctx, &workers, window, shell, marketService, marketInstaller, archiveImporter, app.NewPackImportService(archiveImporter, installations, javaService.Ensure))
 		shell.ConnectAssets(launcherui.AssetActions{
 			Icon: func(id string, file app.AssetFile, done func(image.Image, error)) func() {
 				return marketWork(ctx, &workers, window, func(ctx context.Context) (image.Image, error) {
@@ -227,6 +285,30 @@ func run() error {
 			},
 		})
 		shell.ConnectLibrary(launcherui.LibraryActions{
+			DeleteInstance: func(id string, done func(error)) func() {
+				return marketWork(ctx, &workers, window, func(task context.Context) (struct{}, error) {
+					plan, err := instanceDeletion.Inspect(task, id)
+					if err != nil {
+						return struct{}{}, err
+					}
+					detail := "将删除该实例下的全部数据，包括存档、模组、资源包、配置、日志、安装记录及实例专属备份，并移入系统废纸篓。不是仅移除列表记录。\n\n" + plan.MetadataPath
+					if plan.ExternalPayload != "" {
+						detail += "\n" + plan.ExternalPayload
+					}
+					detail += "\n\n共享 Java、公共下载/运行缓存和其他实例的数据不会删除。无法移入废纸篓时会报错，不会自动永久删除。"
+					if plan.Pending {
+						detail = "上次删除未完成，将继续处理剩余数据。\n\n" + detail
+					}
+					result, err := mygo.Dialog.Message(mygo.MessageOptions{Parent: window, Type: mygo.MessageWarning, Title: "删除实例", Message: "删除「" + plan.Name + "」及其全部数据？", Detail: detail, Buttons: []string{"取消", "删除全部数据"}, DefaultButton: 0, CancelButton: 0, DestructiveButtons: []int{1}})
+					if err != nil {
+						return struct{}{}, err
+					}
+					if task.Err() != nil || result.Button != 1 {
+						return struct{}{}, context.Canceled
+					}
+					return struct{}{}, instanceDeletion.Delete(task, plan)
+				}, func(_ struct{}, err error) { done(err) })
+			},
 			LoaderReleases: func(kind, game string, done func([]loader.Release, error)) func() {
 				return marketWork(ctx, &workers, window, func(ctx context.Context) ([]loader.Release, error) { return loaderCatalog.Releases(ctx, kind, game) }, done)
 			},
@@ -237,6 +319,11 @@ func run() error {
 						return nil, err
 					}
 					return platform.ReadInstanceIcon(ctx, paths[0])
+				}, done)
+			},
+			InspectArchiveFile: func(name string, settings app.Settings, done func(app.ArchiveImportPlan, error)) func() {
+				return marketWork(ctx, &workers, window, func(task context.Context) (app.ArchiveImportPlan, error) {
+					return archiveImporter.InspectLocal(task, name, settings)
 				}, done)
 			},
 			PickArchive: func(settings app.Settings, done func(app.ArchiveImportPlan, error)) func() {
@@ -269,6 +356,7 @@ func run() error {
 				}, done)
 			},
 		})
+		bindImportIntents(ctx, &workers, window, shell)
 		shell.ConnectInstallations(launcherui.InstallationActions{
 			Load: func(done func(map[string]install.Receipt, error)) {
 				background(ctx, &workers, window, installations.Load, done)

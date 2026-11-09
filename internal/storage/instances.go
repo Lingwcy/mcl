@@ -107,8 +107,35 @@ func (s *InstanceStore) Create(ctx context.Context, value instance.Instance) err
 			root.RemoveAll(value.ID)
 		}
 	}()
-	if err := root.Mkdir(filepath.Join(value.ID, "game"), 0o700); err != nil {
-		return err
+	if value.GameDirectoryID == "" {
+		if err := root.Mkdir(filepath.Join(value.ID, "game"), 0o700); err != nil {
+			return err
+		}
+	} else {
+		location, release, err := lockGameLocation(ctx, filepath.Dir(s.dir), value.GameDirectoryID)
+		if err != nil {
+			return err
+		}
+		defer release()
+		// Never reuse or overwrite a pre-existing ID, even if it appears empty.
+		if err := location.Mkdir(value.ID, 0o700); err != nil {
+			return err
+		}
+		payload, err := openRealDirectory(location, value.ID)
+		if err != nil {
+			return err
+		}
+		defer payload.Close()
+		if err := payload.Mkdir("game", 0o700); err != nil {
+			return err
+		}
+		// On failure preserve the freshly reserved external ID rather than
+		// recursively deleting a directory another process could have touched.
+		if err := writeInstance(ctx, root, value); err != nil {
+			return fmt.Errorf("实例登记失败，新的游戏目录已保留 %s: %w", payload.Name(), err)
+		}
+		committed = true
+		return nil
 	}
 	if err := writeInstance(ctx, root, value); err != nil {
 		return err
@@ -188,7 +215,7 @@ func readInstance(ctx context.Context, root *os.Root, id string) (instance.Insta
 	if err := d.Decode(new(any)); !errors.Is(err, io.EOF) {
 		return instance.Instance{}, errors.New("instance document contains trailing content")
 	}
-	if document.Version != 1 || document.Instance.ID != id {
+	if (document.Version < 1 || document.Version > 3) || document.Instance.ID != id {
 		return instance.Instance{}, errors.New("instance schema or ID mismatch")
 	}
 	if err := document.Instance.Validate(); err != nil {
@@ -198,9 +225,20 @@ func readInstance(ctx context.Context, root *os.Root, id string) (instance.Insta
 }
 
 func writeInstance(ctx context.Context, root *os.Root, value instance.Instance) error {
-	data, err := json.MarshalIndent(instanceDocument{Version: 1, Instance: value}, "", "  ")
+	data, err := json.MarshalIndent(instanceDocument{Version: instanceDocumentVersion(value), Instance: value}, "", "  ")
 	if err != nil {
 		return err
 	}
 	return fileio.WriteAt(ctx, root, filepath.Join(value.ID, "instance.json"), append(data, '\n'), 0o600)
+}
+
+// Only new external-location instances require the new document version.
+func instanceDocumentVersion(value instance.Instance) int {
+	if value.Description != "" || (value.Pack != nil && (value.Pack.Source == "multimc" || value.Pack.Name != "" || value.Pack.Version != "" || value.Pack.Author != "")) {
+		return 3
+	}
+	if value.GameDirectoryID != "" {
+		return 2
+	}
+	return 1
 }

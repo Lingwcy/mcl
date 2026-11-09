@@ -54,6 +54,7 @@ func (s *Shell) openHome() {
 }
 
 func (s *Shell) openMarket(kind app.AssetKind) {
+	s.market.importDirectoryID = nil
 	if kind == "" {
 		kind = app.AssetMod
 	}
@@ -195,6 +196,7 @@ func (s *Shell) marketSidebar(c *ui.Context) {
 func (s *Shell) settingsSidebar(c *ui.Context) {
 	ui.Scroll(c.Key("settings-links")).Label("设置导航").Grow(1).MinHeight(0).FillWidth().Padding(12, 10, 8).Gap(2).Children(func() {
 		s.settingsEntry(c, "settings-game", "游戏设置", iconSettingsGame, gameSettingsPage)
+		s.settingsEntry(c, "settings-download", "下载设置", iconSettingsDownload, downloadSettingsPage)
 		s.settingsEntry(c, "settings-runtime", "Java 管理", iconSettingsRuntime, settingsPage)
 		s.settingsEntry(c, "settings-accounts", "账户", iconSettingsAccount, accountsPage)
 		s.settingsEntry(c, "settings-tasks", "下载与任务", iconSettingsDownload, settingsActivityPage)

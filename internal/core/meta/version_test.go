@@ -122,3 +122,18 @@ func fixture(t *testing.T, name string) []byte {
 	}
 	return data
 }
+
+func TestModernOfficialSnapshotUsesTheSameValidatedFormat(t *testing.T) {
+	version, err := ParseVersion(fixture(t, "1.20.4.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	version.Type = "snapshot"
+	if err := version.ValidateVanilla(); err != nil {
+		t.Fatal("modern official snapshot rejected solely by type", err)
+	}
+	version.Type = "old_alpha"
+	if err := version.ValidateVanilla(); err == nil {
+		t.Fatal("legacy type entered the modern pipeline")
+	}
+}

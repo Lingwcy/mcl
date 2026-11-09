@@ -165,6 +165,7 @@ func (s *Shell) startGame() {
 		s.openAccounts()
 		return
 	}
+	launchSettings := s.settings
 	i.generation++
 	generation := i.generation
 	i.instanceID, i.name, i.active = value.ID, value.Name, true
@@ -182,7 +183,7 @@ func (s *Shell) startGame() {
 	}
 	s.taskEvent("准备启动游戏 · "+profile.Name, false)
 	s.page = launchPage
-	i.cancel = i.actions.Launch(value.ID, profile.ID(), s.settings, func(p install.Progress) {
+	i.cancel = i.actions.Launch(value.ID, profile.ID(), launchSettings, func(p install.Progress) {
 		if i.active && i.generation == generation {
 			s.taskProgress(p)
 		}
@@ -193,6 +194,7 @@ func (s *Shell) startGame() {
 		if i.generation != generation {
 			return
 		}
+		canceled := stopAfterStart || i.canceling
 		i.active, i.cancel, i.canceling = false, nil, false
 		i.requestLaunchStop = nil
 		switch {
@@ -207,6 +209,11 @@ func (s *Shell) startGame() {
 			i.receipts[value.ID] = result.Receipt
 			i.launchGameID = result.GameID
 			i.message = "游戏进程已启动。"
+			for _, warning := range result.Warnings {
+				s.taskEvent(warning, false)
+				s.Notify(ToastWarning, warning)
+			}
+			s.maybeOpenGameLogs(launchSettings.Game.ShowLogs, canceled, result.GameID)
 			s.loadAccounts()
 		}
 		s.taskEvent(i.message, i.failed)
@@ -288,6 +295,14 @@ func installationStage(stage string) string {
 		return "自动下载 Java"
 	case "java-extract":
 		return "安装并检查 Java"
+	case "processor-java-discovery":
+		return "查找安装工具 Java"
+	case "processor-java-catalog":
+		return "获取安装工具 Java"
+	case "processor-java-download":
+		return "下载安装工具 Java"
+	case "processor-java-extract":
+		return "安装并检查工具 Java"
 	case "metadata":
 		return "读取版本信息"
 	case "loader":
@@ -300,6 +315,8 @@ func installationStage(stage string) string {
 		return "下载与校验游戏文件"
 	case "assets":
 		return "下载与校验资产对象"
+	case "legacy-assets":
+		return "准备历史资源"
 	case "natives":
 		return "准备本地库"
 	default:

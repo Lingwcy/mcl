@@ -73,10 +73,38 @@ func (c *Client) forgeReleases(ctx context.Context, kind, game string) ([]Releas
 			continue
 		}
 		seen[version] = true
-		result = append(result, Release{Version: version, Stable: !strings.Contains(version, "-"), Recommended: version == recommended && recommended != ""})
+		stable := !strings.Contains(version, "-")
+		isRecommended := version == recommended && recommended != ""
+		if kind == "forge" {
+			stable = stableForgeBuild(version, game)
+			// Promotions may omit the explicit game branch, but only decorate an
+			// identity already returned by the official catalog; never invent it.
+			build, branch, qualified := strings.Cut(version, "-")
+			isRecommended = isRecommended || qualified && branch == game && build == recommended && recommended != ""
+		}
+		result = append(result, Release{Version: version, Stable: stable, Recommended: isRecommended})
 	}
 	slices.SortStableFunc(result, func(a, b Release) int { return -compareBuild(a.Version, b.Version) })
 	return result, ctx.Err()
+}
+
+// A historical -<game> branch is not an EA label. Unknown qualifiers remain
+// non-stable; do not remove them from the exact installer coordinate.
+func stableForgeBuild(version, game string) bool {
+	build, branch, qualified := strings.Cut(version, "-")
+	if qualified && branch != game {
+		return false
+	}
+	parts := strings.Split(build, ".")
+	if len(parts) < 3 || len(parts) > 4 {
+		return false
+	}
+	for _, part := range parts {
+		if part == "" || strings.IndexFunc(part, func(r rune) bool { return r < '0' || r > '9' }) != -1 {
+			return false
+		}
+	}
+	return true
 }
 
 func neoGame(version, game string) bool {
