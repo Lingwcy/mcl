@@ -293,6 +293,15 @@ func (s *GameDirectoryStore) Remove(ctx context.Context, id string) error {
 			return errors.New("这个目录仍有关联实例，不能移除登记；不会删除或移动游戏文件")
 		}
 	}
+	operations, err := NewDirectoryTransferStore(s.root).ListOperations(ctx)
+	if err != nil {
+		return err
+	}
+	for _, operation := range operations {
+		if operation.From == id || operation.To == id {
+			return errors.New("该位置仍有目录任务或迁移旧副本，请先恢复或清理")
+		}
+	}
 	settings, err := NewSettingsStore(filepath.Join(s.root, "settings.json")).Load(ctx)
 	if err != nil {
 		return err

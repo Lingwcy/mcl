@@ -43,6 +43,15 @@ func AcquireAccounts(directory string) (*Lock, error) {
 	return acquireDirectory(directory, "accounts.lock")
 }
 
+// AcquireDirectoryTransfer remains held when a Windows metadata lock must close
+// before Trash. Its inode is outside the instance and is never replaced.
+func AcquireDirectoryTransfer(directory, id string) (*Lock, error) {
+	if !instance.ValidID(id) {
+		return nil, errors.New("invalid instance ID")
+	}
+	return acquireDirectory(filepath.Join(directory, "directory-locks"), id+".lock")
+}
+
 // AcquireExistingSources serializes only app-owned discovery registrations.
 // It never creates a lock file in any chosen foreign Minecraft root.
 func AcquireExistingSources(directory string) (*Lock, error) {

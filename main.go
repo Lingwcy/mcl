@@ -118,6 +118,7 @@ func run() error {
 	installations := app.NewInstallationServiceWithGameDirectory(catalog, instances, storage.NewInstallationStore(paths.Root), sharedDownloads, host, sessions, loaders, assetStore.Directory, assetStore.OpenGame)
 	instanceSettings := app.NewInstanceSettingsService(instances, sessions)
 	instanceDeletion := app.NewInstanceDeletionService(storage.NewInstanceDeletionStore(paths.Root), sessions, mygo.Shell.TrashItem)
+	directoryService := app.NewDirectoryService(storage.NewDirectoryTransferStore(paths.Root, platform.ReadSwiftProfiles), sessions, catalog, loaderCatalog, mygo.Shell.TrashItem)
 	memoryProbe := platform.NewMemoryProbe()
 	memoryService := app.NewMemoryService(memoryProbe, host.Arch)
 	launcher := app.NewLaunchService(installations, javaService.Ensure, memoryProbe, func(plan launch.Plan, register func(launch.ProcessIdentity) error) (launch.Game, error) {
@@ -189,7 +190,8 @@ func run() error {
 		connectJava(ctx, &workers, window, shell, javaService)
 		connectDownloads(ctx, &workers, window, shell, downloadService, downloadCache)
 		connectGameDirectories(ctx, &workers, window, shell, app.NewGameDirectoryService(storage.NewGameDirectoryStore(paths.Root)), assetStore)
-		connectExistingGames(ctx, &workers, window, shell, app.NewExistingGamesService(storage.NewExistingGamesStore(paths.Root)))
+		connectExistingGames(ctx, &workers, window, shell, app.NewExistingGamesService(storage.NewExistingGamesStore(paths.Root, platform.ReadSwiftProfiles)))
+		connectDirectories(ctx, &workers, window, shell, directoryService)
 		connectMemory(ctx, &workers, window, shell, memoryService)
 		connectAccounts(ctx, &workers, window, shell, accounts, microsoftErr == nil)
 		// This subscription has the application's lifetime, like its single window.
@@ -297,6 +299,9 @@ func run() error {
 					detail := "将删除该实例下的全部数据，包括存档、模组、资源包、配置、日志、安装记录及实例专属备份，并移入系统废纸篓。不是仅移除列表记录。\n\n" + plan.MetadataPath
 					if plan.ExternalPayload != "" {
 						detail += "\n" + plan.ExternalPayload
+					}
+					for _, backup := range plan.MigrationBackups {
+						detail += "\n迁移旧副本：" + backup.Path
 					}
 					detail += "\n\n共享 Java、公共下载/运行缓存和其他实例的数据不会删除。无法移入废纸篓时会报错，不会自动永久删除。"
 					if plan.Pending {

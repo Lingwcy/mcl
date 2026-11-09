@@ -75,3 +75,30 @@ func TestExistingDiscoveryViewSurvivesDetailsAndNavigation(t *testing.T) {
 		t.Fatal("read-only discovery page disappeared")
 	}
 }
+
+func TestExistingDiscoveryHasNoInstructionEmptyStateOrReadOnlyBadge(t *testing.T) {
+	shell := NewShell(app.DefaultSettings(), t.TempDir(), nil, nil)
+	shell.page = existingGamesPage
+	tester := ui.NewTester(shell.View, DefaultWidth, DefaultHeight)
+	tester.Frame()
+	tester.Frame()
+	for _, label := range []string{"选择只读来源", "只读发现 · 不修改原目录，不代表已导入或可运行", "选择目录后扫描 versions 中的版本声明", "未发现匹配的版本", "本次未能完成有效版本发现"} {
+		if tester.HasText(label) {
+			t.Fatal("removed discovery filler returned", label)
+		}
+	}
+	if !tester.HasText("发现已有游戏") {
+		t.Fatal("functional page header removed")
+	}
+	shell.existing.sources = []app.ExistingSource{{ID: "source", Name: "Swift Craft Launcher", Path: "/explicit/source"}}
+	shell.existing.sourceID = "source"
+	shell.existing.scanned = true
+	tester.Frame()
+	tester.Frame()
+	if tester.HasText("未发现匹配的版本") {
+		t.Fatal("zero-result empty state returned")
+	}
+	tester.SetSize(MinWidth, MinHeight)
+	tester.SetDark(true)
+	tester.Frame()
+}

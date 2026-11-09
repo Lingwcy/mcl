@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"mcl/internal/app"
@@ -149,6 +150,17 @@ func (s *Shell) scanExistingGames(id string) {
 	}, func() {
 		d.report = result
 		d.scanned = true
+		if len(result.Problems) > 0 {
+			level := ToastWarning
+			if len(result.Candidates) == 0 {
+				level = ToastError
+			}
+			messages := result.Problems[:min(len(result.Problems), 3)]
+			s.Notify(level, strings.Join(messages, "；"))
+		}
+		if result.Truncated {
+			s.Notify(ToastWarning, "扫描已达到读取边界，当前列表不是全部结果")
+		}
 	})
 }
 func (s *Shell) existingSource() (app.ExistingSource, bool) {

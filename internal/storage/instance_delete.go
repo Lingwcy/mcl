@@ -58,6 +58,15 @@ func (s *InstanceDeletionStore) Inspect(ctx context.Context, id string) (app.Ins
 	}
 	digest := sha256.Sum256(data)
 	plan.Name, plan.Fingerprint = value.Name, hex.EncodeToString(digest[:])
+	backups, backupDigest, err := NewDirectoryTransferStore(s.root).deletionBackups(ctx, id)
+	if err != nil {
+		return plan, err
+	}
+	plan.MigrationBackups = backups
+	if len(backups) > 0 {
+		sum := sha256.Sum256(append(data, backupDigest...))
+		plan.Fingerprint = hex.EncodeToString(sum[:])
+	}
 	plan.MetadataPath = managed.Name()
 	var state instanceDeleteState
 	err = readUpdateJSON(ctx, managed, instanceDeleteMarker, 2048, &state)
@@ -96,6 +105,10 @@ func (s *InstanceDeletionStore) Inspect(ctx context.Context, id string) (app.Ins
 	}
 	checked, err := openRealDirectory(location, id)
 	if err != nil {
+		return plan, err
+	}
+	if err := validateExistingDirectoryOwner(ctx, checked, id); err != nil {
+		checked.Close()
 		return plan, err
 	}
 	checked.Close()

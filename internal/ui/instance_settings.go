@@ -103,6 +103,9 @@ func (s *Shell) publishEditedInstance(value instance.Instance) {
 }
 
 func (s *Shell) instanceEditBlockReason(id string) string {
+	if s.directories.running && s.directories.instanceID == id {
+		return "目录操作进行中，请从目录任务查看进度"
+	}
 	for _, game := range s.games.rows {
 		if game.InstanceID == id && game.Running {
 			return "游戏运行时不能修改实例信息"

@@ -13,6 +13,7 @@ const (
 
 type Loader struct{ Kind, Version string }
 type Candidate struct {
+	Format                                     string `json:"format,omitempty"`
 	ID                                         string
 	Folder, DocumentID, GameVersion, MainClass string
 	Path, ClientPath                           string
@@ -21,6 +22,8 @@ type Candidate struct {
 	Problems                                   []string
 	Status                                     string
 	MetadataSHA256                             string
+	DocumentDigests                            []string
+	UnknownComponents                          bool
 	Documents                                  []string
 }
 type Report struct {

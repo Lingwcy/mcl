@@ -331,6 +331,7 @@ func (s *Shell) activityView(c *ui.Context) {
 			settingsGroupLabel(c, "下载与任务").Grow(1)
 			ui.Button(c.Key("refresh-sessions"), "刷新会话").Height(24).Disabled(i.sessionsBusy).OnClick(s.refreshSessions)
 		})
+		ui.Button(c.Key("open-directory-operations"), "目录迁移与复制任务…").Height(26).OnClick(s.openDirectoryTasks)
 		s.marketTaskCard(c)
 		s.javaTaskCard(c)
 		s.assetAssociationTask(c)

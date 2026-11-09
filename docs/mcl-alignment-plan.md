@@ -1,7 +1,7 @@
 # mcl 能力补齐与参考对齐 Plan
 
 日期：2026-11-09
-状态：C1–C4在明确范围内实现/构建收尾；D阶段已开始，D1只读发现已接并构建（第26节），D2受管复制/D3迁移尚未实施。所有新增测试/原生交互/实际游戏验收仍待授权；D分支不改已发布v0.0.3。
+状态：C1–C4与D1–D3在明确范围内实现/构建收尾，D统一交付见第27节；Swift布局缺口与UI反馈修正见第28节；新增回归、跨盘/崩溃/原生交互及真实游戏验收仍未运行。原地管理未实现且不提供入口；T尚未开始。D分支不改已发布v0.0.3。
 主要参考：SJMCL，基线 d5b109e0abb42460a8fd665c58ca4b0cc9982182。
 
 ## 1. 目标与现状
@@ -15,7 +15,7 @@
 最大的不足是：
 
 1. Java8、历史资源、旧Forge与完整继承身份已接实现；仍缺真实版本/异常场景验收。范围外旧式客户端改写、未知运行组件和缺失native不能宣称可运行。
-2. 可以选择多个 mcl 安装位置，但不能直接扫描并接入其他启动器已经安装的游戏。
+2. 已有目录现可只读发现并确认复制为受管实例，可恢复迁移已有 mcl 载荷；不原地接管他人目录、不承诺直接复用外部运行库或所有来源可运行。D行为尚待验收。
 3. 下载有并发、限速、取消、缓存和校验，但缺完整持久任务、暂停续传及重启恢复。
 4. 实例从创建/导入到分享/迁移/更换运行环境的生命周期尚不完整。
 5. 存档、服务器、截图、投影及批量资源维护能力不够全面。
@@ -116,7 +116,7 @@ C 兼容性底座 → D 既有目录接入 → T 持久下载与恢复 → I 实
 
 ### D2. 确认后导入/受管复制
 
-状态：尚未实施；D1来源与发现候选不作为受管实例，不提供假导入或原地启动入口。
+状态：已实现固定来源/文件预览、明确资料位置与分类、官方环境复核、非覆盖受管复制及恢复/撤销。源目录保留，运行环境另由原安装/启动链准备；仅构建，见第27节。原地管理未实现且不提供入口。
 
 - 先定义“仅发现”“复制为 mcl 受管实例”“原地管理”三种语义；第一批优先受管复制，原地管理未实现时明确禁用，不能把它伪装成已有功能。
 - 展示将复制的存档、模组、配置和资源，默认保留源目录。
@@ -125,7 +125,7 @@ C 兼容性底座 → D 既有目录接入 → T 持久下载与恢复 → I 实
 
 ### D3. mcl 实例迁移
 
-状态：尚未实施。
+状态：已实现内置↔外部及外部↔外部的复制/核验/提交/保留旧副本、持久恢复及明确清理，真实会话/OS锁和删除/资产pending保护保持；仅构建，见第27节。
 
 - 支持内置/外部位置间迁移，区分实例载荷与共享 libraries/assets/Java；移动游戏不等于移动应用数据根。
 - 跨卷使用复制、核验、提交、清理的恢复流程，不用跨卷 rename 假装原子事务。
@@ -681,6 +681,8 @@ C阶段实现矩阵见第24节，用户1.6.1反馈修复见第25节；D1已开�
 
 ### 已接实际闭环
 
+本节保留D1交付时点，D2/D3后续状态以第27节为准。
+
 - 新建→导入工作台提供“发现已有游戏（只读）”，进入现有三栏右侧工作区；可以显式添加来源、选择来源、重新扫描、取消、搜索、打开候选详情、仅移除来源登记。没有假导入/原地启动/迁移按钮，不改创建表单的三模式、480DIP/无外层滚动约束。
 - 选择真实Minecraft根目录；父目录只有一个直接.minecraft/minecraft且有普通versions时可规范化到该真实子目录，两者都存在则拒绝猜测。选择链接会固定其规范目标路径；保存后不跟随新链接。拒绝重复实际目录、大小写/NFC路径别名与父子重叠、应用数据或其父子目录；不可用磁盘不会创建fallback。
 - core/discovery有界扫描versions：最多2048个目录项、单份4MiB/累计64MiB元数据、2048次文档读取与8层父链，检测循环/不安全ID/损坏JSON/ID不符。累计预算包括读取后发生竞争或校验失败的字节；截断明确显示不是完整清单。单次顺序读取，无无限递归、网络或JAR执行。
@@ -697,3 +699,67 @@ C阶段实现矩阵见第24节，用户1.6.1反馈修复见第25节；D1已开�
 - 变更Go文件gofmt、git diff --check；CGO_ENABLED=0 ./scripts/go.sh build ./...及Windows/Linux/macOS amd64主程序交叉编译成功；MyGo darwin/arm64临时签名体验包build/darwin-arm64/mcl-0.0.3-existing-games-preview-arm64.dmg约8.5MB，app约19.1MB，未公证、未发布Release。
 - 新增discovery/scan_test.go、storage/existing_games_test.go、ui/existing_games_test.go源码，覆盖缺项/损坏/父链/链接/ID错配/取消、来源重复/重叠/离线/损坏登记保留、无源目录写入与移除保留、过期回调和MyGo额外帧/详情/尺寸切换。全部未执行、未编译测试目标；生产build不证明测试通过。
 - 未跑test/vet/race、UI自动化、原生文件选择或任何用户真实目录扫描/变更，未运行Java/游戏/公网验收。D1仅实现/构建，D2复制预览/固定文件计划/非覆盖导入及D3跨盘可恢复迁移仍明确未完成，D整体不能勾完成。
+
+
+## 27. D 阶段统一收尾：确认复制与可恢复迁移（仅构建）
+
+### 用户安排、参考与语义
+
+- 用户要求连续完成整个D后统一交付。本节与第26节共同覆盖D1–D3实现；不启动T，不自动合并main、打新标签或发布Release。
+- 固定只读SJMCL d5b109e0：继续读取instance/commands.rs的copy_resources_to_instances、move_resource_to_instance及helpers/misc.rs的get_instance_subdir_paths。参考按version_isolation选共享根/版本目录，部分路径辅助函数会创建目录，资源移动用fs::rename；这些不是跨卷/崩溃恢复设计，不照搬其写源目录或跨卷rename行为。独立Go实现，无参考代码/品牌/凭据/许可资源复制，无新依赖。
+- 三种语义明确区分：发现只读；受管复制生成新稳定实例ID、保持原资料；原地管理未实现、不提供原地启动/全量删除入口。D3只移动已经属于mcl的载荷，不接管D1登记的外部来源。
+
+### D2：明确来源、固定清单、确认复制
+
+- 入口：新建→导入→发现已有游戏→候选详情→“复制为受管实例…”。右侧紧凑工作台编辑名称、明确选择共享根/隔离资料目录、资料分类和目标位置；只有单一数据候选时自动填入，多个候选不猜隔离设置。目录选择固定稳定ID、不改变全局默认。
+- 允许分类为saves、mods、config、resourcepacks、shaderpacks、screenshots、texturepacks、options.txt、optionsof.txt、servers.dat。config默认不选；其他已知游戏资料默认选，文件清单与排除项可预览，确认前可取消整个分类。配置内可能含私人信息，不宣称通用内容检测器能识别所有秘密。
+- 不读取或继承其他启动器账户、launcher_profiles、JVM/Agent参数、入口脚本、外部版本JSON/JAR/libraries/assets/natives或私有启动器配置。显式排除账户/凭据/令牌名称、.env、session.lock、证书/私钥和常见脚本/本地可执行文件；JAR仅允许在mods分类。复制模组是用户明确选择的游戏资料，不代表运行其处理器或现在执行代码。
+- 预览/运行均重读登记来源和版本继承链，各文档摘要参与固定指纹；D1提示仍不充当官方认证。游戏基底必须在本项目官方目录中，重新读取其受信任元数据；已知单loader按该游戏官方版本目录核对。未知组件/未确认包装器/循环或多loader不猜成原版。缺失外部JAR/库允许由mcl重建，但不能宣称已可运行。
+- SHA-256固定选中文件，复核源资料，私有暂存内复制/同步/核验；只以MoveNoReplace发布。新实例中央元数据与pending一同发布，目标可为内置或已登记外部位置。复制前后重读源文件清单，竞争、源变化、离线、目标冲突、写满或取消不修改/删除原来源。普通失败保留可继续的任务，不生成安装完成收据。
+- 最终directory-import.json只记录注册/候选身份、官方环境和相对文件证据，不把外部本机路径作为持久启动引用；待恢复日志暂存固定源路径以便重开复核，成功后移除。成功文案明确“游戏资料已复制，运行环境仍需安装/修复”，后续沿现有官方安装、自动Java/加载器和StartTracked链，复制不等于运行环境就绪。
+
+### D3：固定位置提交、恢复、旧副本及全量删除
+
+- 入口：实例设置→游戏目录行“迁移…”。支持内置↔外部、外部↔外部；同位置拒绝，预览只读，不改实例名称/版本/loader/Java/图标/身份。仅迁移game（含存档/日志/配置等所有普通文件）、removed-assets和asset-updates；中央账户/来源/收据/会话/runtime/legacy-assets/natives及公共客户端/libraries/assets/Java保持原位。
+- 目录事务独立系统锁位于应用数据directory-locks，真实会话租约与原OS实例锁继续生效。directory-transfer.pending.json保护普通Reserve、资产恢复ReserveForRecovery及删除ReserveForDeletion；只有专门ReserveForDirectoryTransfer可继续本事务，仍不能绕过游戏存活、删除或资产更新pending。AssetStore在pending时拒绝旧路由，不创建隐藏内置fallback。
+- 复制目标使用所在卷私有stage。日志阶段为copying→publishing→committed→backing-up→complete；文件全部核验并非覆盖发布后，原子提交唯一的GameDirectoryID，保留文档原版本的更高值。中央配置可能已提交而日志尚未更新时，按完整前后快照识别，不用实例ID/PID猜状态。共享资源/启动交接接口未绕过。
+- 跨卷永远复制+核验，不跨卷rename。日志、所属标记及文件先flush；Unix增加目录同步屏障，目录内发布/同卷旧副本归档用非覆盖rename。Windows无普通用户POSIX目录fsync等价物，依赖文件flush和文件系统元数据日志；不承诺多文件硬件级断电原子性。原副本不永久删除，持久日志与旧副本用于恢复。
+- 发布未完成可重建丢失的暂存；提交后缺少目标文件时，只从固定原载荷/保留旧副本显式非覆盖补齐，不覆盖变动或无所属证据的目标。外部卷离线/owner或规范路径改变时等待原卷恢复，不伪造空目录成功。目标内容不符保留冲突和日志，用户可核对后重试。
+- 提交前可确认撤销：仅本事务所属的新副本/暂存移入系统废纸篓，来源不动；未标记的冲突数据保留。提交后不可按旧预览强行回滚，需完成恢复，再另起回迁。停止等待worker终态，不提前释放互斥；导航可以离开正在运行的任务，重开“下载与任务→目录迁移与复制任务…”继续/撤销。关窗取消本应用任务、不操作游戏。
+- 旧载荷归档为其原卷.mcl-dir-backup-<token>，不自动永久清理；记录directory-history的实际旧文件证据。如果提交后的旧源又出现变化，保留并显示“旧副本包含后续变化”，不冒称已合入新位置。提供“核对旧副本”打开真实所属目录，以及单独确认、重验文件清单后移入废纸篓的清理；外部位置/只读来源在相关任务或旧副本仍被引用时不能移除登记。
+- 实例“删除全部数据”同步重算历史旧副本范围，将中央/现有外部载荷以及先前迁移的所属旧副本一并列入确认及指纹；分步移入废纸篓、失败保留删除pending并可重试，不留下未确认的外部旧副本、不永久RemoveAll。非受管发现来源、外部位置owner和共享数据不删除。
+
+### 边界、UI与验证状态
+
+- 文件树最多10万项、64层、128GiB总量/16GiB单文件，路径/元信息预算8MiB，编码清单12MiB、日志32MiB，单实例最多256条迁移历史。大小写/NFC别名、链接/特殊文件/越界路径拒绝；不提供软链接跟随或断点文件字节Range。恢复复用已完成且校验相符的整文件，半文件仅为私有分片，T的通用下载任务并未实现。
+- UI复用原圆角、44DIP设置行/26–28DIP按钮、Popover/Radio/Checkbox、列表内滚动、语义色/Toast和原生确认；页面身份不含输入/进度/busy。后台工作经Window.Update，最多一份待交付进度快照，取消/替代/离页/关闭generation保护，渲染不扫描或哈希。
+- 已添加core/transfer、storage/directory_transfer及ui/directory_transfer回归源码：允许/排除资料、链接/别名/冲突/取消、复制保留原始数据、双向迁移、稳定身份/共享数据不动、真实实例锁与各pending入口、旧token拒绝、丢失暂存/提交后缺文件恢复、离线卷无fallback、备份变化不清理、全量删除范围以及UI过期回调/停止等待/额外帧/尺寸切换。全部未执行、未编译测试目标；gofmt只检查语法，不证明这些回归可编译或通过。
+- 按当前偏好，仅gofmt、生产build与Windows/Linux/macOS amd64主程序交叉编译、MyGo darwin/arm64临时签名DMG；不运行test/vet/race、自动化、原生选择/真实目录读写/Trash、跨卷或断电模拟、Java/处理器/游戏或公网安装验收。最终体验包及构建结果在本节末追加。
+- D实现/构建范围已收尾，但原地管理、任意第三方自定义运行组件、外部运行库直接采纳、共享缓存迁盘、字节级断点与完整系统/实机验收均不在本次完成声明中。下一阶段为T，尚未开始；不得以构建成功推导所有来源/文件系统/平台可安全运行。
+
+
+### 本次最终构建结果
+
+- gofmt覆盖本次变更的生产与回归源码；git diff --check通过。
+- CGO_ENABLED=0 ./scripts/go.sh build ./...成功（仅生产目标）。Windows/Linux/macOS amd64使用同一Go1.27.3主程序交叉编译均成功，产物分别为build/mcl-d-directory-windows-amd64.exe（28,504,576字节）、build/mcl-d-directory-linux-amd64（27,835,227字节）、build/mcl-d-directory-darwin-amd64（28,522,832字节）。
+- CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize成功；MyGo0.7.4报告app19.4MB、DMG8.6MB，临时签名且无公证。独立体验包build/darwin-arm64/mcl-0.0.3-directory-stage-preview-arm64.dmg（8,969,216字节），不替换GitHub v0.0.3 Release。
+- 未运行或编译测试目标，未跑test/vet/race、原生/UI自动化、真实目录扫描/改动/Trash、跨卷/断电模拟、Java/游戏或公网安装验收。新增回归仅源码，构建不证明这些行为已验收。D1–D3实现/构建收尾，T尚未开始。
+
+
+## 28. 用户体验反馈：Swift profiles布局与发现页减法
+
+- 用户反馈指定Swift Craft Launcher的Fabulously Optimized实例没有被发现，直接添加profile目录又报“没有普通versions目录”；并明确要求移除截图中的常驻提示、空态与“（只读）”。这是D交付后的真实缺口，不以此前“D完成”推导所有第三方布局均支持。
+- 已获授权对明确指出的目录做针对性只读诊断：该profile只有游戏资料，debug-profile.json为Minecraft HUD配置；Swift根下meta保存公共运行文件，data/data.db与WAL中的game_versions独立登记游戏/loader。只查看结构、实例表schema和指定实例的允许字段，未打开原库SQLite连接、写源目录或查询账户；调查时通过Python标准SQLite在内存中读取结构，新产品代码不依赖Python。
+- 新增core/discovery的WAL内存快照、Swift候选转换，storage的固定布局解析与稳定FD读取；macOS platform使用现有purego绑定系统SQLite，只读deserialize私有影像，固定SQL提取ID/working_path/game_name及gameVersion/modLoader/modVersion/mainClass，不选launchCommand/JVM/Java/认证字段，不执行外部命令。Go.mod/go.sum不变，没有新增SQLite Go驱动或运行时CLI。
+- 支持选择Swift根、profiles或具体profile；单个profile只查询/发现该名称，登记路径保持原选择、不提升到父目录。只允许实例位于当前根的profiles/<safe-name>，工作根必须匹配，不以DB任意路径重定向。UUID、目录别名、未知loader/入口、缺失实例目录都明确核对；不按名称/缓存版本猜身份。关联meta/data所在根也受mcl应用数据重叠保护。
+- 数据库和WAL同FD前后身份/大小/mtime核对，二者查询后再次复核，检查SQLite/WAL头、salt、checksum及最后commit；原文件不checkpoint、不建SHM/锁/临时文件。单文件及内存影像32MiB、累计读取64MiB、最多2048条。原始影像可能含其他配置，因此不落盘/缓存/日志，结束后清零Go缓冲。macOS只读内存读取器不使其他平台获得伪支持，Windows/Linux遇Swift索引明确报暂不支持；标准versions仍使用原链。
+- 复制来源复核与发现共用适配器，Swift game/loader声明仍须经原官方目录核对；只复制已选游戏资料，外部账户、启动参数、Java/JVM和原运行库不导入，不创建安装完成收据。Candidate新增format仅非空时序列化，旧标准来源pending指纹不因空字段变化。
+- 发现入口/原生目录对话框取消“（只读）”，隐藏无来源选择器，删除“只读发现…”常驻条、选择目录说明、无结果空态、重复来源路径和成功状态标签；详情仅保留实际版本/loader/实例路径及真实问题，不堆文档ID/主类/客户端JAR说明。实际异常/截断通过Toast，底层只读和危险操作确认不变。
+- 新增SQLite/WAL校验、最后提交/未提交帧隔离、原输入不变、三种Swift选择范围、D2重读、关联根保护、源变化拒绝、未知路径拒绝，以及页面无提示/空态的回归源码。全部仅格式整理，不执行或编译测试目标；不运行UI自动化/新原生读取器或导入/迁移/Trash/Java/游戏，用户复试仍待。最终构建记录见本节末，T仍未开始。
+
+
+### Swift修正版最终构建记录
+
+- gofmt与git diff --check通过；CGO_ENABLED=0 ./scripts/go.sh build ./...成功。Windows/Linux/macOS amd64主程序交叉编译成功，分别为build/mcl-swift-discovery-windows-amd64.exe（28,587,008字节）、build/mcl-swift-discovery-linux-amd64（27,924,281字节）、build/mcl-swift-discovery-darwin-amd64（28,620,288字节）。跨平台构建不表示Windows/Linux新增了Swift索引支持。
+- CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize成功，MyGo0.7.4报告app19.4MB/DMG8.6MB；独立体验包build/darwin-arm64/mcl-0.0.3-swift-discovery-fix-arm64.dmg（8,982,016字节），临时签名、未公证。不修改已发布Release。
+- 新增回归/Tester未执行、未编译测试目标。仅做用户问题所需的原目录/登记格式只读诊断与SDK声明检查；新macOS索引读取器、mcl识别/复制流程和精简UI未运行实机验收，也未跑test/vet/race/UI自动化、真实目录导入/迁移/Trash或Java/游戏。需用户使用新体验包复试，不将诊断查询当作新代码验收通过。

@@ -17,7 +17,7 @@ func connectExistingGames(ctx context.Context, workers *sync.WaitGroup, window *
 		},
 		Add: func(done func(app.ExistingSource, error)) func() {
 			return marketWork(ctx, workers, window, func(task context.Context) (app.ExistingSource, error) {
-				paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: window, Title: "选择已有Minecraft根目录（只读）", ButtonLabel: "选择", Directory: true})
+				paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: window, Title: "选择已有游戏目录", ButtonLabel: "选择", Directory: true})
 				if err != nil {
 					return app.ExistingSource{}, err
 				}

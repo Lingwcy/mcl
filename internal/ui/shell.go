@@ -24,6 +24,7 @@ const (
 	downloadSettingsPage page = "download-settings"
 	newInstancePage      page = "new-instance"
 	existingGamesPage    page = "existing-games"
+	directoryPage        page = "directory-transfer"
 	instanceSettingsPage page = "instance-settings"
 	marketPage           page = "market"
 	aboutPage            page = "about"
@@ -54,6 +55,7 @@ type Shell struct {
 	memory           memoryState
 	creation         creationState
 	existing         existingGamesState
+	directories      directoryState
 	instanceEditor   *instanceSettingsState
 	page             page
 	theme            *ui.Theme
@@ -102,6 +104,11 @@ func (s *Shell) BindWindow(window *mygo.Window) {
 		s.syncMemoryObservation()
 		s.existing.closed = true
 		s.cancelExistingGames()
+		s.directories.closed = true
+		s.directories.generation++
+		if s.directories.cancel != nil {
+			s.directories.cancel()
+		}
 	})
 	window.OnMaximize(window.Invalidate)
 	window.OnUnmaximize(window.Invalidate)
@@ -123,6 +130,9 @@ func (s *Shell) toggleAppearance() {
 }
 
 func (s *Shell) View(c *ui.Context) {
+	if s.page != directoryPage && s.directories.busy && !s.directories.running {
+		s.cancelDirectoryPreview()
+	}
 	if s.page != existingGamesPage && s.existing.busy {
 		s.cancelExistingGames()
 	}
@@ -190,6 +200,8 @@ func (s *Shell) View(c *ui.Context) {
 							s.marketView(c)
 						case existingGamesPage:
 							s.existingGamesView(c)
+						case directoryPage:
+							s.directoryView(c)
 						case newInstancePage:
 							s.newInstanceView(c)
 						case instanceSettingsPage:
