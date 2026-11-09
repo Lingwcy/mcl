@@ -31,7 +31,9 @@ func legacy17Fixture(t *testing.T, wrapperVersion string, omitParent bool) (Requ
 	id := "1.7.10-Forge" + request.Version
 	core := "net.minecraftforge:forge:1.7.10-" + request.Version
 	install := document["install"].(map[string]any)
-	install["minecraft"], install["version"], install["path"] = base.ID, id, core
+	// The official 1.7.10 installer uses version as display text and target
+	// as its profile ID. The payload/classes below remain synthetic fixtures.
+	install["minecraft"], install["version"], install["target"], install["path"] = base.ID, "Forge "+request.Version, id, core
 	version := document["versionInfo"].(map[string]any)
 	version["id"], version["jar"], version["inheritsFrom"] = id, base.ID, base.ID
 	if omitParent {
@@ -198,6 +200,59 @@ func TestLegacyPublicRepositoryAliasesRemainExact(t *testing.T) {
 	for _, bad := range []string{"http://repo1.maven.org.evil.invalid/maven2", "http://user:secret@repo1.maven.org/maven2", "https://repo.maven.apache.org/maven2/extra", "http://libraries.minecraft.net?proxy=1"} {
 		if _, err := legacyForgeLibraryRoot(bad); err == nil {
 			t.Fatal("arbitrary repository rewrite accepted")
+		}
+	}
+}
+
+func TestLegacy17TargetIsIdentityAndVersionIsDisplayText(t *testing.T) {
+	request, base, document, files := legacy17Fixture(t, "1.12", false)
+	install := document["install"].(map[string]any)
+	id := document["versionInfo"].(map[string]any)["id"].(string)
+	if install["version"] == id || install["target"] != id {
+		t.Fatal("fixture does not model separate installer display/target")
+	}
+	spec, recognized, err := readLegacyForgeSpec(t.Context(), legacyArchive(t, document, files), request, base)
+	if err != nil || !recognized || spec.version.ID != id {
+		t.Fatal("official target form rejected", spec.version.ID, recognized, err)
+	}
+	// Historical producers that genuinely omit target must still bind their
+	// version field to the exact ID; a display label alone is not sufficient.
+	delete(install, "target")
+	install["version"] = id
+	if _, _, err := readLegacyForgeSpec(t.Context(), legacyArchive(t, document, files), request, base); err != nil {
+		t.Fatal("legacy exact-version ID lost support", err)
+	}
+	install["version"] = "Forge " + request.Version
+	if _, _, err := readLegacyForgeSpec(t.Context(), legacyArchive(t, document, files), request, base); err == nil {
+		t.Fatal("unbound display label accepted as launch target")
+	}
+}
+func TestLegacy17ExplicitBadTargetCannotUseVersionAsFallback(t *testing.T) {
+	for _, bad := range []any{nil, "", 17, []string{"anything"}, "1.7.10-Forge10.13.4.9999-1.7.10", "1.12.2-forge"} {
+		request, base, document, files := legacy17Fixture(t, "1.12", false)
+		install := document["install"].(map[string]any)
+		install["version"] = document["versionInfo"].(map[string]any)["id"]
+		install["target"] = bad
+		if _, _, err := readLegacyForgeSpec(t.Context(), legacyArchive(t, document, files), request, base); err == nil {
+			t.Fatal("invalid explicit target bypassed identity check", bad)
+		}
+	}
+}
+func TestLegacy17CorrectTargetDoesNotRelaxCoreIdentity(t *testing.T) {
+	for _, field := range []string{"id", "inheritsFrom", "mainClass"} {
+		request, base, document, files := legacy17Fixture(t, "1.12", false)
+		version := document["versionInfo"].(map[string]any)
+		switch field {
+		case "id":
+			version[field] = "1.7.10-Forge10.13.4.9999-1.7.10"
+			document["install"].(map[string]any)["target"] = version[field]
+		case "inheritsFrom":
+			version[field] = "1.12.2"
+		case "mainClass":
+			version[field] = "unknown.Main"
+		}
+		if _, _, err := readLegacyForgeSpec(t.Context(), legacyArchive(t, document, files), request, base); err == nil {
+			t.Fatal("correct target relaxed fixed client checks", field)
 		}
 	}
 }

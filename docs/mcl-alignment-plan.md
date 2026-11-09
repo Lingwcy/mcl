@@ -971,3 +971,17 @@ LoaderService先读原缓存和受保护别名，再在缓存未命中时规范�
 
 
 本批构建：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64主程序编译成功（build/mcl-forge-branch-fix-windows-amd64.exe，34,045,440字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功（build/darwin-arm64/mcl-0.0.4-forge-branch-fix-arm64.dmg，10,052,096字节，临时签名、未公证）。新增回归只源码未运行/未编译测试目标，无test/vet/自动化/真实Forge/Java/游戏验收；公开元数据请求403的限制保留。不合并main、不发版。
+
+
+## 39. 用户截图：旧Forge安装展示版本误当目标ID
+
+用户在前一版越过Maven404后报“旧Forge客户端版本、父身份、主类或参数格式不受支持”。本次使用固定官方URL只读获取1.7.10-10.13.4.1614-1.7.10-installer.jar（HTTP200，3,699,647字节），仅在内存读取install_profile.json，不运行/安装JAR、不修改用户数据。该GET诊断与早前JSON索引/.sha1/HEAD返回403是不同请求，不能把此前403记成所有官方资源不可访问，也不能把读取元数据记成完整安装验收。
+
+真实清单关键事实：install.version是展示文字“Forge 10.13.4.1614-1.7.10”，install.target与versionInfo.id均为“1.7.10-Forge10.13.4.1614-1.7.10”；install.minecraft/inheritsFrom/jar是1.7.10，主类net.minecraft.launchwrapper.Launch，旧minecraftArguments及cpw.mods.fml.common.launcher.FMLTweaker。失败来自旧解析器强求install.version==versionInfo.id，先前纯合成夹具把两者写成相同ID，遗漏真实字段区别。
+
+修复按install.target核验客户端ID；只有确实缺省target的旧生产者才允许用install.version作为精确ID。显式target:null/空/错误类型/错版本均拒绝，不回退到显示标签。完整build/分支、父版本、主类、旧参数、Universal/LaunchWrapper和Java8等保护保持；原合并大错误拆为具体失败字段，仍只走实际错误路径，不增加常驻提示。
+
+1.7.10合成夹具改为独立展示版本+target形态（不复制官方源码/完整元信息），原准备/缓存/启动计划回归随之覆盖该形态；新增target与display区别、缺省target的旧ID兼容、显式坏target不能回退、正确target不能放行错build/父/主类的回归源码。全部未运行/未编译测试目标，仅gofmt、生产编译、交叉编译及体验包；没有执行Java、安装器、游戏或原生自动化。现有实例直接重试，不要求重建。
+
+
+本批构建记录：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64主程序交叉编译成功（build/mcl-forge-target-fix-windows-amd64.exe，34,046,464字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功（build/darwin-arm64/mcl-0.0.4-forge-target-fix-arm64.dmg，10,057,216字节，临时签名、未公证）。新增及既有回归未运行/未编译测试目标；只读取得官方清单未执行其代码，不是Java/Forge安装或游戏主菜单验收。留feature/persistent-download-tasks，不合并main/发版。

@@ -24,7 +24,10 @@ type legacyForgeLibrary struct {
 	Checksums []string
 }
 type legacyForgeSpec struct {
-	Install     struct{ Path, Version, FilePath, Minecraft string }
+	Install struct {
+		Path, Version, FilePath, Minecraft string
+		Target                             json.RawMessage
+	}
 	VersionInfo json.RawMessage
 	version     meta.Version
 	libraries   []legacyForgeLibrary
@@ -197,8 +200,31 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 		return spec, true, fmt.Errorf("旧Forge versionInfo无效: %w", err)
 	}
 
-	if !legacyForgeID(request, version.ID) || spec.Install.Version != version.ID || version.InheritsFrom != base.ID || version.MainClass != legacyForgeMain || version.Arguments != nil || version.LegacyArguments == "" || len(version.Patches) != 0 || len(version.Downloads) != 0 || version.AssetIndex.ID != "" || version.Java.Major != 0 && version.Java.Major != 8 {
-		return spec, true, errors.New("旧Forge客户端版本、父身份、主类或参数格式不受支持")
+	// install.version is a human-readable installer label in older releases.
+	// install.target binds versionInfo.id; only producers without target use
+	// version itself as the exact launch ID. An explicit malformed/null target
+	// must not fall back to that label.
+	target := spec.Install.Version
+	if len(spec.Install.Target) > 0 {
+		target = ""
+		if err := json.Unmarshal(spec.Install.Target, &target); err != nil || target == "" {
+			return spec, true, errors.New("旧Forge安装目标ID无效")
+		}
+	}
+	if !legacyForgeID(request, version.ID) {
+		return spec, true, errors.New("旧Forge客户端版本ID与固定构建不匹配")
+	}
+	if target != version.ID {
+		return spec, true, errors.New("旧Forge安装目标与客户端版本ID不匹配")
+	}
+	if version.InheritsFrom != base.ID {
+		return spec, true, errors.New("旧Forge客户端父版本与官方基底不匹配")
+	}
+	if version.MainClass != legacyForgeMain {
+		return spec, true, errors.New("旧Forge客户端主类不受支持")
+	}
+	if version.Arguments != nil || version.LegacyArguments == "" || len(version.Patches) != 0 || len(version.Downloads) != 0 || version.AssetIndex.ID != "" || version.Java.Major != 0 && version.Java.Major != 8 {
+		return spec, true, errors.New("旧Forge客户端参数或运行字段不受支持")
 	}
 	if version.Type != "" && version.Type != "release" || version.Jar != "" && version.Jar != base.ID || version.Assets != "" && version.Assets != base.Assets || spec.Install.Minecraft != "" && spec.Install.Minecraft != base.ID {
 		return spec, true, errors.New("旧Forge试图替换官方客户端或资源身份")
