@@ -12,6 +12,10 @@ import (
 	"strings"
 )
 
+// ErrContentMismatch identifies fully read bytes that do not match the fixed
+// digest/size. It does not represent transport, filesystem or cancellation errors.
+var ErrContentMismatch = errors.New("下载副本摘要或大小不匹配")
+
 // Object identifies bytes, not a URL, local path or distribution permission.
 type Object struct {
 	SHA1, SHA256, SHA512 string
@@ -72,7 +76,7 @@ func (o Object) Copy(ctx context.Context, destination io.Writer, source io.Reade
 		return expected == "" || strings.EqualFold(hex.EncodeToString(hash), expected)
 	}
 	if count != o.Size || !equal(h1.Sum(nil), o.SHA1) || !equal(h256.Sum(nil), o.SHA256) || !equal(h512.Sum(nil), o.SHA512) {
-		return errors.New("下载副本摘要或大小不匹配")
+		return ErrContentMismatch
 	}
 	return nil
 }

@@ -985,3 +985,15 @@ LoaderService先读原缓存和受保护别名，再在缓存未命中时规范�
 
 
 本批构建记录：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64主程序交叉编译成功（build/mcl-forge-target-fix-windows-amd64.exe，34,046,464字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功（build/darwin-arm64/mcl-0.0.4-forge-target-fix-arm64.dmg，10,057,216字节，临时签名、未公证）。新增及既有回归未运行/未编译测试目标；只读取得官方清单未执行其代码，不是Java/Forge安装或游戏主菜单验收。留feature/persistent-download-tasks，不合并main/发版。
+
+## 40. 用户截图：旧Forge Scala依赖.sha1旁车404
+
+截图固定org.scala-lang:scala-parser-combinators_2.11:1.0.1的加载器请求404。本次只读获取同一官方1.7.10/10.13.4.1614安装清单，核对目标坐标的.jar.sha1 GET与.jar HEAD：Forge旁车404但JAR HEAD200、419701字节；Mojang库与Maven Central同坐标都404。官方清单已有两个合法checksums；不能改group到org.scala-lang.modules、换版本、换文件或用文件名/HEAD冒充摘要。旁查同批scala-xml_2.11:1.0.2也为旁车404/JAR HEAD200、648679字节；scala-swing_2.11:1.0.1旁车200且摘要在清单允许集合、JAR HEAD200、726500字节。
+
+新增旧Forge清单摘要后备：原.sha1+HEAD路径仍优先，旁车只有404/410且固定安装清单存在有效checksum时才后备。先HEAD固定大小及单项/整组剩余预算，再仅尝试清单最多16个去重SHA-1。每个候选经过同一共享download.Client及私有摘要路径、并发/限速/代理/副本缓存/分片/系统锁/完整校验；只有实际完整内容不匹配才换下一允许摘要，旧候选置skipped不充当必需完成文件。取消、网络/权限/磁盘/发布失败不借机轮换或放行；无checksum、畸形摘要、鉴权403/401、旁车非摘要内容、大小异常仍明确失败。成功选定的文件继续原总量约束、完整校验/清单checksum校验、暂存和独立运行库发布，不增加未校验下载，也不改Java/会话身份流程。
+
+共享下载仅给完整摘要/大小错误加可errors.Is识别类型，并保留分片丢弃后包装传播；不把任意IO错误冒充摘要差异。正常旁车元数据、显式artifact和官方base同名固定依赖仍保持原路径。新增缺旁车/多摘要第二候选、正常旁车、无pin/坏pin/数量边界/非法旁车/错摘要/鉴权/缺文件/错误大小/网络不轮换/取消/剩余预算回归源码，全部未执行/未编译测试目标。
+
+范围仍是格式/生产构建/体验包，官方请求只读元信息，未下载运行Scala依赖、Java、Forge安装器或游戏；不操作真实实例、不添加UI说明、不合并main/发版。现有实例可直接重试。
+
+本批构建记录：gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64交叉编译成功（build/mcl-forge-checksum-fix-windows-amd64.exe，34,055,168字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功（build/darwin-arm64/mcl-0.0.4-forge-checksum-fix-arm64.dmg，10,058,240字节，临时签名、未公证）。未运行或编译测试目标，未执行Java/Forge/游戏或原生验收。公开请求仅清单/摘要/HEAD，未实际验收依赖下载和整包启动。

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -275,7 +276,10 @@ func (p *partial) publish(ctx context.Context, root *os.Root, f File) (bool, tim
 		if e := savePartial(context.WithoutCancel(ctx), p.root, p.marker, p.state); e != nil {
 			return false, 0, e
 		}
-		return true, 0, errors.New("下载摘要不符，已丢弃无效分片，可重试")
+		if errors.Is(err, ErrContentMismatch) {
+			return true, 0, fmt.Errorf("下载摘要不符，已丢弃无效分片，可重试: %w", err)
+		}
+		return true, 0, errors.New("下载校验未通过，已丢弃无效分片，可重试")
 	}
 	after, err := p.file.Stat()
 	if err != nil {

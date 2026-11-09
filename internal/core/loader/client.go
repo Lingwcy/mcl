@@ -53,7 +53,7 @@ func (c *Client) bytes(ctx context.Context, address string, limit int64) ([]byte
 	}
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
-		return nil, fmt.Errorf("加载器服务返回 HTTP %d", response.StatusCode)
+		return nil, &metadataStatusError{status: response.StatusCode}
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
@@ -270,19 +270,29 @@ func (c *Client) mavenMetadata(ctx context.Context, address, relative string) (m
 	if len(fields) == 0 || !meta.ValidSHA1(fields[0]) {
 		return meta.Download{}, errors.New("Maven SHA-1 无效")
 	}
-	response, err := c.request(ctx, http.MethodHead, address)
+	size, err := c.mavenSize(ctx, address)
 	if err != nil {
 		return meta.Download{}, err
 	}
+	return meta.Download{Path: relative, URL: address, SHA1: strings.ToLower(fields[0]), Size: size}, nil
+}
+
+// Keep size discovery separate: a legacy fixed installer may already pin SHA-1
+// even when the repository does not publish a .sha1 sidecar for that artifact.
+func (c *Client) mavenSize(ctx context.Context, address string) (int64, error) {
+	response, err := c.request(ctx, http.MethodHead, address)
+	if err != nil {
+		return 0, err
+	}
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
-		return meta.Download{}, fmt.Errorf("Maven 文件返回 HTTP %d", response.StatusCode)
+		return 0, fmt.Errorf("Maven 文件返回 HTTP %d", response.StatusCode)
 	}
 	size, err := strconv.ParseInt(response.Header.Get("Content-Length"), 10, 64)
 	if err != nil || size <= 0 || size > 512<<20 {
-		return meta.Download{}, errors.New("Maven 未提供有效文件大小")
+		return 0, errors.New("Maven 未提供有效文件大小")
 	}
-	return meta.Download{Path: relative, URL: address, SHA1: strings.ToLower(fields[0]), Size: size}, nil
+	return size, ctx.Err()
 }
 func AllowedLibraryURL(address string) bool {
 	u, err := url.Parse(address)

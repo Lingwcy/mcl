@@ -352,7 +352,7 @@ func (s *ForgeInstaller) prepareLegacyForge(ctx context.Context, z *archive.Zip,
 			}
 			library.Downloads.Artifact = &identity
 		} else {
-			file, err := s.legacyForgeLibraryIdentity(ctx, lib, base)
+			file, err := s.legacyForgeLibraryIdentityWithin(ctx, lib, base, min(512<<20, (4<<30)-total))
 			if err != nil {
 				return Profile{}, fmt.Errorf("固定旧Forge依赖 %s: %w", lib.Name, err)
 			}
@@ -428,6 +428,10 @@ func (s *ForgeInstaller) prepareLegacyForge(ctx context.Context, z *archive.Zip,
 }
 
 func (s *ForgeInstaller) legacyForgeLibraryIdentity(ctx context.Context, lib legacyForgeLibrary, base meta.Version) (meta.Download, error) {
+	return s.legacyForgeLibraryIdentityWithin(ctx, lib, base, 512<<20)
+}
+
+func (s *ForgeInstaller) legacyForgeLibraryIdentityWithin(ctx context.Context, lib legacyForgeLibrary, base meta.Version, maxSize int64) (meta.Download, error) {
 	coordinate, err := meta.ParseCoordinate(lib.Name)
 	if err != nil {
 		return meta.Download{}, err
@@ -468,5 +472,5 @@ func (s *ForgeInstaller) legacyForgeLibraryIdentity(ctx context.Context, lib leg
 	if err != nil {
 		return meta.Download{}, err
 	}
-	return s.catalog.mavenMetadata(ctx, root+"/"+relative, relative)
+	return s.legacyForgePinnedMetadata(ctx, root+"/"+relative, relative, lib.Checksums, maxSize)
 }
