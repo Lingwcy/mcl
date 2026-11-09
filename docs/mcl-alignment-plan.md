@@ -908,3 +908,10 @@ C阶段实现矩阵见第24节，用户1.6.1反馈修复见第25节；D1已开�
 
 
 本批构建记录：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64交叉编译成功（build/mcl-pack-read-feedback-windows-amd64.exe，33,946,624字节），MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-pack-read-feedback-arm64.dmg，10,025,984字节，临时签名、未公证）。回归源码未运行/未编译测试目标，未做公网/原生或该用户整合包实机验收，不把错误反馈修复称为已解决具体包底层失败。留feature/persistent-download-tasks，不合并main/发版。
+
+
+## 36. 用户再次明确：移除Forge导入常驻说明
+
+删除“Forge安装器将在导入后核验；文件可导入不代表游戏已可运行”的生成与确认页Warnings展示分支，旧任务中保留的该字段也不会重现提示。不改为Toast、Tooltip或替代说明，不留下布局空白。真实工作错误仍沿原Toast/任务诊断反馈。用户反复要求不要在UI加入这类提示，后续不得再以兼容边界/实现说明为由恢复。仅格式、生产构建及体验包，未运行测试/原生验收。
+
+构建记录：gofmt、git diff --check、CGO_ENABLED=0生产build及MyGo darwin/arm64临时签名打包成功；build/darwin-arm64/mcl-0.0.4-no-import-notice-arm64.dmg，10,024,960字节，未公证。未测试/原生验收。

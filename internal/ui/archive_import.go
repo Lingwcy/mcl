@@ -351,9 +351,6 @@ func (s *Shell) archiveImportView(c *ui.Context) {
 		ui.PrimaryButton(c.Key("archive-confirm"), "安装地图").Height(30).OnClick(s.importMarketArchive)
 		return
 	}
-	for _, warning := range plan.Warnings {
-		ui.Text(c, warning).FontSize(11).TextColor(t.Warning).MaxLines(2)
-	}
 	if len(plan.Missing) > 0 || i.archiveMissing > 0 || i.supplyNote != "" {
 		ui.Row(c).FillWidth().Gap(8).Children(func() {
 			if len(plan.Missing) > 0 {
