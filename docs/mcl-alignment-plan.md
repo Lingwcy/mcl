@@ -827,3 +827,17 @@ C阶段实现矩阵见第24节，用户1.6.1反馈修复见第25节；D1已开�
 - 未跑test/vet/race/httptest/Tester、UI自动化、公网资源下载、Java/处理器/游戏、真实断网/进程崩溃/断电模拟、用户实例导入/更新或分片清理。回归只有源码，格式/生产构建不证明这些回归可编译或通过。
 - 体验入口：“下载与任务”默认统一列表，可暂停/继续或重试/取消、查看文件快照、右上角刷新与维护；会话/日志/目录等从“会话与其他任务”进入。重开后明确点击继续；原启动任务冷恢复只准备资源，不自动运行游戏。
 - T1–T4按本节范围实现/构建交付，等用户统一验收；I尚未开始。代码留feature/persistent-download-tasks，未合并main、更新版本号、打标签或发布Release。Go/MyGo/依赖及只读SJMCL工作区未改。
+
+
+## 30. T体验反馈：Forge整合包被Fabric声明误拦截
+
+用户截图：Zombie Invade 100 Days导入已下载130/130文件，发布前报“没有匹配当前加载器的声明；fabric / forge”。静态定位guardStagedPackMods → mods.GuardTransition → check：只读取到其他loader的描述符时，直接产生结构性Error，导致合法辅助元数据/兼容层或当前读取器不认识的入口被当作已证实不兼容。未读取用户真实JAR，不能据此证明该包必定兼容或确定具体文件。
+
+- 未匹配当前loader的描述符统一为待确认诊断，保留原路径/声明loader/实例loader；既不当作当前已加载模块或provider，也不作为阻止整包发布的确定错误。相关完整性降为未知，不能由缺少已识别provider反推依赖必定缺失。
+- 仍优先匹配当前loader，Quilt的Fabric后备不变；已识别重复ID、确定的冲突，以及从Yes变No/Unknown的已有必需关系仍拦截。没有自动换loader/停用/删除JAR或增加兼容模组，没有跳过下载摘要或实例发布保护。
+- 本地声明阻塞增加稳定ErrUnsafeChange类别，持久任务显示安全固定原因，不把原始元数据/URL写入历史；即时错误包含对应文件路径，便于定位，不再只有“fabric/forge”。
+- 新增回归源码覆盖外部描述符不阻止发布/不冒充provider、缺失判断保持未知、已满足依赖失效仍拦截、重复与冲突仍拦截、双描述符按当前loader选择和Quilt后备。遵循既有偏好，全部未运行且未编译测试目标；只格式、生产build及体验包，不接触用户真实实例/公网/游戏。
+- 新包体验时在原任务点击“重试”，继续固定计划并复用通过摘要验证的已有缓存；不要求删除原任务/已下载资源或重建实例。重试后仍可能出现其他确切依赖/运行环境错误，不能把本次规则修正称作该包运行验收。
+
+
+本修正版构建：gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64主程序交叉编译成功（build/mcl-pack-declarations-fix-windows-amd64.exe，33,935,360字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-pack-declarations-fix-arm64.dmg，10,022,912字节，约9.6MiB，临时签名、未公证）。回归源码已格式整理，未执行/未编译测试目标；未运行公网、用户实例修改、Java/处理器/游戏或原生交互。仍在feature/persistent-download-tasks，未合并main/发版。

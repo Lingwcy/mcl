@@ -14,6 +14,7 @@ import (
 	"mcl/internal/core/archive"
 	"mcl/internal/core/download"
 	"mcl/internal/core/instance"
+	"mcl/internal/core/mods"
 	"mcl/internal/core/tasks"
 )
 
@@ -629,6 +630,9 @@ func (s *TaskService) ClearHistory(ctx context.Context) error {
 func taskReason(err error) string {
 	if err == nil {
 		return ""
+	}
+	if errors.Is(err, mods.ErrUnsafeChange) {
+		return "模组声明检查未通过，未应用文件变更；请核对模组文件与依赖后重试"
 	}
 	if errors.Is(err, download.ErrCheckpoint) {
 		return "下载检查点未能保存，请检查磁盘空间后重试；任务尚未安全暂停"

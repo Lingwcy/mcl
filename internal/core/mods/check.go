@@ -109,16 +109,19 @@ func check(ctx context.Context, files []File, runtime Runtime, incomplete, captu
 		}
 		if selected == nil {
 			if file.Enabled {
-				partial = partial || runtime.Loader == "" || len(file.Archive.Variants) == 0 || len(file.Archive.Problems) > 0
+				// A foreign descriptor does not prove that this JAR is an active mod
+				// for that loader, nor rule out a compatibility layer or an entry
+				// point that this inspector cannot read. Keep its providers unknown.
+				partial = true
 				loaders := make([]string, 0, len(file.Archive.Variants))
 				for _, variant := range file.Archive.Variants {
 					loaders = append(loaders, variant.Loader)
 				}
-				title := "没有匹配当前加载器的声明"
+				title := "当前加载器下的声明关系待确认"
 				if runtime.Loader == "" {
 					title = "实例未配置加载器，声明关系待确认"
 				}
-				add(Issue{Code: "loader", Path: file.Path, Title: title, Detail: "声明：" + strings.Join(loaders, " / ") + "；配置：" + runtime.Loader, Error: runtime.Loader != "" && len(loaders) > 0})
+				add(Issue{Code: "loader", Path: file.Path, Title: title, Detail: "声明：" + strings.Join(loaders, " / ") + "；配置：" + runtime.Loader})
 			}
 			continue
 		}
