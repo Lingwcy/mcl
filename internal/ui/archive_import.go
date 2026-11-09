@@ -142,6 +142,10 @@ func (s *Shell) finishPackImport(i *marketInstallState, result app.PackImportRes
 	if s.market.install != i {
 		return
 	}
+	// Navigate only from the editor that owns this completion. A background
+	// import must not replace a page the user has already chosen to visit.
+	visible := s.page == marketPage && s.market.showInstall ||
+		s.page == newInstancePage && s.creation.mode == 1 && i.localArchive != nil
 	i.busy, i.installing, i.cancel, i.canceling = false, false, nil, false
 	value := result.Instance
 	if result.Imported && value.ID != "" {
@@ -193,6 +197,12 @@ func (s *Shell) finishPackImport(i *marketInstallState, result app.PackImportRes
 	if i.project.Kind == market.Modpack {
 		s.refreshJava()
 	}
+	if i.complete {
+		s.market.install, s.market.showInstall = nil, false
+		if visible {
+			s.selectInstance(value.ID)
+		}
+	}
 }
 func (s *Shell) resumePackImport() {
 	i := s.market.install
@@ -223,30 +233,6 @@ func (s *Shell) archiveImportView(c *ui.Context) {
 		}
 		ui.Text(c, i.project.Title).FontSize(16).FontWeight(500).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
 	})
-	if i.complete {
-		title := "存档已安装"
-		if i.project.Kind == market.Modpack {
-			title = "整合包已导入"
-		}
-		marketStatus(c, title, iconCheck)
-		if i.project.Kind == market.Modpack {
-			ui.Text(c, "运行环境已就绪").FontSize(12).TextColor(t.TextMuted)
-		}
-		if !i.archiveRuntimeReady && i.project.Kind == market.Modpack && len(i.archivePlan.Instance.Pack.Loaders) > 0 {
-			value := i.archivePlan.Instance
-			ui.Text(c, s.instanceRuntimeStatus(value)).FontSize(11).TextColor(t.TextMuted)
-			if supportedPackLoader(value) {
-				ui.Button(c.Key("archive-install-runtime"), "安装运行环境").Height(28).OnClick(func() {
-					id := i.request.InstanceID
-					s.market.install = nil
-					s.selectInstance(id)
-					s.startInstallation()
-				})
-			}
-		}
-		ui.Button(c.Key("archive-open-instance"), "查看实例").Height(28).OnClick(func() { id := i.request.InstanceID; s.market.install = nil; s.selectInstance(id) })
-		return
-	}
 	if i.busy {
 		label := "正在读取压缩包…"
 		if i.supplying {

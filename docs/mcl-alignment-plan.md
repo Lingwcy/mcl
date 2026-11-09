@@ -857,3 +857,15 @@ C阶段实现矩阵见第24节，用户1.6.1反馈修复见第25节；D1已开�
 
 
 本修正版构建记录：gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...通过。Windows amd64主程序交叉编译成功（build/mcl-forge-tool-java-fix-windows-amd64.exe，33,935,360字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-forge-tool-java-fix-arm64.dmg，10,022,912字节，约9.6MiB，临时签名、未公证）。回归仅格式整理，未执行/未编译测试目标；未运行Java/真实处理器、用户实例续装、公网下载或游戏。feature/persistent-download-tasks独立修复，不合并main/发版。
+
+
+## 32. T体验：导入成功直达实例
+
+用户要求删除截图中的“整合包已导入/运行环境已就绪/查看实例”成功结果页。finishPackImport在确认Imported和RuntimeReady成功、收据与实例摘要更新后，清除当前导入编辑器并通过selectInstance进入对应实例；地图成功也返回目标实例。导航只在用户仍看本次市场导入页或本地导入工作台时执行，离开去其他页面后不抢导航。原任务指针不符的晚到回调仍拒绝；文件导入但环境失败/取消保留继续安装入口，不冒称整体成功。所有成功导航发生在原完成回调，不在每帧渲染里操作。
+
+用户另询问删除实例后同包几乎秒完成，本次只静态核对并解释，不改缓存/删除策略：cache/market/<SHA1>保留原压缩包与包内下载文件；共享客户端/libraries/assets、loader代际及受管Java独立于实例；共享副本缓存也能按摘要恢复。实例删除仍回收专属载荷/中央记录/专属备份至系统废纸篓，不删其他实例共用资源。重新导入生成新实例、从已验证资源重建，不从缓存恢复旧存档。任务字节进度包含校验复用的对象体积，不能视作实际网络传输字节；本轮未读取用户磁盘或网络日志，不声称识别了该次每个命中的具体文件。
+
+遵循现行偏好，仅格式、生产构建及macOS体验包，不跑测试/自动化/原生导入验收。没有新配置/API/缓存行为变更，没有访问或清理用户真实数据。
+
+
+本次构建记录：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...成功；Windows amd64主程序交叉编译成功（build/mcl-import-navigation-windows-amd64.exe，33,929,216字节）。MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功，独立体验包build/darwin-arm64/mcl-0.0.4-import-navigation-arm64.dmg（10,024,448字节，约9.6MiB，临时签名、未公证）。未运行test/vet/Tester/原生自动化或真实导入/删除/缓存清理，本次不新增测试；功能交互待用户体验。
