@@ -997,3 +997,15 @@ LoaderService先读原缓存和受保护别名，再在缓存未命中时规范�
 范围仍是格式/生产构建/体验包，官方请求只读元信息，未下载运行Scala依赖、Java、Forge安装器或游戏；不操作真实实例、不添加UI说明、不合并main/发版。现有实例可直接重试。
 
 本批构建记录：gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64交叉编译成功（build/mcl-forge-checksum-fix-windows-amd64.exe，34,055,168字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功（build/darwin-arm64/mcl-0.0.4-forge-checksum-fix-arm64.dmg，10,058,240字节，临时签名、未公证）。未运行或编译测试目标，未执行Java/Forge/游戏或原生验收。公开请求仅清单/摘要/HEAD，未实际验收依赖下载和整包启动。
+
+## 41. 用户反馈：1.7.10音乐响起但没有可见窗口
+
+用户提供运行截图及音乐已经响起的反馈：状态“等待游戏窗口”，日志有OpenAL初始化/声音引擎启动及FalsePatternLib配置回退。不将单条AL错误当作窗口失败的已证实原因，也不把音乐当已进入可见主菜单；仅凭截图无法判断图形线程阻塞、隐藏/其他空间窗口或Quartz未识别。
+
+静态发现明确参数问题：meta.legacyJVMArguments对所有旧minecraftArguments模板自动添加macOS -XstartOnFirstThread，把现代LWJGL3/GLFW首线程启动方式套到旧LWJGL2的AWT/Cocoa路径。参考SJMCL command_generator.rs Part3的旧模板分支只补natives/launcher属性，并不补首线程参数；b-launcher却给所有mac旧模板添加，不继续照搬此默认。修复移除旧模板自动注入，现代官方arguments.jvm原有首线程规则完整保留；不按用户Java偏好或Forge版本替换图形库、不打补丁/Agent、不改natives或安装/会话身份。
+
+官方缓存是原始摘要元数据，每次读取重新规范化；Forge Profile.Merge每次从当前base.Arguments拷贝JVM参数，旧Forge缓存不持久化新旧base的默认JVM。所以既有实例/原始缓存和已安装Forge无需删除重建，下一次启动即使用修正。Java8 manifest-only classpath传输不变。窗口状态仍依同一登记进程的真实Quartz可见窗口，不用声音日志/超时伪装窗口已出现，不抢前台或改变用户运行中的窗口。
+
+更新旧参数合成回归预期，新增1.6.1/1.7.10/1.12.2缓存重读及OS边界、natives/classpath保留、现代显式首线程规则保留、Java8最终ProcessArguments不重新加首线程的回归源码。全部未运行/未编译测试目标。仅格式/生产构建/体验包，不探测/结束/重启用户正在运行的游戏，不运行Java/原生自动化或实机验收；本次参数缺陷确实存在，但该运行实例是否由它导致无窗口尚待用户重试确认。保持不合并main/不发版。
+
+本批构建记录：gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64交叉编译成功（build/mcl-legacy-mac-window-fix-windows-amd64.exe，34,055,168字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功（build/darwin-arm64/mcl-0.0.4-legacy-mac-window-fix-arm64.dmg，10,055,680字节，临时签名、未公证）。未运行/编译测试目标或执行Java/游戏/原生验收；未读取或改变用户运行会话，当前无窗口的唯一原因和修复效果待用户体验。

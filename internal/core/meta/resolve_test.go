@@ -93,12 +93,9 @@ func TestVerifiedLegacyNormalizationPreservesRawCache(t *testing.T) {
 	if err := version.ValidateVanilla(); err != nil {
 		t.Fatal(err)
 	}
-	for _, target := range []struct {
-		os  string
-		mac bool
-	}{{"osx", true}, {"windows", false}, {"linux", false}} {
-		args, err := SelectArguments(version.Arguments.JVM, Platform{OS: target.os, Arch: "amd64"})
-		if err != nil || slices.Contains(args, "-XstartOnFirstThread") != target.mac || !slices.Contains(args, "-cp") {
+	for _, target := range []string{"osx", "windows", "linux"} {
+		args, err := SelectArguments(version.Arguments.JVM, Platform{OS: target, Arch: "amd64"})
+		if err != nil || slices.Contains(args, "-XstartOnFirstThread") || !slices.Contains(args, "-cp") {
 			t.Fatalf("legacy JVM rules: %v %v", args, err)
 		}
 	}
