@@ -23,6 +23,7 @@ const (
 	gameSettingsPage     page = "game-settings"
 	downloadSettingsPage page = "download-settings"
 	newInstancePage      page = "new-instance"
+	existingGamesPage    page = "existing-games"
 	instanceSettingsPage page = "instance-settings"
 	marketPage           page = "market"
 )
@@ -51,6 +52,7 @@ type Shell struct {
 	toasts           toastState
 	memory           memoryState
 	creation         creationState
+	existing         existingGamesState
 	instanceEditor   *instanceSettingsState
 	page             page
 	theme            *ui.Theme
@@ -92,7 +94,12 @@ func (s *Shell) BindWindow(window *mygo.Window) {
 	s.window = window
 	window.OnFocus(func() { s.memory.blurred = false; s.syncMemoryObservation(); window.Invalidate() })
 	window.OnBlur(func() { s.memory.blurred = true; s.syncMemoryObservation(); window.Invalidate() })
-	window.OnClosed(func() { s.memory.blurred = true; s.syncMemoryObservation() })
+	window.OnClosed(func() {
+		s.memory.blurred = true
+		s.syncMemoryObservation()
+		s.existing.closed = true
+		s.cancelExistingGames()
+	})
 	window.OnMaximize(window.Invalidate)
 	window.OnUnmaximize(window.Invalidate)
 	window.Invalidate()
@@ -113,6 +120,9 @@ func (s *Shell) toggleAppearance() {
 }
 
 func (s *Shell) View(c *ui.Context) {
+	if s.page != existingGamesPage && s.existing.busy {
+		s.cancelExistingGames()
+	}
 	s.syncMemoryObservation()
 	if s.page != downloadSettingsPage && s.downloadTools.operation != "" {
 		clearing := s.downloadTools.operation == "clear"
@@ -175,6 +185,8 @@ func (s *Shell) View(c *ui.Context) {
 							s.instanceView(c)
 						case marketPage:
 							s.marketView(c)
+						case existingGamesPage:
+							s.existingGamesView(c)
 						case newInstancePage:
 							s.newInstanceView(c)
 						case instanceSettingsPage:
