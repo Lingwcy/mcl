@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egoist/mygo/ui"
+
 	"mcl/internal/app"
 	"mcl/internal/core/market"
-
-	"github.com/egoist/mygo/ui"
 )
 
 type assetUpdateState struct {
@@ -317,7 +317,7 @@ func (s *Shell) assetUpdateView(c *ui.Context) {
 			ui.Text(c, state.message).FontSize(12).TextColor(t.TextMuted).MaxLines(4)
 		}
 		if state.busy {
-			loadingStatus(c, assetUpdateStage(state))
+			s.workStatus(c, s.taskPaused("update", state.instanceID), assetUpdateStage(state))
 			p := state.progress.Progress
 			if p.TotalBytes > 0 {
 				smoothProgress(c, float64(p.Bytes)/float64(p.TotalBytes)).FillWidth().Height(4)
@@ -446,6 +446,9 @@ func (s *Shell) assetUpdateTaskCard(c *ui.Context) {
 				label = assetUpdateStage(state)
 			} else if state.message != "" {
 				label = state.message
+			}
+			if s.taskPaused("update", state.instanceID) {
+				label = "已暂停"
 			}
 			ui.Text(c, label).FontSize(12).Grow(1).MinWidth(0).MaxLines(3)
 			ui.Button(c.Key("view-asset-update-task"), "查看").Height(25).OnClick(func() { s.viewAssetUpdate(state) })

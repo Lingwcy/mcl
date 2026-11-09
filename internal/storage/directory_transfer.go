@@ -233,7 +233,7 @@ func checkPayloadSource(ctx context.Context, root *os.Root, id string, external 
 		return errors.New("外部载荷有未知顶层内容，未迁移")
 	}
 	for _, entry := range entries {
-		if !slices.Contains(payloadParts, entry.Name()) && entry.Name() != transfer.OwnerFile && entry.Name() != directoryBackupOwner && entry.Name() != ".DS_Store" {
+		if !slices.Contains(payloadParts, entry.Name()) && entry.Name() != transfer.OwnerFile && entry.Name() != directoryBackupOwner && entry.Name() != packPublicationOwner && entry.Name() != ".DS_Store" {
 			return errors.New("外部载荷有未纳入迁移的顶层内容，请先核对")
 		}
 	}

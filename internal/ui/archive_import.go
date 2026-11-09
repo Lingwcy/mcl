@@ -8,13 +8,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/egoist/mygo/ui"
+
 	"mcl/internal/app"
 	"mcl/internal/core/download"
 	"mcl/internal/core/install"
 	"mcl/internal/core/instance"
 	"mcl/internal/core/market"
-
-	"github.com/egoist/mygo/ui"
 )
 
 func (s *Shell) inspectMarketArchive() {
@@ -264,7 +264,7 @@ func (s *Shell) archiveImportView(c *ui.Context) {
 		if !i.installing && i.progress.TotalBytes > 0 {
 			label += " · " + formatBytes(i.progress.Bytes) + " / " + formatBytes(i.progress.TotalBytes)
 		}
-		loadingStatus(c, label)
+		s.workStatus(c, s.marketTaskPaused(i), label)
 		if i.installing && i.progress.TotalFiles > 0 {
 			smoothProgress(c, float64(i.progress.Files)/float64(i.progress.TotalFiles)).FillWidth().Height(4)
 		}

@@ -12,6 +12,7 @@ import (
 
 	"mcl/internal/core/java"
 	"mcl/internal/core/meta"
+	"mcl/internal/core/tasks"
 )
 
 type JavaRegistration struct {
@@ -37,6 +38,7 @@ type JavaRepository interface {
 }
 
 type JavaService struct {
+	Tasks       *TaskService
 	store       JavaRepository
 	discover    func(context.Context) ([]string, error)
 	installer   *java.Installer
@@ -171,6 +173,9 @@ func (s *JavaService) Remove(ctx context.Context, executable string) error {
 }
 
 func (s *JavaService) Install(ctx context.Context, p java.Package, progress func(java.Progress)) (JavaEnvironment, error) {
+	if s.Tasks != nil && taskScope(ctx) == nil {
+		return performTask(ctx, s.Tasks, tasks.Intent{Kind: "java", Name: "安装 Java · " + p.Version, Fingerprint: p.ID(), Payload: taskPayload(p)}, func(task context.Context) (JavaEnvironment, error) { return s.Install(task, p, progress) })
+	}
 	select {
 	case s.installSlot <- struct{}{}:
 		defer func() { <-s.installSlot }()

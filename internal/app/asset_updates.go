@@ -45,6 +45,7 @@ type AssetUpdateRegistry interface {
 	ReserveForRecovery(context.Context, string) (SessionLease, error)
 }
 type AssetUpdateService struct {
+	Tasks     *TaskService
 	instances InstanceReader
 	registry  AssetUpdateRegistry
 	store     AssetUpdateRepository
@@ -205,6 +206,35 @@ func (s *AssetUpdateService) Supply(ctx context.Context, plan market.UpdatePlan,
 }
 
 func (s *AssetUpdateService) Apply(ctx context.Context, plan market.UpdatePlan, report func(AssetUpdateProgress)) (AssetUpdateResult, error) {
+	if s.Tasks != nil && taskScope(ctx) == nil {
+		intent, err := taskPlanIntent(ctx, s.instances, "update", "更新市场资源", plan.Request.InstanceID, plan)
+		if err != nil {
+			return AssetUpdateResult{}, err
+		}
+		return performTask(ctx, s.Tasks, intent, func(task context.Context) (AssetUpdateResult, error) {
+			if err := checkTaskTarget(task, s.instances, intent); err != nil {
+				return AssetUpdateResult{}, err
+			}
+			current := plan
+			if TaskAttempt(task) > 1 {
+				if result, done, err := s.recoverTask(task, plan); err != nil || done {
+					return result, err
+				}
+				fresh, err := s.refreshTaskPlan(task, plan)
+				if err != nil {
+					return AssetUpdateResult{}, err
+				}
+				current = fresh
+			}
+			return s.Apply(task, current, report)
+		})
+	}
+	if taskScope(ctx) != nil {
+		result, done, err := s.recoverTask(ctx, plan)
+		if err != nil || done {
+			return result, err
+		}
+	}
 	lease, err := s.registry.Reserve(ctx, plan.Request.InstanceID)
 	if err != nil {
 		return AssetUpdateResult{}, err
@@ -212,6 +242,9 @@ func (s *AssetUpdateService) Apply(ctx context.Context, plan market.UpdatePlan, 
 	defer lease.Close()
 	value, err := s.instances.Get(ctx, plan.Request.InstanceID)
 	if err != nil {
+		return AssetUpdateResult{}, err
+	}
+	if err := checkTaskInstance(ctx, value); err != nil {
 		return AssetUpdateResult{}, err
 	}
 	if value.Version.ID != plan.Request.GameVersion || !strings.EqualFold(value.Version.SHA1, plan.Request.VersionSHA1) {
@@ -249,6 +282,9 @@ func (s *AssetUpdateService) Apply(ctx context.Context, plan market.UpdatePlan, 
 		}); err != nil {
 			return AssetUpdateResult{}, err
 		}
+	}
+	if err := TaskStage(ctx, "发布"); err != nil {
+		return AssetUpdateResult{}, err
 	}
 	return s.store.CommitUpdate(ctx, plan, report)
 }

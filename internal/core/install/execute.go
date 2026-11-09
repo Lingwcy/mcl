@@ -8,9 +8,8 @@ import (
 	"path"
 	"strings"
 
-	"mcl/internal/core/meta"
-
 	"mcl/internal/core/download"
+	"mcl/internal/core/meta"
 )
 
 type Progress struct {
@@ -37,6 +36,9 @@ func Execute(ctx context.Context, client *download.Client, plan Plan, nativePare
 	}
 	if err := client.Run(ctx, plan.Files, stage("files")); err != nil {
 		return Result{}, fmt.Errorf("安装基础文件: %w", err)
+	}
+	if err := download.Phase(ctx, "读取资源索引"); err != nil {
+		return Result{}, err
 	}
 	root, err := os.OpenRoot(client.Root)
 	if err != nil {
@@ -73,6 +75,9 @@ func Execute(ctx context.Context, client *download.Client, plan Plan, nativePare
 	}
 	if err := client.Run(ctx, assets, stage("assets")); err != nil {
 		return Result{}, fmt.Errorf("安装资产对象: %w", err)
+	}
+	if err := download.Phase(ctx, "准备资源与本地库"); err != nil {
+		return Result{}, err
 	}
 	var game *os.Root
 	if len(gameDirectory) > 0 {

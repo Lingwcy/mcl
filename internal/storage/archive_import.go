@@ -197,6 +197,7 @@ func (s *ArchiveStore) CommitArchive(ctx context.Context, plan app.ArchiveImport
 	var external *os.Root
 	externalTemporary := ""
 	externalPublished := false
+	externalReused := false
 	if plan.Instance.GameDirectoryID != "" {
 		location, release, err := lockGameLocation(ctx, s.dir, plan.Instance.GameDirectoryID)
 		if err != nil {
@@ -205,7 +206,16 @@ func (s *ArchiveStore) CommitArchive(ctx context.Context, plan app.ArchiveImport
 		defer release()
 		external = location
 		if _, err := location.Lstat(plan.Instance.ID); err == nil {
-			return errors.New("所选游戏位置已有相同实例 ID，未覆盖")
+			previous, e := openRealDirectory(location, plan.Instance.ID)
+			if e != nil {
+				return e
+			}
+			e = readPackPublication(ctx, previous, plan)
+			previous.Close()
+			if e != nil {
+				return e
+			}
+			externalReused = true
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -279,13 +289,29 @@ func (s *ArchiveStore) CommitArchive(ctx context.Context, plan app.ArchiveImport
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if external != nil {
+		if err := writeDirectoryJSON(ctx, payload, packPublicationOwner, packPublicationFor(plan)); err != nil {
+			return err
+		}
+		if externalReused {
+			previous, err := openRealDirectory(external, plan.Instance.ID)
+			if err != nil {
+				return err
+			}
+			err = samePackPayload(ctx, payload, previous)
+			previous.Close()
+			if err != nil {
+				return err
+			}
+		}
+	}
 	// Close stage handles before rename for Windows sharing semantics.
 	game.Close()
 	if payload != stage {
 		payload.Close()
 	}
 	stage.Close()
-	if external != nil {
+	if external != nil && !externalReused {
 		if err := fileio.PublishDirectory(external, externalTemporary, plan.Instance.ID); err != nil {
 			return err
 		}
@@ -368,6 +394,9 @@ func (s *ArchiveStore) commitWorld(ctx context.Context, z *archive.Zip, plan app
 		return err
 	}
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := writeDirectoryJSON(ctx, stage, packPublicationOwner, packPublicationFor(plan)); err != nil {
 		return err
 	}
 	stage.Close()

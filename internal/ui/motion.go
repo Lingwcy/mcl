@@ -231,6 +231,13 @@ func (s *Shell) contentIdentity() contentIdentity {
 				id.version = m.version.version.ID
 			}
 		}
+	case activityPage, settingsActivityPage:
+		if s.downloadJobs.showLegacy {
+			id.screen = "other-tasks"
+		} else if s.downloadJobs.selected != "" {
+			id.screen = "task-files"
+			id.instance = s.downloadJobs.selected
+		}
 	case directoryPage:
 		id.screen = s.directories.mode
 		if s.directories.mode != "tasks" {
