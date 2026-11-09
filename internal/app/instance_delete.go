@@ -9,7 +9,12 @@ import (
 
 // Paths are inspection results, never caller-selected deletion targets. The
 // store recomputes and validates them against the authoritative instance.
+type InstanceDeletionBackup struct {
+	Path string
+	Gone bool
+}
 type InstanceDeletionPlan struct {
+	MigrationBackups                        []InstanceDeletionBackup
 	InstanceID, Name, Fingerprint           string
 	MetadataPath, GamePath, ExternalPayload string
 	Pending, PayloadGone                    bool
@@ -68,6 +73,17 @@ func (s *InstanceDeletionService) Delete(ctx context.Context, expected InstanceD
 	}
 	if err := s.store.Mark(ctx, current); err != nil {
 		return err
+	}
+	for _, backup := range current.MigrationBackups {
+		if backup.Gone {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := s.trash(backup.Path); err != nil {
+			return fmt.Errorf("迁移旧副本尚未移入废纸篓，可重试: %w", err)
+		}
 	}
 	if current.ExternalPayload != "" && !current.PayloadGone {
 		if err := ctx.Err(); err != nil {

@@ -71,6 +71,7 @@ func (s *Shell) instanceSettingsView(c *ui.Context) {
 						}
 					})
 					iconButton(c, "open-instance-location", "打开游戏目录", iconFolder, func() { s.openInstanceGameDirectory(state.id) }).Disabled(s.gameDirectories.busy || s.gameDirectories.actions.OpenInstance == nil)
+					ui.Button(c.Key("migrate-instance-directory"), "迁移…").Height(26).Disabled(disabled || state.saving || s.directories.actions.InspectMove == nil).OnClick(s.openDirectoryMove)
 				})
 				gameSettingsDivider(c)
 				if state.value.Description != "" {

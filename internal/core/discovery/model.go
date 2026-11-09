@@ -21,6 +21,8 @@ type Candidate struct {
 	Problems                                   []string
 	Status                                     string
 	MetadataSHA256                             string
+	DocumentDigests                            []string
+	UnknownComponents                          bool
 	Documents                                  []string
 }
 type Report struct {

@@ -146,6 +146,7 @@ func (s *scanner) candidate(folder string) Candidate {
 			break
 		}
 		if seen[current] {
+			candidate.UnknownComponents = true
 			note("本地父版本引用存在循环")
 			break
 		}
@@ -166,8 +167,10 @@ func (s *scanner) candidate(folder string) Candidate {
 		if doc.MainClass != "" && candidate.MainClass == "" {
 			candidate.MainClass = doc.MainClass
 		}
+		candidate.DocumentDigests = append(candidate.DocumentDigests, snapshot.digest)
 		hints, unknown := loaderHints(doc)
 		if unknown {
+			candidate.UnknownComponents = true
 			note("检测到未知运行组件；不能据此确认兼容")
 		}
 		for _, hint := range hints {
@@ -195,6 +198,7 @@ func (s *scanner) candidate(folder string) Candidate {
 		candidate.GameVersion = doc.InheritsFrom
 		current = doc.InheritsFrom
 		if depth == 7 {
+			candidate.UnknownComponents = true
 			note("本地版本继承超过8层")
 		}
 	}

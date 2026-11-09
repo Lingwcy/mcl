@@ -14,6 +14,7 @@ import (
 
 	"mcl/internal/app"
 	"mcl/internal/core/archive"
+	"mcl/internal/core/instance"
 	"mcl/internal/core/market"
 )
 
@@ -39,6 +40,14 @@ func (s *AssetStore) openGame(ctx context.Context, id string) (*os.Root, error) 
 	return s.OpenGame(ctx, id)
 }
 func (s *AssetStore) openPayload(ctx context.Context, id string) (*os.Root, error) {
+	if !instance.ValidID(id) {
+		return nil, errors.New("invalid instance ID")
+	}
+	if _, err := os.Lstat(filepath.Join(s.dir, id, directoryPending)); err == nil {
+		return nil, errors.New("目录操作尚未完成，请先恢复")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
 	value, err := NewInstanceStore(s.dir).Get(ctx, id)
 	if err != nil {
 		return nil, err

@@ -34,18 +34,22 @@ func NewSessionStore(dir string, running ProcessRunning) *SessionStore {
 }
 
 func (s *SessionStore) Reserve(ctx context.Context, id string) (app.SessionLease, error) {
-	return s.reserve(ctx, id, false, false)
+	return s.reserve(ctx, id, false, false, false)
 }
 
 func (s *SessionStore) ReserveForDeletion(ctx context.Context, id string) (app.SessionLease, error) {
-	return s.reserve(ctx, id, false, true)
+	return s.reserve(ctx, id, false, true, false)
 }
 
 func (s *SessionStore) ReserveForRecovery(ctx context.Context, id string) (app.SessionLease, error) {
-	return s.reserve(ctx, id, true, false)
+	return s.reserve(ctx, id, true, false, false)
 }
 
-func (s *SessionStore) reserve(ctx context.Context, id string, recovery, deleting bool) (app.SessionLease, error) {
+func (s *SessionStore) ReserveForDirectoryTransfer(ctx context.Context, id string) (app.SessionLease, error) {
+	return s.reserve(ctx, id, false, false, true)
+}
+
+func (s *SessionStore) reserve(ctx context.Context, id string, recovery, deleting, directoryTransfer bool) (app.SessionLease, error) {
 	if !instance.ValidID(id) {
 		return nil, errors.New("invalid instance ID")
 	}
@@ -65,6 +69,13 @@ func (s *SessionStore) reserve(ctx context.Context, id string, recovery, deletin
 		return nil, fmt.Errorf("实例正被其他启动器操作占用: %w", err)
 	}
 	fail := func(err error) (app.SessionLease, error) { lock.Close(); root.Close(); return nil, err }
+	if !directoryTransfer {
+		if _, err := root.Lstat(path.Join("instances", id, directoryPending)); err == nil {
+			return fail(errors.New("此实例有未完成的目录操作，请在目录任务中恢复"))
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fail(err)
+		}
+	}
 	if !deleting {
 		if _, err := root.Lstat(path.Join("instances", id, instanceDeleteMarker)); err == nil {
 			return fail(errors.New("此实例有未完成的删除，请在实例设置中继续删除"))

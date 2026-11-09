@@ -142,7 +142,10 @@ func (s *Shell) existingGameDetails(c *ui.Context, row discovery.Candidate) {
 	t := s.theme
 	ui.Scroll(c.Key("existing-detail-scroll")).FillWidth().Grow(1).MinHeight(0).Children(func() {
 		ui.Column(c.Key(row.ID)).FillWidth().Gap(10).Children(func() {
-			ui.Text(c, row.Folder).FontSize(13).FontWeight(600).FillWidth()
+			ui.Row(c.Key("existing-import-header")).FillWidth().Height(28).Gap(8).Children(func() {
+				ui.Text(c, row.Folder).FontSize(13).FontWeight(600).Grow(1).MinWidth(0)
+				ui.Button(c.Key("copy-existing-game"), "复制为受管实例…").Height(26).Disabled(row.Status == "unreadable" || row.GameVersion == "" || row.UnknownComponents || s.directories.actions.InspectImport == nil).OnClick(func() { s.openDirectoryImport(row) })
+			})
 			for _, field := range []struct{ name, value string }{
 				{"文档ID", row.DocumentID}, {"游戏基底（本地声明）", row.GameVersion}, {"加载器线索", existingLoaderLabel(row)},
 				{"版本目录", row.Path}, {"客户端JAR路径（仅检查存在）", row.ClientPath}, {"客户端主类", row.MainClass},

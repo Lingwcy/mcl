@@ -242,6 +242,15 @@ func (s *ExistingGamesStore) Remove(ctx context.Context, id string) error {
 	if !slices.ContainsFunc(doc.Sources, func(value app.ExistingSource) bool { return value.ID == id }) {
 		return errors.New("只读来源已不在登记中")
 	}
+	operations, err := NewDirectoryTransferStore(s.root).ListOperations(ctx)
+	if err != nil {
+		return err
+	}
+	for _, operation := range operations {
+		if !operation.Backup && operation.SourceID == id {
+			return errors.New("此来源有未完成的复制，请先继续或撤销目录任务")
+		}
+	}
 	doc.Sources = slices.DeleteFunc(doc.Sources, func(value app.ExistingSource) bool { return value.ID == id })
 	return s.write(ctx, doc)
 }

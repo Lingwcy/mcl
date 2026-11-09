@@ -231,6 +231,12 @@ func (s *Shell) contentIdentity() contentIdentity {
 				id.version = m.version.version.ID
 			}
 		}
+	case directoryPage:
+		id.screen = s.directories.mode
+		if s.directories.mode != "tasks" {
+			id.instance = s.directories.instanceID
+			id.source = s.directories.request.CandidateID
+		}
 	case existingGamesPage:
 		id.source = s.existing.sourceID
 		id.instance = s.existing.selectedID
