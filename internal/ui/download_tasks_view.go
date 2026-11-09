@@ -135,6 +135,8 @@ func (s *Shell) downloadTaskFiles(c *ui.Context) {
 			label = "未完成"
 		case "canceled":
 			label = "已取消"
+		case "skipped":
+			label = "已跳过"
 		case "interrupted":
 			label = "可继续"
 		}

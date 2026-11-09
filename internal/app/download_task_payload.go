@@ -64,7 +64,7 @@ func safeTaskPayload(raw json.RawMessage) (json.RawMessage, error) {
 }
 func publicTaskHost(host string) bool {
 	host = strings.ToLower(host)
-	for _, allowed := range []string{"mojang.com", "minecraft.net", "minecraftforge.net", "neoforged.net", "fabricmc.net", "quiltmc.org", "modrinth.com", "forgecdn.net", "github.com", "maven.apache.org", "maven.org"} {
+	for _, allowed := range []string{"mojang.com", "minecraft.net", "minecraftforge.net", "neoforged.net", "fabricmc.net", "quiltmc.org", "modrinth.com", "forgecdn.net", "github.com", "cdn.azul.com", "maven.apache.org", "maven.org"} {
 		if host == allowed || strings.HasSuffix(host, "."+allowed) {
 			return true
 		}

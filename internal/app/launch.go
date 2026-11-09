@@ -191,8 +191,9 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	if err != nil {
 		return nil, err
 	}
-	if _, err := install.Build(base, s.installations.platform); err != nil {
-		return nil, fmt.Errorf("客户端平台兼容性: %w", err)
+	target, err := s.installations.targetPlatform(ctx, base)
+	if err != nil {
+		return nil, err
 	}
 	javaProgress := func(p java.Progress) {
 		if report != nil {
@@ -203,11 +204,11 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 		return nil, err
 	}
 	preferred := []string{value.JavaPath, fallback.JavaPath}
-	runtime, err := s.resolveJava(ctx, base.Java.Major, s.installations.platform, preferred, javaProgress)
+	runtime, err := s.resolveJava(ctx, base.Java.Major, target, preferred, javaProgress)
 	if err != nil {
 		return nil, err
 	}
-	if err := runtime.Check(base.Java.Major, s.installations.platform); err != nil {
+	if err := runtime.Check(base.Java.Major, target); err != nil {
 		return nil, err
 	}
 	// Pass the verified game executable only as a hint. The loader resolves its
@@ -219,12 +220,12 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 		return nil, err
 	}
 	if resolved.version.Java.Major > runtime.Major {
-		runtime, err = s.resolveJava(ctx, resolved.version.Java.Major, s.installations.platform, preferred, javaProgress)
+		runtime, err = s.resolveJava(ctx, resolved.version.Java.Major, target, preferred, javaProgress)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if err := runtime.Check(resolved.version.Java.Major, s.installations.platform); err != nil {
+	if err := runtime.Check(resolved.version.Java.Major, target); err != nil {
 		return nil, err
 	}
 	receipt, err := s.installations.execute(ctx, value, resolved, report)
@@ -241,7 +242,7 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	}
 	options := launch.Options{
 		Root: s.installations.client.Root, InstanceID: id, Version: resolved.version, GameDirectory: gameDirectory,
-		Platform: s.installations.platform, Java: runtime, NativeDirectory: receipt.NativeDirectory, LegacyAssetsDirectory: receipt.LegacyAssetsDirectory,
+		Platform: target, Java: runtime, NativeDirectory: receipt.NativeDirectory, LegacyAssetsDirectory: receipt.LegacyAssetsDirectory,
 		MaxMemoryMiB: memoryMiB,
 		GCMode:       fallback.GCMode, JVMArguments: jvmArguments, Game: fallback.Game,
 	}

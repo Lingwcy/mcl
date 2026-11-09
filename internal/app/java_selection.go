@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	"mcl/internal/core/download"
 	"mcl/internal/core/java"
 	"mcl/internal/core/meta"
 )
@@ -37,47 +38,75 @@ func (s *JavaService) Ensure(ctx context.Context, major int, target meta.Platfor
 	if err := ctx.Err(); err != nil {
 		return java.Runtime{}, err
 	}
-	emit("java-catalog")
-	catalog, err := s.Catalog(ctx, major, target)
-	if err != nil {
-		return java.Runtime{}, fmt.Errorf("自动安装 Java %d: %w", major, err)
-	}
-	var selected *java.Package
-	for _, p := range catalog.Packages {
-		if p.Major != major || p.OS != target.OS || p.Arch != meta.NormalizeArch(target.Arch) {
-			continue
+
+	var failures []error
+	for _, provider := range java.Providers() {
+		emit("java-catalog")
+		catalog, err := s.catalog.CatalogFor(ctx, provider, major, target)
+		if ctx.Err() != nil {
+			return java.Runtime{}, ctx.Err()
 		}
-		if err := p.Validate(); err != nil {
-			return java.Runtime{}, err
+		if err != nil {
+			failures = append(failures, fmt.Errorf("%s 目录: %w", provider, err))
+			if len(catalog.Packages) == 0 {
+				continue
+			}
 		}
-		// Prefer the smaller runtime; a JDK is suitable when no JRE is published.
-		if selected == nil || p.Kind == "jre" && selected.Kind != "jre" {
-			copy := p
-			selected = &copy
+		packages := slices.Clone(catalog.Packages)
+		slices.SortStableFunc(packages, func(a, b java.Package) int {
+			if a.Kind == b.Kind {
+				return 0
+			}
+			if a.Kind == "jre" {
+				return -1
+			}
+			return 1
+		})
+		for _, p := range packages {
+			if p.Major != major || p.OS != target.OS || p.Arch != meta.NormalizeArch(target.Arch) {
+				continue
+			}
+			if err := p.Validate(); err != nil {
+				failures = append(failures, err)
+				continue
+			}
+			emit("java-download")
+			environment, err := s.Install(ctx, p, func(p java.Progress) {
+				if report == nil {
+					return
+				}
+				stage := "java-download"
+				if p.Stage == "解压并检查 Java" {
+					stage = "java-extract"
+					p.Bytes, p.Total = 0, 0
+				}
+				report(java.Progress{Stage: stage, Bytes: p.Bytes, Total: p.Total})
+			})
+			if ctx.Err() != nil {
+				return java.Runtime{}, ctx.Err()
+			}
+			if err != nil {
+				file := p.DownloadFile()
+				if observeErr := download.Observe(ctx, download.Event{Key: download.FileKey(file), Path: file.Path, State: "skipped", Total: p.Size}); observeErr != nil {
+					return java.Runtime{}, observeErr
+				}
+				failures = append(failures, fmt.Errorf("%s 安装: %w", provider, err))
+				continue
+			}
+			if environment.Runtime.Major != major {
+				return java.Runtime{}, errors.New("Java 安装结果主版本与请求不符")
+			}
+			if err := environment.Runtime.Check(major, target); err != nil {
+				failures = append(failures, err)
+				continue
+			}
+			return environment.Runtime, nil
 		}
 	}
-	if selected == nil {
-		return java.Runtime{}, fmt.Errorf("官方目录暂无适合 %s/%s 的 Java %d；可在 Java 管理中添加对应环境后重试", target.OS, target.Arch, major)
+	if len(failures) > 0 {
+		return java.Runtime{}, fmt.Errorf("自动准备 Java %d（%s/%s）各来源均未完成: %w", major, target.OS, target.Arch, errors.Join(failures...))
 	}
-	emit("java-download")
-	environment, err := s.Install(ctx, *selected, func(p java.Progress) {
-		if report == nil {
-			return
-		}
-		stage := "java-download"
-		if p.Stage == "解压并检查 Java" {
-			stage = "java-extract"
-			p.Bytes, p.Total = 0, 0
-		}
-		report(java.Progress{Stage: stage, Bytes: p.Bytes, Total: p.Total})
-	})
-	if err != nil {
-		return java.Runtime{}, fmt.Errorf("自动安装 Java %d: %w", major, err)
-	}
-	if err := environment.Runtime.Check(major, target); err != nil {
-		return java.Runtime{}, err
-	}
-	return environment.Runtime, ctx.Err()
+	return java.Runtime{}, fmt.Errorf("各官方发行商暂无 %s/%s 的稳定 Java %d", target.OS, target.Arch, major)
 }
 
 func matchingJava(environments []JavaEnvironment, major int, target meta.Platform, preferred []string) (java.Runtime, bool) {

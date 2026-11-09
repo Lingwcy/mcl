@@ -20,6 +20,7 @@ import (
 	"mcl/internal/core/java"
 	"mcl/internal/core/launch"
 	"mcl/internal/core/meta"
+	"mcl/internal/platform"
 )
 
 type Exit = launch.Exit
@@ -77,8 +78,8 @@ func start(plan launch.Plan, register func(launch.ProcessIdentity) error, direct
 	if err != nil {
 		return nil, err
 	}
-	if target, current := plan.Target(), meta.CurrentPlatform(); target.OS != current.OS || target.Arch != current.Arch {
-		return nil, errors.New("启动计划与当前系统或架构不匹配")
+	if err := platform.CheckExecutionPlatform(context.Background(), meta.CurrentPlatform(), plan.Target()); err != nil {
+		return nil, err
 	}
 	if !filepath.IsAbs(plan.Executable()) || !filepath.IsAbs(plan.Directory()) {
 		return nil, errors.New("invalid process paths")

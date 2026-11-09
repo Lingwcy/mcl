@@ -915,3 +915,45 @@ C阶段实现矩阵见第24节，用户1.6.1反馈修复见第25节；D1已开�
 删除“Forge安装器将在导入后核验；文件可导入不代表游戏已可运行”的生成与确认页Warnings展示分支，旧任务中保留的该字段也不会重现提示。不改为Toast、Tooltip或替代说明，不留下布局空白。真实工作错误仍沿原Toast/任务诊断反馈。用户反复要求不要在UI加入这类提示，后续不得再以兼容边界/实现说明为由恢复。仅格式、生产构建及体验包，未运行测试/原生验收。
 
 构建记录：gofmt、git diff --check、CGO_ENABLED=0生产build及MyGo darwin/arm64临时签名打包成功；build/darwin-arm64/mcl-0.0.4-no-import-notice-arm64.dmg，10,024,960字节，未公证。未测试/原生验收。
+
+
+## 37. Java多发行商回退、国内镜像与旧版macOS架构回退
+
+### 用户授权与来源证据
+
+用户明确要求一个来源无包/不可用时继续尝试其他源，并考虑国内镜像；截图实际是旧LWJGL2.9.1没有ARM64 natives，不能通过换ARM Java伪装解决。覆盖早期“Java仅Temurin”和“旧版macOS ARM64直接拒绝”的实现限制。本批仍不跑测试/自动化/真实Java/游戏，I未开始，不合并main/发版。
+
+只读核对官方目录：Azul metadata v1的Java8/macOS/aarch64/GA/CA查询和UUID详情确实提供Zulu8.0.512 ARM64 JDK、固定SHA-256/103741000字节及cdn.azul.com地址。官方接口返回摘要和包身份，不由镜像提供信任根。也只读查看TUNA /Adoptium/8/jdk/x64/mac/公开目录，确认映射结构；未下载任何Java压缩包/执行Java，元数据核对不等于安装验收。实现动态取目录，不写死该版本或UUID。
+
+### Java目录与下载
+
+- Package增加Provider，空值兼容旧Temurin任务；官方提供者顺序Temurin → Azul Zulu，自动启动/安装工具使用相同Ensure链。每个来源无包/目录失败/安装失败后继续下一候选；同发行商先JRE再JDK，目录部分成功仍使用有效包；用户取消或任务取消立即结束，不将取消当失败继续联网。最后只有全部不可用才汇总错误。
+- Java管理目录合并两家可用发行包，自动选择懒读取各提供者，不为已可用的首选环境等待无关来源。本机兼容且稳定的显式偏好仍优先，游戏精确major、目标架构和EA拒绝规则不变，Java8不会改成17来冒充成功。
+- Zulu先通过有界列表取得UUID，再读取官方详情，核对UUID/product、OS、arch/bitness、major、kind、archive、GA/CA与非JavaFX，固定SHA-256与大小；只允许cdn.azul.com/zulu/bin的对应平台归档。未知来源/凭据/查询URL拒绝，下载后继续解压边界与实际Probe的major/arch/稳定性检查。安装目录temurin-/zulu-分开，旧Temurin目录和任务仍可发现/继续。
+- Java生产下载仍用sharedDownloads，共享并发、代理、总限速、摘要缓存、目标锁和分片恢复，不加私人下载代理。Temurin固定官方Github发布文件增加TUNA Adoptium镜像映射，严格对应major/kind/arch/os/文件名；支持官方tag中的%2B与新版本文件名下划线。镜像优先/官方优先/自动遵循现有下载设置，镜像404/落后/摘要不符按原下载候选回官方；默认“仅官方”仍只用两家官方源。
+- 仅有独立官方摘要的字节可镜像，未知Maven/CF/Modrinth/元数据或签名URL不因此被代理。Zulu直接使用其官方CDN，没有虚构Zulu镜像、借Key或取消来源限制；官方目录无法提供可靠身份时宁可进入下一来源。镜像目录核对不表示所有最新版本已同步。
+- 回退的无效Java候选记录skipped文件状态，文件详情可查看，汇总不把弃用归档体积算成最终所需进度；固定Java单包任务仍按原包重试，不静默换它的摘要。历史允许公共cdn.azul.com URL，仍不保存授权/代理/账户秘密。
+
+### 同一目标架构贯穿安装与启动
+
+- core.install为明确缺少ARM native的错误增加类型，SelectPlatform先完整建立宿主计划；仅macOS ARM64遭遇这种架构缺项、且完整x86-64计划可建立时，候选回退为amd64。其他损坏元数据、缺摘要、未知规则或Linux/Windows ARM不借此绕过。
+- InstallationService注入只读CheckExecutionPlatform，macOS适配检查Rosetta运行时标记；缺失时明确失败，不自动运行系统安装器/提权。原生ARM计划可用时继续ARM，不改版本元数据或偷偷注入替代LWJGL/Agent。
+- 目标平台传入JavaResolver、加载器Request/代际缓存、libraries/natives计划、安装Receipt、launch.Options和最终Plan；不只改Java路径或只移除native保护。重开识别同OS且受支持的x64收据，真实准备仍重新规划和校验。
+- RunLoaderProcessor重新Probe后和StartTracked交接前再次检查宿主/目标能力，仅显式允许的macOS ARM→x64转换放行；其余跨平台仍拒绝。原实例/OS锁、SessionRegistry、gated进程身份登记、优先级应用、停止/取消与真实游戏交接链不变，不回到低层Start/猜PID/通过shell启动。
+- Rosetta只解决CPU执行架构，不承诺任意旧模组/游戏/显卡兼容；本轮没有实际启动Java8/LWJGL2或游戏，不增加已验收版本组合，也不添加常驻说明或警告卡片。只在真正失败时沿现有错误路径展示。
+
+### 验证范围
+
+新增回归源码覆盖Temurin403回退Zulu、固定官方详情身份/GA/架构/摘要拒绝、目录取消、二进制失败后下一发行商/取消不继续、现代与Java8镜像映射及官方优先/镜像优先、带%2B官方地址、旧native整套x64计划/现代保持ARM/不掩盖元数据错误/无fallback库拒绝、注入缺Rosetta与平台一致性。全部未执行、未编译测试目标。只gofmt、git diff --check、生产build、主程序交叉编译与MyGo体验包；未跑test/vet/race/Tester/原生自动化、Java下载/解压/Probe/处理器/游戏或Rosetta实机验收。构建证据在本节末追加。
+
+
+### 本批最终构建证据
+
+gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...成功；Windows/Linux/macOS amd64主程序交叉编译及MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包全部退出0。
+
+- build/mcl-java-fallback-windows-amd64.exe：34,014,720字节。
+- build/mcl-java-fallback-linux-amd64：33,312,189字节。
+- build/mcl-java-fallback-darwin-amd64：34,198,096字节。
+- build/darwin-arm64/mcl-0.0.4-java-fallback-arm64.dmg：10,039,296字节。
+
+macOS体验包临时签名、未公证，未发签名自动更新或Release。新增回归只格式源码、未执行/未编译测试目标；没有test/vet/race/Tester、Java安装/Probe、加载器处理器、游戏、Rosetta/窗口自动化或用户真实实例操作。跨编译不代表对应平台功能已验收。只读核对官方JSON/镜像目录与真实二进制下载/执行分开记录，后者仍待用户体验。

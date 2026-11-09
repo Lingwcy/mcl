@@ -84,7 +84,7 @@ func (g Group) Validate() error {
 			return errors.New("任务文件键格式无效")
 		}
 		switch file.State {
-		case "pending", "checking", "downloading", "verifying", "publishing", "done", "paused", "failed", "canceled", "interrupted", "completed", "queued", "running", "pausing", "canceling":
+		case "skipped", "pending", "checking", "downloading", "verifying", "publishing", "done", "paused", "failed", "canceled", "interrupted", "completed", "queued", "running", "pausing", "canceling":
 		default:
 			return errors.New("任务文件状态无效")
 		}
@@ -98,9 +98,13 @@ func (g Group) Terminal() bool {
 
 func (g Group) Summary() Group {
 	g.Received, g.Verified, g.TotalBytes = 0, 0, 0
-	g.FileCount = len(g.Files)
+	g.FileCount = 0
 	g.DoneFiles = 0
 	for _, f := range g.Files {
+		if f.State == "skipped" {
+			continue
+		}
+		g.FileCount++
 		g.Received += f.Received
 		g.Verified += f.Verified
 		g.TotalBytes += f.Total

@@ -32,6 +32,7 @@ func NewLoaderService(catalog LoaderCatalog, store LoaderRepository, forge *load
 }
 
 type resolvedVersion struct {
+	platform           meta.Platform
 	version            meta.Version
 	profileFingerprint string
 	libraryPaths       map[string]bool

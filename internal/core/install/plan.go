@@ -136,7 +136,7 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 		// ${arch} in the legacy format means x86 bitness, not host pointer
 		// width. Do not substitute 64 and accidentally select x86 on ARM.
 		if platform.Arch == "arm64" && strings.Contains(classifier, "${arch}") {
-			return Plan{}, fmt.Errorf("library %s has no explicit ARM64 native classifier", lib.Name)
+			return Plan{}, fmt.Errorf("%w: library %s has no explicit ARM64 native classifier", ErrNativeArchitecture, lib.Name)
 		}
 		bits := "64"
 		if platform.Arch == "386" {
@@ -147,7 +147,7 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 			return Plan{}, errors.New("unknown native classifier placeholder")
 		}
 		if platform.Arch == "arm64" && !strings.HasSuffix(classifier, "-arm64") && !strings.HasSuffix(classifier, "-aarch64") {
-			return Plan{}, fmt.Errorf("library %s lacks explicit ARM64 natives", lib.Name)
+			return Plan{}, fmt.Errorf("%w: library %s lacks explicit ARM64 natives", ErrNativeArchitecture, lib.Name)
 		}
 		matched, err := legacyNativeMatches(classifier, platform)
 		if err != nil {
@@ -183,6 +183,9 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 	}
 	for group, matched := range nativeGroups {
 		if !matched {
+			if platform.Arch == "arm64" {
+				return Plan{}, fmt.Errorf("%w: library %s has no native artifact for %s/%s", ErrNativeArchitecture, group, platform.OS, platform.Arch)
+			}
 			return Plan{}, fmt.Errorf("library %s has no native artifact for %s/%s", group, platform.OS, platform.Arch)
 		}
 	}
