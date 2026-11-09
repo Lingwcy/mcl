@@ -25,10 +25,11 @@ const (
 	newInstancePage      page = "new-instance"
 	instanceSettingsPage page = "instance-settings"
 	marketPage           page = "market"
+	aboutPage            page = "about"
 )
 
 func (p page) inSettings() bool {
-	return p == settingsPage || p == gameSettingsPage || p == downloadSettingsPage || p == accountsPage || p == settingsActivityPage
+	return p == settingsPage || p == gameSettingsPage || p == downloadSettingsPage || p == accountsPage || p == settingsActivityPage || p == aboutPage
 }
 
 const (
@@ -75,6 +76,8 @@ type Shell struct {
 	accounts         accountState
 	java             javaState
 	sidebarCollapsed bool
+	version          string
+	updates          Updates
 }
 
 func NewShell(settings app.Settings, dataDir string, loadErr error, save SaveSettings) *Shell {
@@ -191,6 +194,8 @@ func (s *Shell) View(c *ui.Context) {
 							s.activityView(c)
 						case logsPage:
 							s.logView(c)
+						case aboutPage:
+							s.aboutView(c)
 						}
 					})
 				})

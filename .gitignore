@@ -16,6 +16,8 @@ doc/
 # Public project pages
 !/README.md
 !/README.zh-CN.md
+# Release notes shown by the in-app updater; CI requires it.
+!/CHANGELOG.md
 
 # Earlier cover drafts
 /media/readme-hero.jpg

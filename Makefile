@@ -1,7 +1,7 @@
 GO := ./scripts/go.sh
 GOFILES := $(wildcard *.go) $(shell find internal -name '*.go' -type f)
 
-.PHONY: dev run fmt check-fmt vet test race check build package doctor
+.PHONY: dev run fmt check-fmt vet test race check build package package-signed doctor
 
 dev:
 	$(GO) tool mygo dev
@@ -32,8 +32,16 @@ check: check-fmt vet test build
 build:
 	CGO_ENABLED=0 $(GO) build ./...
 
+# Ad-hoc signed and not notarized: runs on this Mac only.
 package:
-	$(GO) tool mygo build
+	$(GO) tool mygo build -sign - -skip-notarize
+
+# Developer ID signed and notarized, as releases are. Needs the identity
+# (name or SHA-1 from `security find-identity -v -p codesigning`) and the
+# notarytool profile mcl-notary in the login keychain.
+package-signed:
+	@test -n "$$MACOS_SIGNING_IDENTITY" || { echo 'Set MACOS_SIGNING_IDENTITY to a Developer ID Application identity.'; exit 1; }
+	$(GO) tool mygo build -sign "$$MACOS_SIGNING_IDENTITY"
 
 doctor:
 	$(GO) tool mygo doctor

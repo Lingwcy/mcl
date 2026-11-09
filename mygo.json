@@ -5,6 +5,15 @@
   "out": "build",
   "slug": "mcl",
   "icon": "resources/icon.png",
+  "updates": {
+    "publicKey": "oLL1MeG3NXoQCCc0URCvMkrBCTXYUHpgNCjqCd2yvYk=",
+    "github": "Lingwcy/mcl"
+  },
+  "macos": {
+    "notarize": {
+      "keychainProfile": "mcl-notary"
+    }
+  },
   "urlSchemes": [
     "mcl"
   ],

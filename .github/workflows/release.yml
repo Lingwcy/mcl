@@ -1,6 +1,12 @@
 name: Desktop release
 
-# Update mygo.json's version, then push the matching vX.Y.Z tag.
+# Update mygo.json's version, add its section to CHANGELOG.md, commit, then
+# push the matching vX.Y.Z tag. A tag builds, signs, notarizes and uploads
+# every platform to a draft release, verifies it, then publishes it, which
+# makes installed launchers update to it.
+#
+# Manual runs build ad-hoc signed, unnotarized test installers as workflow
+# artifacts and publish nothing.
 on:
   push:
     tags:
@@ -21,6 +27,7 @@ jobs:
     outputs:
       number: ${{ steps.version.outputs.number }}
       revision: ${{ steps.version.outputs.revision }}
+      release: ${{ steps.version.outputs.release }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -29,6 +36,7 @@ jobs:
         env:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           version=$(jq -er '.version | strings' mygo.json)
           if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
@@ -39,16 +47,74 @@ jobs:
             echo "::error::The release tag must match v$version."
             exit 1
           fi
+          if ! grep -Eq "^## \[?${version//./\\.}\]?([[:space:]]|$)" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md needs a '## $version' section; the update window shows it."
+            exit 1
+          fi
+          release=false
+          if [[ "$EVENT_NAME" == push && "$REF_TYPE" == tag ]]; then
+            release=true
+          fi
           {
             echo "number=$version"
             echo "revision=$(git rev-parse HEAD)"
+            echo "release=$release"
           } >> "$GITHUB_OUTPUT"
+
+  draft:
+    name: Prepare draft release
+    if: needs.version.outputs.release == 'true'
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.revision }}
+          persist-credentials: false
+      # One draft for every platform job to upload to: without it, each
+      # concurrent `mygo build -upload` would create a draft of its own.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.version.outputs.number }}
+        run: |
+          draft=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$RELEASE_TAG\") | .draft")
+          case "$draft" in
+            "")
+              awk -v v="$RELEASE_VERSION" '
+                /^## / { if (found) exit; found = ($2 == v || $2 == "[" v "]"); next }
+                found
+              ' CHANGELOG.md > notes.md
+              gh release create "$RELEASE_TAG" --verify-tag --draft \
+                --title "mcl $RELEASE_TAG" --notes-file notes.md
+              ;;
+            true) echo "Reusing the draft release $RELEASE_TAG." ;;
+            false)
+              # Uploading again would replace files that installed apps
+              # already update from.
+              echo "::error::$RELEASE_TAG is already published; bump the version instead."
+              exit 1
+              ;;
+            *)
+              echo "::error::Multiple releases found for $RELEASE_TAG."
+              exit 1
+              ;;
+          esac
 
   package:
     name: Package ${{ matrix.name }}
-    needs: version
+    needs: [version, draft]
+    # The draft job is skipped for manual runs, which still package.
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.draft.result != 'failure' }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
+    timeout-minutes: 40
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -65,6 +131,7 @@ jobs:
             installer: mcl-setup-${{ needs.version.outputs.number }}-amd64.exe
     env:
       CGO_ENABLED: "0"
+      RELEASE: ${{ needs.version.outputs.release }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -73,11 +140,79 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Build installer
+      - name: Cache NSIS
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\mygo\nsis-*
+          key: nsis-${{ hashFiles('go.sum') }}
+      - name: Import the Developer ID certificate and notary credentials
+        if: runner.os == 'macOS' && env.RELEASE == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          for name in MACOS_CERTIFICATE MACOS_CERTIFICATE_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::The $name secret is missing."
+              exit 1
+            fi
+          done
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(openssl rand -base64 24)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          # Default and first in the search list, so codesign finds the
+          # identity and notarytool the mcl-notary profile of mygo.json.
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -d user -s "$keychain"
+          echo "$APPLE_API_KEY" > "$RUNNER_TEMP/notary.p8"
+          xcrun notarytool store-credentials mcl-notary --keychain "$keychain" \
+            --key "$RUNNER_TEMP/notary.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID"
+          rm -f "$RUNNER_TEMP/notary.p8"
+          # Sign by the certificate's SHA-1 so its name never has to live in
+          # the repository or the workflow.
+          identity=$(security find-identity -v -p codesigning "$keychain" \
+            | awk '/"Developer ID Application: / { print $2; exit }')
+          if [[ -z "$identity" ]]; then
+            echo "::error::MACOS_CERTIFICATE holds no Developer ID Application identity."
+            exit 1
+          fi
+          echo "MACOS_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+      - name: Build, sign and upload to the draft release
+        if: env.RELEASE == 'true'
         shell: bash
         env:
           PLATFORM: ${{ matrix.platform }}
-        run: go tool mygo build -platform "$PLATFORM" -o build/release -skip-notarize
+          GH_TOKEN: ${{ github.token }}
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$MYGO_UPDATER_PRIVATE_KEY" ]]; then
+            echo "::error::The MYGO_UPDATER_PRIVATE_KEY secret is missing."
+            exit 1
+          fi
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            signing=(-sign "$MACOS_SIGNING_IDENTITY")
+          else
+            # macos.notarize applies to disk images only.
+            signing=(-skip-notarize)
+          fi
+          go tool mygo build -platform "$PLATFORM" -o build/release "${signing[@]}" -upload
+      - name: Build test installer
+        if: env.RELEASE != 'true'
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: go tool mygo build -platform "$PLATFORM" -o build/release -sign - -skip-notarize
       - name: Verify Windows x64 application and installer payload
         if: runner.os == 'Windows'
         shell: pwsh
@@ -94,19 +229,37 @@ jobs:
           INSTALLER: ${{ matrix.installer }}
         run: |
           bundle="build/release/darwin-universal/mcl.app"
+          dmg="build/release/darwin-universal/$INSTALLER"
           arches=$(lipo -archs "$bundle/Contents/MacOS/mcl")
           if [[ " $arches " != *" arm64 "* || " $arches " != *" x86_64 "* ]]; then
             echo "::error::Expected arm64 and x86_64, found $arches."
             exit 1
           fi
           codesign --verify --deep --strict "$bundle"
-          hdiutil verify "build/release/darwin-universal/$INSTALLER"
-      - name: Verify installer exists
+          hdiutil verify "$dmg"
+          if [[ "$RELEASE" == true ]]; then
+            details=$(codesign -dvv "$bundle" 2>&1)
+            grep -q '^Authority=Developer ID Application: ' <<< "$details" || { echo "::error::Not signed with a Developer ID."; exit 1; }
+            grep -q 'flags=.*runtime' <<< "$details" || { echo "::error::Hardened runtime is off."; exit 1; }
+            xcrun stapler validate "$bundle"
+            xcrun stapler validate "$dmg"
+            spctl --assess --type execute --verbose=4 "$bundle"
+            spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
+          fi
+      - name: Verify installer and update files exist
         shell: bash
         env:
           INSTALLER: ${{ matrix.installer }}
           DIRECTORY: ${{ matrix.directory }}
-        run: test -s "build/release/$DIRECTORY/$INSTALLER"
+          VERSION: ${{ needs.version.outputs.number }}
+        run: |
+          out="build/release/$DIRECTORY"
+          test -s "$out/$INSTALLER"
+          if [[ "$RELEASE" == true ]]; then
+            test -s "$out/update-$DIRECTORY.json"
+            test -s "$out/mcl-$VERSION-$DIRECTORY.tar.gz"
+            jq -e --arg v "$VERSION" '.version == $v' "$out/update-$DIRECTORY.json" > /dev/null
+          fi
       - uses: actions/upload-artifact@v7
         with:
           name: mcl-${{ matrix.directory }}
@@ -114,22 +267,16 @@ jobs:
           if-no-files-found: error
           overwrite: true
 
-  release:
+  publish:
     name: Publish GitHub release
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: needs.version.outputs.release == 'true'
     needs: [version, package]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: mcl-*
-          path: release-assets
-          merge-multiple: true
-      - name: Publish verified installers
-        working-directory: release-assets
+      - name: Verify assets, rewrite checksums and publish
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -137,45 +284,33 @@ jobs:
           RELEASE_VERSION: ${{ needs.version.outputs.number }}
           RELEASE_REVISION: ${{ needs.version.outputs.revision }}
         run: |
-          installers=("mcl-$RELEASE_VERSION.dmg" "mcl-setup-$RELEASE_VERSION-amd64.exe")
-          for installer in "${installers[@]}"; do
-            test -s "$installer"
-          done
-          sha256sum "${installers[@]}" > SHA256SUMS.txt
-
           revision=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)
           if [[ "$revision" != "$RELEASE_REVISION" ]]; then
             echo "::error::The release tag no longer points to the packaged commit."
             exit 1
           fi
-          draft=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
-            --jq ".[] | select(.tag_name == \"$RELEASE_TAG\") | .draft")
-          case "$draft" in
-            false)
-              echo "$RELEASE_TAG is already published."
-              exit 0
-              ;;
-            "")
-              gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes \
-                --title "mcl $RELEASE_TAG" \
-                --notes "macOS: universal DMG (Apple Silicon and Intel), ad-hoc signed and not notarized. Windows: unsigned x64 (x86-64/AMD64, Intel and AMD) installer, not ARM64 or 32-bit x86."
-              ;;
-            true) ;;
-            *)
-              echo "::error::Multiple releases found for $RELEASE_TAG."
-              exit 1
-              ;;
-          esac
-
-          files=("${installers[@]}" SHA256SUMS.txt)
-          gh release upload "$RELEASE_TAG" --clobber "${files[@]}"
-          uploaded=$(gh release view "$RELEASE_TAG" --json assets \
+          assets=$(gh release view "$RELEASE_TAG" --json assets \
             --jq '.assets[] | select(.state == "uploaded") | [.name, .digest] | @tsv')
-          for file in "${files[@]}"; do
-            digest=$(sha256sum "$file" | cut -d ' ' -f 1)
-            if ! grep -Fxq "$(printf '%s\tsha256:%s' "$file" "$digest")" <<< "$uploaded"; then
-              echo "::error::Uploaded asset checksum mismatch: $file"
+          required=(
+            "mcl-$RELEASE_VERSION.dmg"
+            "mcl-setup-$RELEASE_VERSION-amd64.exe"
+            "mcl-$RELEASE_VERSION-darwin-universal.tar.gz"
+            "mcl-$RELEASE_VERSION-windows-amd64.tar.gz"
+            "update-darwin-universal.json"
+            "update-windows-amd64.json"
+            "install.sh"
+            "install.ps1"
+          )
+          for name in "${required[@]}"; do
+            if ! cut -f 1 <<< "$assets" | grep -Fxq "$name"; then
+              echo "::error::The release is missing $name."
               exit 1
             fi
           done
-          gh release edit "$RELEASE_TAG" --draft=false
+          # Both platform jobs merge SHA256SUMS at the same time, so one may
+          # have dropped the other's lines. Rebuild it from GitHub's digests.
+          awk -F '\t' '$1 != "SHA256SUMS" && $2 ~ /^sha256:/ { sub(/^sha256:/, "", $2); print $2 "  " $1 }' \
+            <<< "$assets" | sort -k 2 > SHA256SUMS
+          cat SHA256SUMS
+          gh release upload "$RELEASE_TAG" --clobber SHA256SUMS
+          gh release edit "$RELEASE_TAG" --draft=false --latest
