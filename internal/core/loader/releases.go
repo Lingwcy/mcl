@@ -19,16 +19,12 @@ func (c *Client) forgeReleases(ctx context.Context, kind, game string) ([]Releas
 	var versions []string
 	recommended := ""
 	if kind == "forge" {
-		data, err := c.bytes(ctx, c.ForgeURL+"/maven-metadata.json", 4<<20)
+		var err error
+		versions, err = c.forgeVersions(ctx, game)
 		if err != nil {
 			return nil, err
 		}
-		var catalog map[string][]string
-		if err := json.Unmarshal(data, &catalog); err != nil {
-			return nil, errors.New("Forge 版本目录无效")
-		}
-		versions = catalog[game]
-		data, err = c.bytes(ctx, c.ForgeURL+"/promotions_slim.json", 1<<20)
+		data, err := c.bytes(ctx, c.ForgeURL+"/promotions_slim.json", 1<<20)
 		if err == nil {
 			var promotions struct {
 				Promos map[string]string `json:"promos"`
@@ -186,4 +182,47 @@ func compareBuild(a, b string) int {
 		return 1
 	}
 	return 0
+}
+
+// The files-site JSON and Maven XML are both official indices. An unavailable
+// primary index must not force guessing a suffix or selecting a newer build.
+func (c *Client) forgeVersions(ctx context.Context, game string) ([]string, error) {
+	data, primaryErr := c.bytes(ctx, c.ForgeURL+"/maven-metadata.json", 4<<20)
+	if primaryErr == nil {
+		var catalog map[string][]string
+		if err := json.Unmarshal(data, &catalog); err == nil {
+			versions := catalog[game]
+			if len(versions) > 10000 {
+				return nil, errors.New("Forge 版本数量过多")
+			}
+			return versions, ctx.Err()
+		}
+		primaryErr = errors.New("Forge 官方 JSON 目录无效")
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	data, err := c.bytes(ctx, "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml", 4<<20)
+	if err != nil {
+		return nil, errors.Join(primaryErr, err)
+	}
+	var catalog struct {
+		Versions []string `xml:"versioning>versions>version"`
+	}
+	if err := xml.Unmarshal(data, &catalog); err != nil {
+		return nil, errors.New("Forge 官方 Maven 目录无效")
+	}
+	if len(catalog.Versions) > 50000 {
+		return nil, errors.New("Forge 官方 Maven 版本数量过多")
+	}
+	var versions []string
+	for _, version := range catalog.Versions {
+		if strings.HasPrefix(version, game+"-") {
+			versions = append(versions, version)
+		}
+	}
+	if len(versions) > 10000 {
+		return nil, errors.New("Forge 游戏版本数量过多")
+	}
+	return versions, ctx.Err()
 }

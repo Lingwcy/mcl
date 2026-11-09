@@ -957,3 +957,17 @@ gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...成功；Win
 - build/darwin-arm64/mcl-0.0.4-java-fallback-arm64.dmg：10,039,296字节。
 
 macOS体验包临时签名、未公证，未发签名自动更新或Release。新增回归只格式源码、未执行/未编译测试目标；没有test/vet/race/Tester、Java安装/Probe、加载器处理器、游戏、Rosetta/窗口自动化或用户真实实例操作。跨编译不代表对应平台功能已验收。只读核对官方JSON/镜像目录与真实二进制下载/执行分开记录，后者仍待用户体验。
+
+
+## 38. 用户截图：Forge10.13.4.1614安装包摘要请求404
+
+用户截图从ARM native问题越过到Forge安装包摘要/大小请求404。静态定位：整合包要求短build10.13.4.1614，app.LoaderService未调用已有官方发行目录，直接forgeInstaller拼成1.7.10-10.13.4.1614；旧代际官方目录可能以同构建游戏分支10.13.4.1614-1.7.10标识。此前目录列表保留后缀，但整合包/已有实例启动未做短版本到完整分支映射。
+
+新增CanonicalForgeRequest，仅历史Forge数字短build读取官方索引，优先精确条目，否则只接受同build且branch完全等于GameVersion的条目；不拼猜后缀、不换高版本/别的MC/预发布分支。显式分支和现代Forge不增加索引请求。JSON目录不可用时回退同官方Maven XML，输入仍4MiB/有界版本数/取消保护。
+
+LoaderService先读原缓存和受保护别名，再在缓存未命中时规范化请求；完整分支连同BaseSHA1/完整继承摘要/OS/架构进入原profile/runtime缓存key，安装器Universal/版本ID仍按完整身份核验。实例/整合包记录及任务指纹保留原短build，不改用户固定要求、不重建实例。成功合并、原运行库校验通过后才写cache/loader-aliases/<requested.Key>.json（schema1/8KiB/私有原子写与目录sync），已缓存映射不每次查索引/重复写；损坏/错build/平台/基底映射拒绝且保留，不在离线时重新猜版本。
+
+新增回归源码覆盖短build精确映射与Maven文件名、未知/其他build/跨游戏分支拒绝、完整基底/平台保护、官方XML回退、显式/现代不查索引、取消不继续、映射无对应完整profile不发布及损坏记录保留。全部未执行/未编译测试目标。本轮只读核对官方JSON及两种候选.sha1/HEAD时，开发环境均返回HTTP403，未取得公网成功证据；不能把合成fixture写成真实10.13.4.1614安装器验收。只格式/生产编译/体验包，不跑Java/安装器/游戏或真实用户目录操作。无新增常驻UI提示、依赖或配置schema；等待用户现有实例重试反馈。
+
+
+本批构建：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64主程序编译成功（build/mcl-forge-branch-fix-windows-amd64.exe，34,045,440字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功（build/darwin-arm64/mcl-0.0.4-forge-branch-fix-arm64.dmg，10,052,096字节，临时签名、未公证）。新增回归只源码未运行/未编译测试目标，无test/vet/自动化/真实Forge/Java/游戏验收；公开元数据请求403的限制保留。不合并main、不发版。

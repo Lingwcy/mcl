@@ -51,7 +51,39 @@ func (s *LoaderService) resolve(ctx context.Context, value instance.Instance, ba
 	if err != nil {
 		return resolvedVersion{}, err
 	}
+	requested := request
+	knownAlias := false
+	if aliases, ok := s.store.(interface {
+		LoadRequestAlias(context.Context, loader.Request) (loader.Request, error)
+	}); ok && request.Type == "forge" {
+		canonical, err := aliases.LoadRequestAlias(ctx, request)
+		if err != nil {
+			return resolvedVersion{}, fmt.Errorf("读取 Forge 固定构建映射: %w", err)
+		}
+		if err := loader.ValidateForgeAlias(request, canonical); err != nil {
+			return resolvedVersion{}, err
+		}
+		knownAlias = canonical != request
+		request = canonical
+	}
 	profile, cacheErr := s.store.Load(ctx, request)
+	if cacheErr != nil && request.Type == "forge" {
+		if canonicalizer, ok := s.catalog.(interface {
+			CanonicalForgeRequest(context.Context, loader.Request) (loader.Request, error)
+		}); ok {
+			canonical, err := canonicalizer.CanonicalForgeRequest(ctx, request)
+			if err != nil {
+				return resolvedVersion{}, fmt.Errorf("解析 Forge %s 完整发行编号: %w", required.Version, err)
+			}
+			if err := loader.ValidateForgeAlias(request, canonical); err != nil {
+				return resolvedVersion{}, err
+			}
+			if canonical != request {
+				request = canonical
+				profile, cacheErr = s.store.Load(ctx, request)
+			}
+		}
+	}
 	if cacheErr != nil {
 		if err := ctx.Err(); err != nil {
 			return resolvedVersion{}, err
@@ -86,9 +118,19 @@ func (s *LoaderService) resolve(ctx context.Context, value instance.Instance, ba
 	if profile.Request != request {
 		return resolvedVersion{}, fmt.Errorf("加载器缓存与当前完整基底身份不匹配")
 	}
+
 	effective, err := profile.Merge(base)
 	if err != nil {
 		return resolvedVersion{}, err
+	}
+	if requested != request && !knownAlias {
+		if aliases, ok := s.store.(interface {
+			SaveRequestAlias(context.Context, loader.Request, loader.Request) error
+		}); ok {
+			if err := aliases.SaveRequestAlias(ctx, requested, request); err != nil {
+				return resolvedVersion{}, fmt.Errorf("保存 Forge 固定构建映射: %w", err)
+			}
+		}
 	}
 	paths := make(map[string]bool, len(profile.Libraries))
 	for _, library := range profile.Libraries {
