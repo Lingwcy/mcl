@@ -22,6 +22,9 @@ type marketInstallState struct {
 	archiveBitmap                         *ui.Bitmap
 	archiveIconOpen, archiveIconBusy      bool
 	archiveIconCancel                     func()
+	archiveIconGeneration                 uint64
+	archiveIconChosen                     bool
+	archiveIconURL                        string
 	archiveDirectoryID                    *string
 	project                               market.Project
 	version                               market.Version
@@ -52,6 +55,12 @@ func (s *Shell) selectMarketInstall(project market.Project, version market.Versi
 	if m.install != nil && m.install.busy {
 		m.message = "已有资产安装任务"
 		return
+	}
+	if m.install != nil {
+		s.cancelArchiveIcon(m.install)
+	}
+	if m.detail != nil && m.detail.Project.ID == project.ID && m.detail.Project.Source == project.Source && project.IconURL == "" {
+		project.IconURL = m.detail.Project.IconURL
 	}
 	s.closeMarketVersion()
 	id := m.targetID
@@ -84,6 +93,16 @@ func (s *Shell) selectMarketInstall(project market.Project, version market.Versi
 	}
 	if project.Kind == market.DataPack {
 		s.loadInstallWorlds()
+	}
+	if project.Kind == market.Modpack {
+		m.install.archiveName = archiveInitialName(project.Title)
+		directory := s.settings.GameDirectoryID
+		if m.install.archiveDirectoryID != nil {
+			directory = *m.install.archiveDirectoryID
+		}
+		m.install.archiveDirectoryID = &directory
+		s.loadArchiveProjectIcon(m.install)
+		s.inspectMarketArchive()
 	}
 }
 func (s *Shell) loadInstallWorlds() {

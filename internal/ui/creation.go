@@ -211,6 +211,7 @@ func (s *Shell) beginArchiveInspection(run func(func(app.ArchiveImportPlan, erro
 			return
 		}
 		request := plan.Request
+		s.cancelArchiveIcon(s.market.install)
 		s.market.install = &marketInstallState{
 			project:     market.Project{Source: request.Source, Kind: market.Modpack, ID: request.ProjectID, Title: plan.Instance.Name},
 			version:     market.Version{Source: request.Source, ProjectID: request.ProjectID, ID: request.VersionID, Name: plan.Manifest.Version},

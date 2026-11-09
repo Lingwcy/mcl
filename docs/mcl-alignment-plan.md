@@ -881,3 +881,18 @@ C阶段实现矩阵见第24节，用户1.6.1反馈修复见第25节；D1已开�
 
 
 本批构建：gofmt、git diff --check及CGO_ENABLED=0 ./scripts/go.sh build ./...通过，Windows amd64主程序编译成功（build/mcl-cache-display-windows-amd64.exe，33,928,704字节），MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-cache-display-arm64.dmg，10,023,936字节，临时签名、未公证）。未跑测试/vet/Tester/自动化/原生/用户真实缓存扫描或清理，未新增回归，不把构建称为交互验收。留在feature/persistent-download-tasks，不合并main/发版。
+
+
+## 34. T体验：精简整合包确认流程与项目图标
+
+用户连续反馈：移除常驻“从本地补齐”、优化确认页和描述输入、使用对应市场整合包icon；同时明确删除只有名称/游戏目录/继续的中间页。
+
+- 在线选择整合包版本后直接发起原后台Inspect并固定当前游戏目录，进入读取状态后到最终确认；不会自动发布或跳过可选文件/固定清单确认。成功后仍直达实例。读取失败提供重新读取，返回直接离开当前导入，不恢复多余中间页。地图仍需真实目标实例/存档选择。
+- 确认页48DIP图标、可编辑名称与单行来源/版本/Minecraft/loader元信息集中在顶部；删除重复整合包名称/大输入框和独立元信息块。描述改MyGo原生TextAreaBase，64DIP可换行编辑，使用共同内容组的内边距和细边框，不嵌单行灰输入框；目录行仍紧凑。清单圆角细边框和自身滚动，底部右对齐30DIP安装按钮，无外层表单Scroll。
+- 移除无条件“从本地补齐”和空工具栏。真实受限/缺失文件仍明确阻止安装、保留原项目页，并只在对应缺失文件行提供选择文件图标；不跳摘要、不绕分发，不删除原手动补齐后端或限制说明。原始包受限时仍须选择对应压缩包。
+- 新增显式InstanceIcon异步动作，与原市场图片共用四项并发和平台图片适配：仅公共Modrinth/CF图像CDN、2MiB/2048x2048、80x80归一化、后台PNG编码、Window.Update交付；UI渲染不联网/读盘/编码。市场已有bitmap可先显示，完成后把PNG副本放入导入Request和Instance，下载/导入进度以及创建后实例均可使用，不依赖市场列表bitmap寿命或只存URL。
+- 详情中补全IconURL后按同来源项目ID带入；元信息回调不能重置先到的项目图标；手动预设/本地图片覆盖会取消网络任务并递增generation，迟到图标不能覆盖。切换导入、返回、关窗主动取消，旧任务指针/代际均拒绝。用户选择自动时可重新加载项目图标；失败Toast并明确回到默认图标，不能仅显示缓存缩略图却静默保存空图标。本地包没有远端市场身份时继续原图标规则。
+- 新增回归源码覆盖版本选择立即读取/固定目录、图标先到不被元信息重置、PNG进入固定导入快照与独立字节所有权、取消/手动预设/替换任务拒绝迟到回调；全部未运行、未编译测试目标。仅格式/生产构建/体验包，不访问公网或运行原生交互、真实包/Java/游戏验收；没有新增依赖或配置schema。
+
+
+本批构建记录：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64主程序交叉编译成功（build/mcl-pack-editor-windows-amd64.exe，33,943,040字节）。MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-pack-editor-arm64.dmg，10,026,496字节，临时签名、未公证）。新增回归只源码、未执行/未编译测试目标，未跑vet/Tester/原生交互、公共图标请求/真实整合包导入或Java/游戏验收。无新依赖/配置schema，参考目录未动；留feature/persistent-download-tasks，不合并main/发版。

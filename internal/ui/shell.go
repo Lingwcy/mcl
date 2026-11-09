@@ -101,6 +101,7 @@ func (s *Shell) BindWindow(window *mygo.Window) {
 	window.OnFocus(func() { s.memory.blurred = false; s.syncMemoryObservation(); window.Invalidate() })
 	window.OnBlur(func() { s.memory.blurred = true; s.syncMemoryObservation(); window.Invalidate() })
 	window.OnClosed(func() {
+		s.cancelArchiveIcon(s.market.install)
 		s.downloadTools.closed = true
 		s.cancelDownloadTools()
 		s.memory.blurred = true
