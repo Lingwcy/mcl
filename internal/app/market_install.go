@@ -36,6 +36,7 @@ func (e *MissingMarketFilesError) Error() string {
 }
 
 type MarketInstaller struct {
+	Tasks     *TaskService
 	catalog   *MarketService
 	instances InstanceReader
 	registry  SessionRegistry
@@ -125,6 +126,26 @@ func (s *MarketInstaller) Supply(ctx context.Context, plan market.InstallPlan, p
 }
 
 func (s *MarketInstaller) Install(ctx context.Context, plan market.InstallPlan, report func(download.Progress)) error {
+	if s.Tasks != nil && taskScope(ctx) == nil {
+		intent, err := taskPlanIntent(ctx, s.instances, "market", "安装市场资源", plan.Request.InstanceID, plan)
+		if err != nil {
+			return err
+		}
+		return s.Tasks.Execute(ctx, intent, func(task context.Context) error {
+			if err := checkTaskTarget(task, s.instances, intent); err != nil {
+				return err
+			}
+			current := plan
+			if TaskAttempt(task) > 1 {
+				fresh, err := s.refreshTaskPlan(task, plan)
+				if err != nil {
+					return err
+				}
+				current = fresh
+			}
+			return s.Install(task, current, report)
+		})
+	}
 	request := plan.Request
 	lease, err := s.registry.Reserve(ctx, request.InstanceID)
 	if err != nil {
@@ -133,6 +154,9 @@ func (s *MarketInstaller) Install(ctx context.Context, plan market.InstallPlan, 
 	defer lease.Close()
 	value, err := s.instances.Get(ctx, request.InstanceID)
 	if err != nil {
+		return err
+	}
+	if err := checkTaskInstance(ctx, value); err != nil {
 		return err
 	}
 	if value.Version.ID != request.GameVersion {
@@ -162,6 +186,9 @@ func (s *MarketInstaller) Install(ctx context.Context, plan market.InstallPlan, 
 		if err := s.downloads.Run(ctx, files, report); err != nil {
 			return fmt.Errorf("下载资产: %w", err)
 		}
+	}
+	if err := TaskStage(ctx, "发布"); err != nil {
+		return err
 	}
 	if err := s.files.Commit(ctx, plan); err != nil {
 		return fmt.Errorf("写入实例资产: %w", err)

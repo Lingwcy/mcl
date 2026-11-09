@@ -349,7 +349,11 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 			if err != nil {
 				return err
 			}
-			minimum := 8
+			// Modern installers run with at least the official game JVM baseline.
+			// Java 8 class headers only describe the bytecode floor; they do not
+			// require a Java 8 process for a Java 17/21 game installation. Keep
+			// the existing exact-8 policy for historical game/tool combinations.
+			minimum := max(8, base.Java.Major)
 			var classpath []string
 			for _, relative := range p.classpath {
 				file, ok := known[relative]

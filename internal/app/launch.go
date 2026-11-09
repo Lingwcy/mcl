@@ -24,6 +24,7 @@ type ProcessStarter func(launch.Plan, func(launch.ProcessIdentity) error) (launc
 type GameDirectoryResolver func(context.Context, string) (string, error)
 
 type LaunchService struct {
+	Tasks           *TaskService
 	gameDirectory   GameDirectoryResolver
 	installations   *InstallationService
 	resolveJava     JavaResolver
@@ -49,6 +50,18 @@ type PreparationReport struct {
 // Check prepares and releases an instance. A launch prepares again under its
 // own reservation before using the selected identity.
 func (s *LaunchService) Check(ctx context.Context, id string, settings Settings, report func(install.Progress)) (PreparationReport, error) {
+	if s.Tasks != nil && taskScope(ctx) == nil {
+		intent, err := taskGameIntent(ctx, s.installations.instances, id, "preparation")
+		if err != nil {
+			return PreparationReport{}, err
+		}
+		return performTask(ctx, s.Tasks, intent, func(task context.Context) (PreparationReport, error) {
+			if err := checkTaskTarget(task, s.installations.instances, intent); err != nil {
+				return PreparationReport{}, err
+			}
+			return s.Check(task, id, settings, report)
+		})
+	}
 	p, err := s.Prepare(ctx, id, settings, report)
 	if err != nil {
 		return PreparationReport{}, err
@@ -82,6 +95,18 @@ type LaunchResult struct {
 }
 
 func (s *LaunchService) Run(ctx context.Context, id string, settings Settings, resolve func(context.Context) (launch.Session, error), report func(install.Progress)) (LaunchResult, error) {
+	if s.Tasks != nil && taskScope(ctx) == nil {
+		intent, err := taskGameIntent(ctx, s.installations.instances, id, "preparation")
+		if err != nil {
+			return LaunchResult{}, err
+		}
+		return performTask(ctx, s.Tasks, intent, func(task context.Context) (LaunchResult, error) {
+			if err := checkTaskTarget(task, s.installations.instances, intent); err != nil {
+				return LaunchResult{}, err
+			}
+			return s.Run(task, id, settings, resolve, report)
+		})
+	}
 	p, err := s.Prepare(ctx, id, settings, report)
 	if err != nil {
 		return LaunchResult{}, err
@@ -144,6 +169,10 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	if err != nil {
 		return nil, err
 	}
+	if err := checkTaskInstance(ctx, value); err != nil {
+		return nil, err
+	}
+
 	gameDirectory := ""
 	if s.gameDirectory != nil {
 		directory, err := s.gameDirectory(ctx, id)
@@ -162,20 +191,24 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	if err != nil {
 		return nil, err
 	}
-	if _, err := install.Build(base, s.installations.platform); err != nil {
-		return nil, fmt.Errorf("客户端平台兼容性: %w", err)
+	target, err := s.installations.targetPlatform(ctx, base)
+	if err != nil {
+		return nil, err
 	}
 	javaProgress := func(p java.Progress) {
 		if report != nil {
 			report(install.Progress{Stage: p.Stage, Progress: download.Progress{Bytes: p.Bytes, TotalBytes: p.Total}})
 		}
 	}
+	if err := taskBaseIdentity(ctx, value, base); err != nil {
+		return nil, err
+	}
 	preferred := []string{value.JavaPath, fallback.JavaPath}
-	runtime, err := s.resolveJava(ctx, base.Java.Major, s.installations.platform, preferred, javaProgress)
+	runtime, err := s.resolveJava(ctx, base.Java.Major, target, preferred, javaProgress)
 	if err != nil {
 		return nil, err
 	}
-	if err := runtime.Check(base.Java.Major, s.installations.platform); err != nil {
+	if err := runtime.Check(base.Java.Major, target); err != nil {
 		return nil, err
 	}
 	// Pass the verified game executable only as a hint. The loader resolves its
@@ -187,12 +220,12 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 		return nil, err
 	}
 	if resolved.version.Java.Major > runtime.Major {
-		runtime, err = s.resolveJava(ctx, resolved.version.Java.Major, s.installations.platform, preferred, javaProgress)
+		runtime, err = s.resolveJava(ctx, resolved.version.Java.Major, target, preferred, javaProgress)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if err := runtime.Check(resolved.version.Java.Major, s.installations.platform); err != nil {
+	if err := runtime.Check(resolved.version.Java.Major, target); err != nil {
 		return nil, err
 	}
 	receipt, err := s.installations.execute(ctx, value, resolved, report)
@@ -209,7 +242,7 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	}
 	options := launch.Options{
 		Root: s.installations.client.Root, InstanceID: id, Version: resolved.version, GameDirectory: gameDirectory,
-		Platform: s.installations.platform, Java: runtime, NativeDirectory: receipt.NativeDirectory, LegacyAssetsDirectory: receipt.LegacyAssetsDirectory,
+		Platform: target, Java: runtime, NativeDirectory: receipt.NativeDirectory, LegacyAssetsDirectory: receipt.LegacyAssetsDirectory,
 		MaxMemoryMiB: memoryMiB,
 		GCMode:       fallback.GCMode, JVMArguments: jvmArguments, Game: fallback.Game,
 	}

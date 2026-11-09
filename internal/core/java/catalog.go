@@ -17,9 +17,11 @@ import (
 	"mcl/internal/core/meta"
 )
 
-// Package pins one official Eclipse Temurin binary and its SHA-256.
+// Package pins an official vendor binary and its SHA-256. Empty Provider is
+// retained as Temurin for existing durable tasks and managed installations.
 type Package struct {
 	Name, Version, Kind, OS, Arch string
+	Provider                      string
 	URL, SHA256                   string
 	Size                          int64
 	Major                         int
@@ -42,7 +44,7 @@ func NewCatalogClient() *CatalogClient {
 }
 
 // Catalog uses official Adoptium v3 metadata, never a hardcoded binary URL.
-func (c *CatalogClient) Catalog(ctx context.Context, major int, platform meta.Platform) (Catalog, error) {
+func (c *CatalogClient) temurinCatalog(ctx context.Context, major int, platform meta.Platform) (Catalog, error) {
 	result := Catalog{}
 	var info struct {
 		Available []int `json:"available_releases"`
@@ -103,7 +105,7 @@ func (c *CatalogClient) Catalog(ctx context.Context, major int, platform meta.Pl
 				continue
 			}
 			p := Package{
-				Name: "Eclipse Temurin", Version: asset.Version.Semver, Major: major,
+				Provider: "temurin", Name: "Eclipse Temurin", Version: asset.Version.Semver, Major: major,
 				Kind: kind, OS: platform.OS, Arch: meta.NormalizeArch(platform.Arch),
 				URL: binary.Package.Link, SHA256: binary.Package.Checksum, Size: binary.Package.Size,
 			}
@@ -129,12 +131,24 @@ func (p Package) Validate() error {
 	u, urlErr := url.Parse(p.URL)
 	if err != nil || len(digest) != 32 || p.SHA256 != fmt.Sprintf("%x", digest) ||
 		p.Size <= 0 || p.Size > 1<<30 || urlErr != nil || u.Scheme != "https" ||
-		u.User != nil || u.Host != "github.com" || u.RawQuery != "" || u.Fragment != "" {
+		u.User != nil || u.Port() != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.RawPath != "" && p.Vendor() != "temurin") {
 		return errors.New("Java 下载元数据缺少有效摘要、大小或官方地址")
 	}
-	prefix := "/adoptium/temurin" + strconv.Itoa(p.Major) + "-binaries/releases/download/"
-	if !strings.HasPrefix(u.Path, prefix) || (p.Kind != "jdk" && p.Kind != "jre") {
-		return errors.New("Java 下载来源不是对应版本的官方发行仓库")
+	if p.Kind != "jdk" && p.Kind != "jre" {
+		return errors.New("Java 包类型无效")
+	}
+	switch p.Vendor() {
+	case "temurin":
+		prefix := "/adoptium/temurin" + strconv.Itoa(p.Major) + "-binaries/releases/download/"
+		if u.Host != "github.com" || !strings.HasPrefix(u.Path, prefix) {
+			return errors.New("Java 下载来源不是对应版本的官方发行仓库")
+		}
+	case "zulu":
+		if u.Host != "cdn.azul.com" || !strings.HasPrefix(u.Path, "/zulu/bin/") || !validZuluFilename(p) {
+			return errors.New("Java 下载来源不是对应平台的 Azul 官方发行包")
+		}
+	default:
+		return errors.New("未知 Java 发行商")
 	}
 	return nil
 }
@@ -148,7 +162,10 @@ func (c *CatalogClient) get(ctx context.Context, endpoint string, target any) er
 	req.Header.Set("Accept", "application/json")
 	response, err := c.HTTP.Do(req)
 	if err != nil {
-		return fmt.Errorf("读取 Java 下载目录: %w", err)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return errors.New("读取 Java 下载目录失败")
 	}
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusNotFound {

@@ -4,10 +4,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mcl/internal/app"
-
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+
+	"mcl/internal/app"
 )
 
 type page string
@@ -64,6 +64,7 @@ type Shell struct {
 	gameSettings     gameSettingsState
 	downloadSettings downloadSettingsState
 	downloadTools    downloadToolsState
+	downloadJobs     downloadTaskState
 	gameDirectories  gameDirectoriesState
 	dataDir          string
 	loadErr          error
@@ -100,8 +101,13 @@ func (s *Shell) BindWindow(window *mygo.Window) {
 	window.OnFocus(func() { s.memory.blurred = false; s.syncMemoryObservation(); window.Invalidate() })
 	window.OnBlur(func() { s.memory.blurred = true; s.syncMemoryObservation(); window.Invalidate() })
 	window.OnClosed(func() {
+		s.cancelArchiveIcon(s.market.install)
+		s.downloadTools.closed = true
+		s.cancelDownloadTools()
 		s.memory.blurred = true
 		s.syncMemoryObservation()
+		s.downloadJobs.closed = true
+		s.closeDownloadTask()
 		s.existing.closed = true
 		s.cancelExistingGames()
 		s.directories.closed = true
@@ -130,6 +136,9 @@ func (s *Shell) toggleAppearance() {
 }
 
 func (s *Shell) View(c *ui.Context) {
+	if s.page != activityPage && s.page != settingsActivityPage && s.downloadJobs.selected != "" {
+		s.closeDownloadTask()
+	}
 	if s.page != directoryPage && s.directories.busy && !s.directories.running {
 		s.cancelDirectoryPreview()
 	}
@@ -279,10 +288,11 @@ func (s *Shell) saveSettings() {
 		if err != nil {
 			s.notice, s.noticeFail = err.Error(), true
 		} else {
-			if s.settings.Download != snapshot.Download {
+			downloadsChanged := s.settings.Download != snapshot.Download
+			s.settings = snapshot
+			if downloadsChanged {
 				s.downloadPreferencesCommitted()
 			}
-			s.settings = snapshot
 		}
 		if s.savePending {
 			s.saveSettings()

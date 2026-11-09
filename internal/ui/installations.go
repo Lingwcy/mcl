@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo/ui"
+
 	"mcl/internal/app"
 	"mcl/internal/core/install"
 	"mcl/internal/core/instance"
 	"mcl/internal/core/launch"
 	"mcl/internal/core/loader"
 	"mcl/internal/core/meta"
-
-	"github.com/egoist/mygo/ui"
 )
 
 // InstallationActions delivers callbacks on the UI thread. Start returns a
@@ -324,11 +324,14 @@ func installationStage(stage string) string {
 	}
 }
 
-func (s *Shell) activityView(c *ui.Context) {
+func (s *Shell) legacyActivityView(c *ui.Context) {
 	i, t := &s.installation, s.theme
 	ui.Scroll(c).Grow(1).FillWidth().Padding(18, 24, 24).Gap(8).Children(func() {
 		ui.Row(c).FillWidth().Height(28).Shrink(0).Gap(8).Children(func() {
 			settingsGroupLabel(c, "下载与任务").Grow(1)
+			if s.downloadJobs.actions.Refresh != nil {
+				ui.Button(c.Key("back-download-tasks"), "下载任务").Height(24).OnClick(func() { s.downloadJobs.showLegacy = false })
+			}
 			ui.Button(c.Key("refresh-sessions"), "刷新会话").Height(24).Disabled(i.sessionsBusy).OnClick(s.refreshSessions)
 		})
 		ui.Button(c.Key("open-directory-operations"), "目录迁移与复制任务…").Height(26).OnClick(s.openDirectoryTasks)
@@ -388,8 +391,14 @@ func (s *Shell) activityView(c *ui.Context) {
 			}
 			if i.active {
 				ui.Row(c).Gap(12).Children(func() {
-					busyIndicator(c, 14)
-					ui.Text(c.Key("installation-stage"), installationStage(i.progress.Stage)).Grow(1).ContentTransition(ui.ContentTransition{Animation: &motionFade})
+					paused := s.downloadGroupState(i.instanceID) == "paused"
+					labelStage := installationStage(i.progress.Stage)
+					if paused {
+						labelStage = "已暂停"
+					} else {
+						busyIndicator(c, 14)
+					}
+					ui.Text(c.Key("installation-stage"), labelStage).Grow(1).ContentTransition(ui.ContentTransition{Animation: &motionFade})
 					label := "取消任务"
 					if i.canceling {
 						label = "正在取消…"

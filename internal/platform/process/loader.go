@@ -14,6 +14,7 @@ import (
 	"mcl/internal/core/java"
 	"mcl/internal/core/launch"
 	"mcl/internal/core/meta"
+	"mcl/internal/platform"
 )
 
 // RunLoaderProcessor owns a short-lived process tree entirely separate from
@@ -29,7 +30,13 @@ func RunLoaderProcessor(ctx context.Context, executable, work string, args []str
 	if runtime.Major > 25 {
 		return errors.New("安装工具Java超过已支持范围")
 	}
-	if err := runtime.Check(8, meta.CurrentPlatform()); err != nil {
+	host := meta.CurrentPlatform()
+	target := host
+	target.Arch = runtime.Arch
+	if err := platform.CheckExecutionPlatform(ctx, host, target); err != nil {
+		return err
+	}
+	if err := runtime.Check(8, target); err != nil {
 		return err
 	}
 	var data []byte

@@ -6,10 +6,31 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"mcl/internal/core/instance"
 )
+
+func AcquireDownload(directory, key string) (*Lock, error) {
+	if len(key) != 64 || strings.ContainsAny(key, "/\\:") {
+		return nil, errors.New("invalid download key")
+	}
+	return acquireDirectory(filepath.Join(directory, "download-locks"), key+".lock")
+}
+func AcquireDownloadParts(root *os.Root, exclusive bool) (*Lock, error) {
+	return acquireMode(root, "parts.lock", !exclusive)
+}
+
+func AcquireTask(directory, id string) (*Lock, error) {
+	if !instance.ValidID(id) {
+		return nil, errors.New("invalid task ID")
+	}
+	return acquireDirectory(filepath.Join(directory, "task-locks"), id+".lock")
+}
+func AcquireTaskIndex(directory string) (*Lock, error) {
+	return acquireDirectory(filepath.Join(directory, "task-locks"), "index.lock")
+}
 
 var ErrBusy = errors.New("instance is occupied by another launcher operation")
 

@@ -12,6 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
+
 	"mcl/internal/app"
 	"mcl/internal/branding"
 	"mcl/internal/core/auth"
@@ -27,9 +30,6 @@ import (
 	"mcl/internal/platform/process"
 	"mcl/internal/storage"
 	launcherui "mcl/internal/ui"
-
-	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/ui"
 )
 
 func main() {
@@ -83,7 +83,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	taskService := app.NewTaskService(ctx, storage.NewDownloadTaskStore(paths.Root))
 	sharedDownloads := download.NewClient(paths.Root)
+	sharedDownloads.Track = taskService.TrackDownloads
+	sharedDownloads.Coordination = storage.NewDownloadCoordination(paths.Root)
 	sharedDownloads.Transfers = transfers
 	downloadCache := storage.NewDownloadCache(paths.Root, settings.Download.CacheDirectory)
 	sharedDownloads.Cache = downloadCache
@@ -112,10 +115,11 @@ func run() error {
 	javaCatalog := java.NewCatalogClient()
 	javaCatalog.HTTP.Transport = network
 	javaService := app.NewJavaService(storage.NewJavaStore(paths.Root), platform.JavaCandidates,
-		&java.Installer{Directory: filepath.Join(paths.Root, "java"), Transfers: transfers, Transport: network, Cache: downloadCache}, javaCatalog)
+		&java.Installer{Downloads: sharedDownloads, Directory: filepath.Join(paths.Root, "java"), Transfers: transfers, Transport: network, Cache: downloadCache}, javaCatalog)
 	forgeInstaller := loader.NewForgeInstallerWithJava(loaderCatalog, sharedDownloads, process.RunLoaderProcessor, javaService.EnsureProcessor)
 	loaders := app.NewLoaderService(loaderCatalog, storage.NewLoaderStore(paths.Root), forgeInstaller)
 	installations := app.NewInstallationServiceWithGameDirectory(catalog, instances, storage.NewInstallationStore(paths.Root), sharedDownloads, host, sessions, loaders, assetStore.Directory, assetStore.OpenGame)
+	installations.CheckExecutionPlatform = platform.CheckExecutionPlatform
 	instanceSettings := app.NewInstanceSettingsService(instances, sessions)
 	instanceDeletion := app.NewInstanceDeletionService(storage.NewInstanceDeletionStore(paths.Root), sessions, mygo.Shell.TrashItem)
 	directoryService := app.NewDirectoryService(storage.NewDirectoryTransferStore(paths.Root, platform.ReadSwiftProfiles), sessions, catalog, loaderCatalog, mygo.Shell.TrashItem)
@@ -132,6 +136,16 @@ func run() error {
 		}
 		return process.StartTracked(plan, register, game)
 	}, process.GameWindowProbe(), assetStore.Directory)
+	archiveImporter.Tasks = taskService
+	installations.Tasks = taskService
+	javaService.Tasks = taskService
+	marketInstaller.Tasks = taskService
+	assetUpdates.Tasks = taskService
+	launcher.Tasks = taskService
+	packImports := app.NewPackImportService(archiveImporter, installations, javaService.Ensure)
+	packImports.Tasks = taskService
+	taskReplayer := &app.TaskReplayer{Installations: installations, Java: javaService, Market: marketInstaller, Packs: packImports, Updates: assetUpdates, Downloads: sharedDownloads, Instances: instances, Settings: repository.Load}
+	taskService.SetReplay(taskReplayer.Replay)
 	detachGames = launcher.DetachAll
 	clientID, configErr := platform.MicrosoftClientID(ctx, paths.Root)
 	if configErr != nil {
@@ -197,6 +211,7 @@ func run() error {
 		})
 		shell.BindWindow(window)
 		connectUpdates(window, shell, portable)
+		connectDownloadTasks(ctx, &workers, window, shell, taskService, sharedDownloads)
 		connectJava(ctx, &workers, window, shell, javaService)
 		connectDownloads(ctx, &workers, window, shell, downloadService, downloadCache)
 		connectGameDirectories(ctx, &workers, window, shell, app.NewGameDirectoryService(storage.NewGameDirectoryStore(paths.Root)), assetStore)
@@ -212,7 +227,7 @@ func run() error {
 				}
 			})
 		})
-		connectMarket(ctx, &workers, window, shell, marketService, marketInstaller, archiveImporter, app.NewPackImportService(archiveImporter, installations, javaService.Ensure))
+		connectMarket(ctx, &workers, window, shell, marketService, marketInstaller, archiveImporter, packImports)
 		shell.ConnectAssets(launcherui.AssetActions{
 			Icon: func(id string, file app.AssetFile, done func(image.Image, error)) func() {
 				return marketWork(ctx, &workers, window, func(ctx context.Context) (image.Image, error) {

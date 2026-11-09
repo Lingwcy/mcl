@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egoist/mygo/ui"
+
 	"mcl/internal/app"
 	"mcl/internal/core/java"
-
-	"github.com/egoist/mygo/ui"
 )
 
 type JavaActions struct {
@@ -374,6 +374,7 @@ func (s *Shell) javaPackageInstalled(p java.Package) bool {
 
 func (s *Shell) javaTaskCard(c *ui.Context) {
 	job, t := &s.java.job, s.theme
+	paused := s.javaDownloadPaused(job.packageID)
 	if job.packageID == "" {
 		return
 	}
@@ -393,11 +394,16 @@ func (s *Shell) javaTaskCard(c *ui.Context) {
 		label := job.message
 		if job.active {
 			label = job.progress.Stage
+			if paused {
+				label = "已暂停"
+			}
 			if job.canceling {
 				label = "正在取消…"
 			}
 			ui.Row(c).FillWidth().Gap(7).Children(func() {
-				busyIndicator(c, 11)
+				if !paused {
+					busyIndicator(c, 11)
+				}
 				ui.Text(c, label).FontSize(11).TextColor(t.TextMuted)
 				ui.Spacer(c)
 				if job.progress.Total > 0 {

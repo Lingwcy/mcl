@@ -9,6 +9,10 @@ import (
 	"mcl/internal/core/archive"
 )
 
+// ErrUnsafeChange identifies a definite new violation or loss of a previously
+// established relationship, without exposing descriptor details to task history.
+var ErrUnsafeChange = errors.New("变更未通过模组声明检查")
+
 func modFileKey(name string) string { return archive.Key(strings.TrimSuffix(name, ".disabled")) }
 
 // GuardTransition compares the same runtime before and after an explicit edit.
@@ -50,12 +54,12 @@ func GuardTransition(ctx context.Context, before, after []File, runtime Runtime,
 		state, known := previous[relation.key]
 		if known && state == Yes {
 			if relation.state == Unknown {
-				return fmt.Errorf("无法确认仍满足已有依赖，未修改文件：%s；请先检查资产", relation.detail)
+				return fmt.Errorf("%w：无法确认仍满足已有依赖（%s）：%s", ErrUnsafeChange, relation.path, relation.detail)
 			}
-			return fmt.Errorf("变更会破坏已有关系（%s）：%s", relation.reason, relation.detail)
+			return fmt.Errorf("%w：变更会破坏已有关系（%s · %s）：%s", ErrUnsafeChange, relation.path, relation.reason, relation.detail)
 		}
 		if relation.state == No && (!known || changed[modFileKey(relation.path)] || relation.peer != "" && changed[modFileKey(relation.peer)]) {
-			return fmt.Errorf("变更后的模组声明不满足要求（%s）：%s", relation.reason, relation.detail)
+			return fmt.Errorf("%w：变更后的声明不满足要求（%s · %s）：%s", ErrUnsafeChange, relation.path, relation.reason, relation.detail)
 		}
 	}
 	issueKey := func(issue Issue) string {
@@ -67,7 +71,7 @@ func GuardTransition(ctx context.Context, before, after []File, runtime Runtime,
 	}
 	for _, issue := range next.structural {
 		if !oldProblems[issueKey(issue)] {
-			return fmt.Errorf("变更会新增声明问题，未修改文件：%s · %s", issue.Title, issue.Detail)
+			return fmt.Errorf("%w：%s · %s · %s", ErrUnsafeChange, issue.Path, issue.Title, issue.Detail)
 		}
 	}
 	return ctx.Err()

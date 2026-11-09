@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/egoist/mygo/ui"
+
 	"mcl/internal/app"
 	"mcl/internal/core/instance"
-
-	"github.com/egoist/mygo/ui"
 )
 
 func (s *Shell) launchGameSnapshot() (app.GameSnapshot, bool) {
@@ -55,7 +55,8 @@ func (s *Shell) launchView(c *ui.Context) {
 	palette := colors(t)
 	game, hasGame := s.launchGameSnapshot()
 	waiting := s.waitingForGameWindow(game, hasGame)
-	busy := i.active || waiting
+	paused := s.downloadGroupState(i.instanceID) == "paused"
+	busy := i.active && !paused || waiting
 	exited := !i.active && hasGame && !game.Running
 	earlyExit := exited && game.Window == app.GameWindowPending
 	failed := i.failed || exited && !game.Exit.Stopped && (earlyExit || game.Exit.Code != 0)
@@ -73,6 +74,8 @@ func (s *Shell) launchView(c *ui.Context) {
 	status := installationStage(i.progress.Stage)
 	detail := ""
 	switch {
+	case paused:
+		status = "已暂停"
 	case i.canceling:
 		status = "正在取消准备…"
 	case waiting:
@@ -155,7 +158,7 @@ func (s *Shell) launchView(c *ui.Context) {
 				iconButton(c, "stop-launch", stopLabel, iconSquare, s.stopLaunch).Disabled(!canStop)
 				iconButton(c, "leave-launch", "退出启动页，返回实例", iconBack, s.returnToLaunchInstance)
 			})
-			if !busy && !running {
+			if !busy && !running && !i.active {
 				ui.PrimaryButton(c.Key("retry-launch"), "重新启动").Height(28).OnClick(s.retryLaunch)
 			}
 		})

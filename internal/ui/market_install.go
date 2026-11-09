@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/egoist/mygo/ui"
+
 	"mcl/internal/app"
 	"mcl/internal/core/download"
 	"mcl/internal/core/market"
-
-	"github.com/egoist/mygo/ui"
 )
 
 type marketInstallState struct {
@@ -22,6 +22,9 @@ type marketInstallState struct {
 	archiveBitmap                         *ui.Bitmap
 	archiveIconOpen, archiveIconBusy      bool
 	archiveIconCancel                     func()
+	archiveIconGeneration                 uint64
+	archiveIconChosen                     bool
+	archiveIconURL                        string
 	archiveDirectoryID                    *string
 	project                               market.Project
 	version                               market.Version
@@ -52,6 +55,12 @@ func (s *Shell) selectMarketInstall(project market.Project, version market.Versi
 	if m.install != nil && m.install.busy {
 		m.message = "已有资产安装任务"
 		return
+	}
+	if m.install != nil {
+		s.cancelArchiveIcon(m.install)
+	}
+	if m.detail != nil && m.detail.Project.ID == project.ID && m.detail.Project.Source == project.Source && project.IconURL == "" {
+		project.IconURL = m.detail.Project.IconURL
 	}
 	s.closeMarketVersion()
 	id := m.targetID
@@ -84,6 +93,16 @@ func (s *Shell) selectMarketInstall(project market.Project, version market.Versi
 	}
 	if project.Kind == market.DataPack {
 		s.loadInstallWorlds()
+	}
+	if project.Kind == market.Modpack {
+		m.install.archiveName = archiveInitialName(project.Title)
+		directory := s.settings.GameDirectoryID
+		if m.install.archiveDirectoryID != nil {
+			directory = *m.install.archiveDirectoryID
+		}
+		m.install.archiveDirectoryID = &directory
+		s.loadArchiveProjectIcon(m.install)
+		s.inspectMarketArchive()
 	}
 }
 func (s *Shell) loadInstallWorlds() {
@@ -227,7 +246,7 @@ func (s *Shell) marketInstallView(c *ui.Context) {
 		case i.installing:
 			label = "正在检查并写入实例…"
 		}
-		loadingStatus(c, label)
+		s.workStatus(c, s.marketTaskPaused(i), label)
 		if i.installing && i.progress.TotalFiles > 0 {
 			smoothProgress(c, float64(i.progress.Files)/float64(i.progress.TotalFiles)).FillWidth().Height(4)
 		}
@@ -351,6 +370,7 @@ func (s *Shell) marketTaskCard(c *ui.Context) {
 	if !i.hasTask() {
 		return
 	}
+	paused := s.marketTaskPaused(i)
 	section(c, i.project.Title, func() {
 		ui.Row(c).FillWidth().Gap(8).Children(func() {
 			status := "资产安装"
@@ -364,7 +384,9 @@ func (s *Shell) marketTaskCard(c *ui.Context) {
 			case !i.busy && i.supplyNote != "":
 				status = i.supplyNote
 			}
-			if i.busy {
+			if paused {
+				status = "已暂停"
+			} else if i.busy {
 				busyIndicator(c, 13)
 			}
 			ui.Text(c.Key("market-task-status"), status).FontSize(12).Grow(1).MaxLines(2).ContentTransition(ui.ContentTransition{Animation: &motionFade})

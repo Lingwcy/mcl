@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/egoist/mygo/ui"
+
 	"mcl/internal/app"
 	"mcl/internal/core/download"
 	"mcl/internal/core/instance"
-
-	"github.com/egoist/mygo/ui"
 )
 
 const restoringPackFiles = "正在恢复文件"
@@ -222,8 +222,12 @@ func (s *Shell) packRepairStatus(c *ui.Context, state *packRepairState, key stri
 	if message == "" {
 		return
 	}
+	paused := s.taskPaused("repair", state.id)
+	if paused {
+		message = "已暂停"
+	}
 	ui.Row(c).FillWidth().Gap(8).Children(func() {
-		if state.job != "" {
+		if state.job != "" && !paused {
 			busyIndicator(c, 13)
 		}
 		ui.Text(c.Key(key+"-message"), message).FontSize(12).TextColor(color).Grow(1).MinWidth(0).MaxLines(3).ContentTransition(ui.ContentTransition{Animation: &motionFade})

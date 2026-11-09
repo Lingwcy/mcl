@@ -15,6 +15,7 @@ import (
 )
 
 type MarketActions struct {
+	InstanceIcon        func(string, func([]byte, error)) func()
 	Search              func(market.Query, func(market.Results, error)) func()
 	Categories          func(market.Source, market.Kind, func([]market.Category, error)) func()
 	LoaderIcons         func(func([]market.LoaderIcon, error)) func()

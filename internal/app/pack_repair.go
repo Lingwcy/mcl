@@ -81,6 +81,11 @@ func (s *ArchiveImporter) SupplyRepair(ctx context.Context, plan PackRepairPlan,
 }
 
 func (s *ArchiveImporter) RestorePack(ctx context.Context, plan PackRepairPlan, paths []string, report func(download.Progress)) (int, error) {
+	if s.Tasks != nil && taskScope(ctx) == nil {
+		return s.taskRestore(ctx, plan, paths, func(task context.Context, current PackRepairPlan, selected []string) (int, error) {
+			return s.RestorePack(task, current, selected, report)
+		})
+	}
 	if len(paths) == 0 || len(paths) > MaxPackRepairSelection {
 		return 0, fmt.Errorf("请选择 1 至 %d 个文件", MaxPackRepairSelection)
 	}
@@ -91,6 +96,9 @@ func (s *ArchiveImporter) RestorePack(ctx context.Context, plan PackRepairPlan, 
 	defer lease.Close()
 	value, err := s.instances.Get(ctx, plan.InstanceID)
 	if err != nil {
+		return 0, err
+	}
+	if err := checkTaskInstance(ctx, value); err != nil {
 		return 0, err
 	}
 	current, err := s.inspectRepair(ctx, value)
@@ -175,6 +183,9 @@ func (s *ArchiveImporter) RestorePack(ctx context.Context, plan PackRepairPlan, 
 		}
 	}
 	if err := s.downloads.Run(ctx, downloads, report); err != nil {
+		return 0, err
+	}
+	if err := TaskStage(ctx, "发布"); err != nil {
 		return 0, err
 	}
 	if err := s.store.CommitPackRepair(ctx, value, current.Receipt, original, selected); err != nil {

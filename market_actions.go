@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"image"
+	"image/png"
 	"sync"
 
 	"mcl/internal/app"
@@ -47,6 +49,25 @@ func connectMarket(ctx context.Context, workers *sync.WaitGroup, window *mygo.Wi
 					return nil, ctx.Err()
 				}
 				return platform.MarketImage(ctx, address)
+			}, done)
+		},
+		InstanceIcon: func(address string, done func([]byte, error)) func() {
+			return marketWork(ctx, workers, window, func(task context.Context) ([]byte, error) {
+				select {
+				case icons <- struct{}{}:
+					defer func() { <-icons }()
+				case <-task.Done():
+					return nil, task.Err()
+				}
+				img, err := platform.MarketImage(task, address)
+				if err != nil {
+					return nil, err
+				}
+				var output bytes.Buffer
+				if err := png.Encode(&output, img); err != nil {
+					return nil, err
+				}
+				return output.Bytes(), task.Err()
 			}, done)
 		},
 		SetKey: service.SetCurseForgeKey,

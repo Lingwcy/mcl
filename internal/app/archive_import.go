@@ -16,6 +16,7 @@ import (
 	"mcl/internal/core/market"
 	"mcl/internal/core/meta"
 	"mcl/internal/core/modpack"
+	"mcl/internal/core/tasks"
 )
 
 type ArchiveImportRequest struct {
@@ -59,6 +60,7 @@ type ArchiveStore interface {
 }
 
 type ArchiveImporter struct {
+	Tasks     *TaskService
 	catalog   *MarketService
 	metadata  VersionCatalog
 	instances InstanceReader
@@ -71,6 +73,20 @@ func NewArchiveImporter(catalog *MarketService, metadata VersionCatalog, instanc
 	return &ArchiveImporter{catalog: catalog, metadata: metadata, instances: instances, registry: registry, store: store, downloads: downloads}
 }
 func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequest, settings Settings, report func(download.Progress)) (ArchiveImportPlan, error) {
+	if s.Tasks != nil && taskScope(ctx) == nil {
+		file, _, _, err := s.resolveArchive(ctx, request)
+		if err != nil {
+			return ArchiveImportPlan{}, fmt.Errorf("读取整合包版本信息: %w", err)
+		}
+		directory := settings.GameDirectoryID
+		if request.GameDirectoryID != nil {
+			directory = *request.GameDirectoryID
+		}
+		intent := tasks.Intent{Kind: "archive", Name: "读取整合包 / 地图", Payload: taskPayload(archiveTask{Request: request, Archive: file, Directory: directory})}
+		return performTask(ctx, s.Tasks, intent, func(task context.Context) (ArchiveImportPlan, error) {
+			return s.Inspect(task, request, settings, report)
+		})
+	}
 	if request.Kind == market.Modpack {
 		selected := settings.GameDirectoryID
 		if request.GameDirectoryID != nil {
@@ -94,6 +110,12 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 	client := s.catalog.Client()
 	file, page, version, err := s.resolveArchive(ctx, request)
 	if err != nil {
+		return plan, fmt.Errorf("读取压缩包文件信息: %w", err)
+	}
+	if err := s.checkArchiveTask(ctx, file); err != nil {
+		return plan, err
+	}
+	if err := TaskStage(ctx, "读取压缩包与清单"); err != nil {
 		return plan, err
 	}
 	plan.ArchivePage = page
@@ -132,7 +154,7 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 			return plan, nil
 		}
 	} else if err := s.downloads.Run(ctx, []download.File{archiveDownload(file)}, report); err != nil {
-		return plan, err
+		return plan, fmt.Errorf("获取整合包压缩文件: %w", err)
 	}
 	if request.Kind == market.World {
 		plan.WorldFiles, err = s.store.InspectWorld(ctx, file)
@@ -140,7 +162,7 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 	}
 	manifest, err := s.store.InspectPack(ctx, file)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("解析整合包清单: %w", err)
 	}
 	if request.LocalArchive != nil && manifest.Format != string(request.Source) {
 		return plan, errors.New("本地整合包格式与固定记录不匹配")
@@ -148,7 +170,7 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 	plan.Manifest = manifest
 	versions, err := s.metadata.Manifest(ctx, false)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("读取官方游戏版本列表: %w", err)
 	}
 	entry, found := versions.Manifest.Find(manifest.Minecraft)
 	if !found || (entry.Type != "release" && entry.Type != "snapshot") {
@@ -156,10 +178,10 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 	}
 	game, err := s.metadata.Version(ctx, entry)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("读取官方游戏版本 %s: %w", entry.ID, err)
 	}
 	if err := game.ValidateVanilla(); err != nil {
-		return plan, err
+		return plan, fmt.Errorf("核对官方游戏版本 %s: %w", entry.ID, err)
 	}
 	if err := manifest.CheckRuntime(game); err != nil {
 		return plan, err
@@ -182,9 +204,6 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 		return plan, err
 	}
 	plan.Instance = value
-	if required, ok := value.RequiredLoader(); ok && required.Type == "forge" && game.Java.Major == 8 {
-		plan.Warnings = append(plan.Warnings, "Forge 安装器将在导入后核验；文件可导入不代表游戏已可运行。")
-	}
 	var total int64
 	for _, f := range manifest.Files {
 		if err := ctx.Err(); err != nil {
@@ -414,6 +433,22 @@ func (s *ArchiveImporter) Import(ctx context.Context, plan ArchiveImportPlan, re
 		if value.Version.SHA1 != plan.Instance.Version.SHA1 {
 			return value, errors.New("目标实例版本已改变")
 		}
+		if err := checkTaskInstance(ctx, value); err != nil {
+			return value, err
+		}
+		if taskScope(ctx) != nil {
+			if checker, ok := s.store.(interface {
+				TaskWorldReady(context.Context, ArchiveImportPlan) (bool, error)
+			}); ok {
+				ready, e := checker.TaskWorldReady(ctx, plan)
+				if e != nil {
+					return value, e
+				}
+				if ready {
+					return value, nil
+				}
+			}
+		}
 		if err := s.store.CheckWorld(ctx, plan.Request.InstanceID, plan.Request.World); err != nil {
 			return value, err
 		}
@@ -421,6 +456,9 @@ func (s *ArchiveImporter) Import(ctx context.Context, plan ArchiveImportPlan, re
 			if err := s.downloads.Run(ctx, []download.File{archiveDownload(plan.Archive)}, report); err != nil {
 				return value, err
 			}
+		}
+		if err := TaskStage(ctx, "发布"); err != nil {
+			return value, err
 		}
 		return value, s.store.CommitArchive(ctx, plan)
 	}
@@ -448,6 +486,9 @@ func (s *ArchiveImporter) Import(ctx context.Context, plan ArchiveImportPlan, re
 		files = append(files, packFileDownload(file))
 	}
 	if err := s.downloads.Run(ctx, files, report); err != nil {
+		return instance.Instance{}, err
+	}
+	if err := TaskStage(ctx, "发布"); err != nil {
 		return instance.Instance{}, err
 	}
 	if err := s.store.CommitArchive(ctx, plan); err != nil {

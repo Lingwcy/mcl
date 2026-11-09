@@ -99,18 +99,15 @@ func historicalJava8Release(id string) bool {
 	return false
 }
 
+// Legacy minecraftArguments documents do not supply JVM arguments. In
+// particular, LWJGL2 uses its AWT/Cocoa integration rather than LWJGL3/GLFW's
+// first-thread entry. Do not synthesize -XstartOnFirstThread here; modern
+// documents keep their own explicit, OS-scoped JVM argument rules unchanged.
 func legacyJVMArguments() []Argument {
-	mac := Rule{Action: "allow"}
-	mac.OS = &struct {
-		Name    string `json:"name"`
-		Arch    string `json:"arch"`
-		Version string `json:"version"`
-	}{Name: "osx"}
 	return []Argument{
 		{Values: []string{"-Djava.library.path=${natives_directory}"}},
 		{Values: []string{"-Dminecraft.launcher.brand=${launcher_name}"}},
 		{Values: []string{"-Dminecraft.launcher.version=${launcher_version}"}},
-		{Values: []string{"-XstartOnFirstThread"}, Rules: []Rule{mac}},
 		{Values: []string{"-cp"}}, {Values: []string{"${classpath}"}},
 	}
 }

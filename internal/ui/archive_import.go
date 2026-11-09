@@ -8,13 +8,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/egoist/mygo/ui"
+
 	"mcl/internal/app"
 	"mcl/internal/core/download"
 	"mcl/internal/core/install"
 	"mcl/internal/core/instance"
 	"mcl/internal/core/market"
-
-	"github.com/egoist/mygo/ui"
 )
 
 func (s *Shell) inspectMarketArchive() {
@@ -48,7 +48,7 @@ func (s *Shell) inspectMarketArchive() {
 		}
 		i.busy, i.cancel, i.canceling = false, nil, false
 		if err != nil {
-			i.err = err.Error()
+			s.failArchiveInspection(i, err)
 			return
 		}
 		s.initializeArchiveEditor(i, plan)
@@ -64,6 +64,27 @@ func (s *Shell) inspectMarketArchive() {
 		}
 		i.archiveList = ui.ListState{}
 	})
+}
+
+// A failed first read has no confirmation editor to return to. Keep its
+// actionable error in a Toast and expose the original project versions again.
+// Re-reading an existing plan keeps that editor and its unsubmitted choices.
+func (s *Shell) failArchiveInspection(i *marketInstallState, err error) {
+	if s.market.install != i {
+		return
+	}
+	if !errors.Is(err, context.Canceled) {
+		i.err = err.Error()
+		s.Notify(ToastError, "读取整合包失败："+i.err)
+	}
+	if i.archivePlan == nil && i.localArchive == nil && i.project.Kind == market.Modpack {
+		s.cancelArchiveIcon(i)
+		s.market.install = nil
+		s.market.showInstall = false
+		if s.market.selected != nil && s.market.selected.ID == i.project.ID && s.market.selected.Source == i.project.Source {
+			s.market.tab = 1
+		}
+	}
 }
 
 func (s *Shell) supplyMarketArchive() {
@@ -122,6 +143,8 @@ func (s *Shell) importMarketArchive() {
 		plan.Request.IconStyle = i.archiveIconStyle
 		plan.Instance.Name = plan.Request.Name
 		plan.Instance.Description = strings.TrimSpace(description)
+		plan.Instance.Icon = slices.Clone(i.archiveIcon)
+		plan.Instance.IconStyle = i.archiveIconStyle
 	}
 	plan.SelectedOptional = nil
 	for name, enabled := range i.optional {
@@ -142,6 +165,10 @@ func (s *Shell) finishPackImport(i *marketInstallState, result app.PackImportRes
 	if s.market.install != i {
 		return
 	}
+	// Navigate only from the editor that owns this completion. A background
+	// import must not replace a page the user has already chosen to visit.
+	visible := s.page == marketPage && s.market.showInstall ||
+		s.page == newInstancePage && s.creation.mode == 1 && i.localArchive != nil
 	i.busy, i.installing, i.cancel, i.canceling = false, false, nil, false
 	value := result.Instance
 	if result.Imported && value.ID != "" {
@@ -193,6 +220,12 @@ func (s *Shell) finishPackImport(i *marketInstallState, result app.PackImportRes
 	if i.project.Kind == market.Modpack {
 		s.refreshJava()
 	}
+	if i.complete {
+		s.market.install, s.market.showInstall = nil, false
+		if visible {
+			s.selectInstance(value.ID)
+		}
+	}
 }
 func (s *Shell) resumePackImport() {
 	i := s.market.install
@@ -212,41 +245,14 @@ func (s *Shell) archiveImportView(c *ui.Context) {
 	i, t := s.market.install, s.theme
 	ui.Row(c).FillWidth().Height(28).Shrink(0).Gap(8).Children(func() {
 		if !i.busy {
-			iconButton(c, "archive-back", "返回", iconBack, func() {
-				if i.archivePlan != nil && !i.complete && i.localArchive == nil && !i.archiveImported {
-					i.archivePlan = nil
-					i.err = ""
-				} else {
-					s.market.install = nil
-				}
-			})
+			iconButton(c, "archive-back", "返回", iconBack, func() { s.cancelArchiveIcon(i); s.market.install = nil; s.market.showInstall = false })
 		}
-		ui.Text(c, i.project.Title).FontSize(16).FontWeight(500).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
+		title := i.project.Title
+		if i.project.Kind == market.Modpack && i.archivePlan != nil && !i.archivePlan.NeedsArchive {
+			title = "导入整合包"
+		}
+		ui.Text(c, title).FontSize(13).FontWeight(500).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
 	})
-	if i.complete {
-		title := "存档已安装"
-		if i.project.Kind == market.Modpack {
-			title = "整合包已导入"
-		}
-		marketStatus(c, title, iconCheck)
-		if i.project.Kind == market.Modpack {
-			ui.Text(c, "运行环境已就绪").FontSize(12).TextColor(t.TextMuted)
-		}
-		if !i.archiveRuntimeReady && i.project.Kind == market.Modpack && len(i.archivePlan.Instance.Pack.Loaders) > 0 {
-			value := i.archivePlan.Instance
-			ui.Text(c, s.instanceRuntimeStatus(value)).FontSize(11).TextColor(t.TextMuted)
-			if supportedPackLoader(value) {
-				ui.Button(c.Key("archive-install-runtime"), "安装运行环境").Height(28).OnClick(func() {
-					id := i.request.InstanceID
-					s.market.install = nil
-					s.selectInstance(id)
-					s.startInstallation()
-				})
-			}
-		}
-		ui.Button(c.Key("archive-open-instance"), "查看实例").Height(28).OnClick(func() { id := i.request.InstanceID; s.market.install = nil; s.selectInstance(id) })
-		return
-	}
 	if i.busy {
 		label := "正在读取压缩包…"
 		if i.supplying {
@@ -264,7 +270,10 @@ func (s *Shell) archiveImportView(c *ui.Context) {
 		if !i.installing && i.progress.TotalBytes > 0 {
 			label += " · " + formatBytes(i.progress.Bytes) + " / " + formatBytes(i.progress.TotalBytes)
 		}
-		loadingStatus(c, label)
+		if i.archiveBitmap != nil {
+			ui.Image(c.Key("archive-progress-icon"), i.archiveBitmap).Size(48, 48).Fit(ui.Contain).Radius(10)
+		}
+		s.workStatus(c, s.marketTaskPaused(i), label)
 		if i.installing && i.progress.TotalFiles > 0 {
 			smoothProgress(c, float64(i.progress.Files)/float64(i.progress.TotalFiles)).FillWidth().Height(4)
 		}
@@ -287,15 +296,12 @@ func (s *Shell) archiveImportView(c *ui.Context) {
 
 	if i.archivePlan == nil {
 		if i.project.Kind == market.Modpack {
-			ui.TextInput(c.Key("archive-instance-name"), &i.archiveName).Label("新实例名称").Placeholder("实例名称").Height(30).FillWidth()
-			ui.Row(c.Key("archive-location-choice")).FillWidth().Height(40).Gap(8).Children(func() {
-				ui.Text(c, "游戏目录").FontSize(12).Width(84)
-				selected := s.settings.GameDirectoryID
-				if i.archiveDirectoryID != nil {
-					selected = *i.archiveDirectoryID
-				}
-				s.gameDirectoryMenu(c, "archive-game-directory", selected, false, func(id string) { i.archiveDirectoryID = &id })
+			ui.Row(c).FillWidth().Height(30).Gap(8).Children(func() {
+				ui.Button(c.Key("archive-return-versions"), "返回版本列表").Height(26).OnClick(func() { s.cancelArchiveIcon(i); s.market.install = nil; s.market.showInstall = false; s.market.tab = 1 })
+				ui.Spacer(c)
+				ui.Button(c.Key("archive-retry"), "重新读取").Height(26).Disabled(s.market.actions.InspectArchive == nil).OnClick(s.inspectMarketArchive)
 			})
+			return
 		} else {
 			name := "选择实例"
 			for _, value := range s.library.snapshot.Instances {
@@ -345,23 +351,20 @@ func (s *Shell) archiveImportView(c *ui.Context) {
 		ui.PrimaryButton(c.Key("archive-confirm"), "安装地图").Height(30).OnClick(s.importMarketArchive)
 		return
 	}
-	for _, warning := range plan.Warnings {
-		ui.Text(c, warning).FontSize(11).TextColor(t.Warning).MaxLines(2)
+	if len(plan.Missing) > 0 || i.archiveMissing > 0 || i.supplyNote != "" {
+		ui.Row(c).FillWidth().Gap(8).Children(func() {
+			if len(plan.Missing) > 0 {
+				ui.Button(c.Key("archive-reread"), "重读文件信息").Height(25).OnClick(s.inspectMarketArchive)
+			}
+			if i.archiveMissing > 0 {
+				ui.Textf(c, "%d 项待补齐", i.archiveMissing).FontSize(11).TextColor(t.Warning)
+			}
+			if i.supplyNote != "" {
+				ui.Text(c, i.supplyNote).FontSize(11).TextColor(t.TextMuted).MaxLines(1).Ellipsis("…")
+			}
+		})
 	}
-	ui.Row(c).FillWidth().Gap(8).Children(func() {
-		if len(plan.Files) > 0 && s.market.actions.SupplyArchive != nil {
-			ui.Button(c.Key("archive-supply"), "从本地补齐").Height(25).OnClick(s.supplyMarketArchive)
-		}
-		if len(plan.Missing) > 0 {
-			ui.Button(c.Key("archive-reread"), "重读文件信息").Height(25).OnClick(s.inspectMarketArchive)
-		}
-		if i.archiveMissing > 0 {
-			ui.Textf(c, "%d 项待补齐", i.archiveMissing).FontSize(11).TextColor(t.Warning)
-		}
-		if i.supplyNote != "" {
-			ui.Text(c, i.supplyNote).FontSize(11).TextColor(t.TextMuted).MaxLines(1).Ellipsis("…")
-		}
-	})
+
 	supplied := make(map[string]bool, len(plan.Supplied))
 	for _, name := range plan.Supplied {
 		supplied[name] = true
@@ -378,7 +381,7 @@ func (s *Shell) archiveImportView(c *ui.Context) {
 		return fmt.Sprintf("missing:%d", index)
 	}
 	ui.List(c.Key("archive-file-list"), &i.archiveList, len(files)+len(plan.Manifest.Overrides)+len(plan.Missing), func(index int) {
-		ui.Row(c).FillWidth().Height(32).Gap(8).Children(func() {
+		ui.Row(c).FillWidth().Height(32).Padding(0, 10).Gap(8).Children(func() {
 			if index < len(files) {
 				f := files[index]
 				pending := f.Size > 0 && len(f.URLs) == 0 && !supplied[f.Path]
@@ -393,6 +396,7 @@ func (s *Shell) archiveImportView(c *ui.Context) {
 					ui.Text(c, "已匹配").FontSize(10).TextColor(t.Success)
 				} else if pending {
 					ui.Text(c, "需本地文件").FontSize(10).TextColor(t.Warning)
+					iconButton(c, "archive-select-required", "选择对应文件", iconFolder, s.supplyMarketArchive).Disabled(s.market.actions.SupplyArchive == nil)
 					if market.SafeURL(f.PageURL) {
 						ui.Button(c.Key("archive-file-page"), "项目页").Height(22).OnClick(func() { services.OpenURL(f.PageURL) })
 					}
@@ -411,6 +415,8 @@ func (s *Shell) archiveImportView(c *ui.Context) {
 				ui.Text(c, missing.ProjectID+" / "+missing.VersionID+" · "+label).FontSize(11).TextColor(t.Warning)
 			}
 		})
-	}).Grow(1).MinHeight(0).FillWidth()
-	ui.PrimaryButton(c.Key("archive-confirm"), "导入并安装").Height(30).Disabled(i.archiveMissing > 0 || i.archiveIconBusy || instance.ValidateName(strings.TrimSpace(i.archiveName)) != nil || instance.ValidateDescription(i.archiveDescription) != nil || !s.gameDirectoryAvailable(plan.Instance.GameDirectoryID)).OnClick(s.importMarketArchive)
+	}).Grow(1).MinHeight(0).FillWidth().Radius(10).Border(.5, colors(t).ListDivider).Clip()
+	ui.Row(c.Key("archive-footer")).FillWidth().Height(32).Shrink(0).Justify(ui.End).Children(func() {
+		ui.PrimaryButton(c.Key("archive-confirm"), "导入并安装").Width(128).Height(30).Disabled(i.archiveMissing > 0 || i.archiveIconBusy || instance.ValidateName(strings.TrimSpace(i.archiveName)) != nil || instance.ValidateDescription(i.archiveDescription) != nil || !s.gameDirectoryAvailable(plan.Instance.GameDirectoryID)).OnClick(s.importMarketArchive)
+	})
 }

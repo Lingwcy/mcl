@@ -1,7 +1,7 @@
 # mcl 能力补齐与参考对齐 Plan
 
 日期：2026-11-09
-状态：C1–C4与D1–D3在明确范围内实现/构建收尾，D统一交付见第27节；Swift布局缺口与UI反馈修正见第28节；新增回归、跨盘/崩溃/原生交互及真实游戏验收仍未运行。原地管理未实现且不提供入口；T尚未开始。D分支不改已发布v0.0.3。
+状态：C1–C4、D1–D3已按明确范围交付，Swift反馈修正与v0.0.4发布见第28节/本地维护记录。T1–T4实现与构建统一收尾见第29节；新增回归、原生交互、断网/崩溃及真实游戏验收均待用户统一执行。I尚未开始。
 主要参考：SJMCL，基线 d5b109e0abb42460a8fd665c58ca4b0cc9982182。
 
 ## 1. 目标与现状
@@ -16,7 +16,7 @@
 
 1. Java8、历史资源、旧Forge与完整继承身份已接实现；仍缺真实版本/异常场景验收。范围外旧式客户端改写、未知运行组件和缺失native不能宣称可运行。
 2. 已有目录现可只读发现并确认复制为受管实例，可恢复迁移已有 mcl 载荷；不原地接管他人目录、不承诺直接复用外部运行库或所有来源可运行。D行为尚待验收。
-3. 下载有并发、限速、取消、缓存和校验，但缺完整持久任务、暂停续传及重启恢复。
+3. 下载现接统一持久任务、暂停排空、范围续传与重开恢复；行为尚未验收，未知凭据URL和已改变的目标仍需重新确认。
 4. 实例从创建/导入到分享/迁移/更换运行环境的生命周期尚不完整。
 5. 存档、服务器、截图、投影及批量资源维护能力不够全面。
 6. 诊断、更新、配置迁移和平台发行能力还没有形成完整产品闭环。
@@ -133,6 +133,8 @@ C 兼容性底座 → D 既有目录接入 → T 持久下载与恢复 → I 实
 - 删除行为跟随真实归属：原地发现/非受管资料不能套用“删除整个 mcl 实例目录”的逻辑。
 
 ## 6. 第三阶段 T：统一任务、暂停与续传
+
+状态：T1–T4已按第29节范围实现并构建，等待用户统一验收；不把构建或回归源码当作已验证。
 
 按 T1–T4 顺序完成：
 
@@ -763,3 +765,255 @@ C阶段实现矩阵见第24节，用户1.6.1反馈修复见第25节；D1已开�
 - gofmt与git diff --check通过；CGO_ENABLED=0 ./scripts/go.sh build ./...成功。Windows/Linux/macOS amd64主程序交叉编译成功，分别为build/mcl-swift-discovery-windows-amd64.exe（28,587,008字节）、build/mcl-swift-discovery-linux-amd64（27,924,281字节）、build/mcl-swift-discovery-darwin-amd64（28,620,288字节）。跨平台构建不表示Windows/Linux新增了Swift索引支持。
 - CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize成功，MyGo0.7.4报告app19.4MB/DMG8.6MB；独立体验包build/darwin-arm64/mcl-0.0.3-swift-discovery-fix-arm64.dmg（8,982,016字节），临时签名、未公证。不修改已发布Release。
 - 新增回归/Tester未执行、未编译测试目标。仅做用户问题所需的原目录/登记格式只读诊断与SDK声明检查；新macOS索引读取器、mcl识别/复制流程和精简UI未运行实机验收，也未跑test/vet/race/UI自动化、真实目录导入/迁移/Trash或Java/游戏。需用户使用新体验包复试，不将诊断查询当作新代码验收通过。
+
+
+## 29. T 阶段统一交付：持久任务、暂停排空、续传与重开恢复
+
+### 授权、只读参考与取舍
+
+- 用户要求开始T并参考.repo/sjmcl，整个阶段完成后统一验收。实际参考路径.repo/SJMCL，固定d5b109e0abb42460a8fd665c58ca4b0cc9982182、Git状态保持干净。本次在feature/persistent-download-tasks开发，不升级Go/MyGo，不新发版、不自动开始I。
+- 阅读src-tauri/src/download.rs与src/components/download-indicator.tsx的服务接入，以及crates/sjmcl-downloader/src/model.rs、command.rs、actor.rs、executor.rs、download.rs、persistence.rs、storage.rs、rate.rs：任务组/文件/后处理、暂停handoff等待running归零再持久化、更新token后恢复、Range/416/200回退、最后文件大小、聚合限速、重启reconcile和历史存储。
+- 只研究行为和边界，独立Go实现。没有复制GPL代码、全局actor/事件总线、SQLite/新ORM、内置CF Key、私有服务或授权绕过。继续复用sharedDownloads、TransferControl、DownloadNetwork、受管缓存、实例租约和原发布链路。没有新Go依赖、CLI、系统软件或全局环境变更。
+
+### T1：固定根任务、文件状态与持久化
+
+- core/tasks定义明确Intent、Group/File状态与终态，core/download提供类型化context观察接口；app.TaskService显式注入各服务，storage.DownloadTaskStore原子保存到应用数据download-tasks-v1/<id>.json。入口注入DownloadCoordination适配原生OS锁，核心不依赖UI/app/platform。
+- 根任务覆盖游戏安装/修复、启动检查/启动准备、独立Java下载安装、市场普通资产、整合包/地图读取与导入、整合包缺失文件恢复、资产版本更新；加载器/Java/基础文件/assets作为当前根任务的阶段与文件接入。嵌套工作共享当前组，不重复生成互相独立的子安装记录；没有对应业务范围的原始文件Run仍可生成文件任务。
+- 文件记录含固定路径/对象键、received、verified、total及pending/checking/downloading/verifying/publishing/done等阶段，组状态区分queued/running/pausing/paused/canceling/interrupted/failed/completed/canceled。下载完成不等于业务完成；安装收据、资产提交、整合包发布及Java注册成功才使根任务完成，真实失败原因归类显示，不把原始错误URL存入历史。
+- 关键状态先原子写盘再交接，进度最多每秒合并一次写盘；状态保存失败取消执行，不能冒称暂停已落盘。内存摘要事件驱动，UI最多一份待交付快照；常规进度不遍历所有磁盘JSON，跨进程变化显式刷新。
+- 单实例任务租约未改为任务ID猜PID；游戏/资产/删除/目录pending的原保护继续生效。任务持有自己独立系统锁，暂停后不持实例/网络租约，但保持当前任务的执行交接所有权，不能多个启动器同时继续同一组。
+
+### T2：暂停排空、继续、取消和发布
+
+- 暂停先进入pausing并取消本次context，停止排队/网络/处理器工作；等待原业务调用返回（其下载worker已join、实例锁/Java安装slot和FD已释放），保存分片最终大小/前缀摘要与Paused后才答复。中途保存失败保留失败状态，不把失败归为暂停。
+- 继续只有在Paused确认后才能触发，进入queued并更新attempt/context；旧worker与新worker不并存。原调用者等待恢复，最终只收到一个终态；取消暂停任务同样等待取消记录落盘。组取消与失败分开，业务已提交成功的竞争返回completed，不能因晚到取消冒称回滚了已安装内容。
+- 发布阶段有明确检查点，主动暂停拒绝正在发布；显式取消仍走原安全失败/回滚链。暂停不把旧context复用、不延迟成功、不在渲染里启动任务；关闭启动器保留interrupted/paused，不在重开时自动执行下载/安装或启动游戏。
+- 任务重试先复核固定的实例ID、位置、游戏SHA1、pack/loader身份；名称等无关展示修改不使资源计划失效，目录/版本/loader变化必须重新确认。锁内再次复核，不能只用暂停前的UI快照。
+
+### T3：受管分片、Range、摘要和资源预算
+
+- 共享下载器新增SHA-256对象支持，Temurin生产下载注入同一个Client，沿用官方GitHub重定向限制、并发、总限速、代理代际与独立缓存。限速等待仍在网络idle预算之外；没有新建不受控制的下载器或放开HTTP来源规则。
+- 分片位于应用数据download-parts-v1，键固定目标路径、大小、SHA-1/SHA-256/附加SHA-512；marker只保存对象、偏移、前缀SHA-256、散列后的来源、强ETag/有效Last-Modified与时间，不保存URL/查询或请求头。整次传输持目标OS锁及维护共享锁，目录和普通文件身份检查、不跟随链接。
+- 重开以实际part大小为准，核对已保存前缀、文件类型与固定对象；来源变化/分片损坏只重建受管分片，不覆盖用户实例内容。偏移>0发送Range与可用If-Range；206严格核对单位/start/end/total、Content-Length、identity编码及已知validator，禁止拼接错位或变内容。
+- 对忽略Range的200使用完整响应并从零截断；400/405/501不支持范围、416偏移不符、错位206或validator变化只作有限完整GET回退。完整分片先离线核对全摘要再发布，不凭416/大小冒充成功；短读保留真实分片，超长和摘要错误不发布并在有限重试内处理，重试耗尽可显式继续。
+- 最终发布前/后核对整个对象摘要及FD身份/mtime，只有校验通过才替换受管下载/cache目标。新增fileio.ReplaceManagedFile用已打开父目录句柄执行同卷替换，实例资产/世界发布依旧MoveNoReplace/原保护，不把共享缓存替换推广为用户资产覆盖。
+- 目标互斥在所有现有缓存核验、缓存复制、下载及发布期间持有，按NFC/大小写键协调跨实例/跨进程同目标。原ObjectCache仍负责独立已验证副本，不把所有cache目录当可删除下载垃圾。
+
+### T4：恢复配方、重入核验和维护
+
+- 启动加载只列出任务，非终态显示可继续，不自动恢复。继续/重试持原任务ID系统锁，复核原意图并经注入的业务服务重建临时URL/阶段，复用已验证缓存和分片。当前进程暂停恢复保留回调；退出后不保存账户或launch回调，原启动任务只继续资源准备，用户需重新明确点击启动。
+- 游戏与loader按原官方元数据重新规划，首次解析的完整Mojang继承链摘要落盘，重开/继续后拒绝来源链变化；相同目标路径出现不同文件对象键也拒绝静默换内容。Java固定官方包身份；市场按固定项目/版本/文件摘要与大小重新读取官方目录及CF分发设置；依赖版本不会改成“最新”。CF Key只从当前会话取，缺少授权明确失败，保留任务供配置后继续。
+- 整合包重读固定原始archive及已选optional清单，比较游戏/loader/每个所选文件身份，不重复创建已经发布的实例。通过中央modpack.json复核已发布来源；外部payload已发布但中央登记中断时，只复用本事务所属、与重新暂存内容完全一致的载荷，未知/修改内容保留，不猜原目录成功。
+- 地图已发布而任务记录未完成时，以固定archive/存档名/实例/owner及全文件对比核验重入，绝不接管同名旧世界。包修复重入必须核对已出现文件的真实摘要，不能把“存在/被保留”当已修复。
+- 资产更新恢复只允许精确匹配固定计划的pending/journal，经原ReserveForRecovery和RecoverUpdate回滚/完成后再决定继续；已提交的结果须对来源记录、目标摘要和停用状态逐项核对。不同更新、目录/删除pending或真实存活进程仍拒绝，不能绕过原事务。
+- 提供已结束历史清理与独立分片清理，原生确认，失败/部分完成Toast。分片清理持维护独占锁，只处理匹配marker与键的普通文件，未知/链接保留；存在活动分片写入时拒绝。取消与删除任务记录不隐式删共享分片或已安装数据，清理分片不删完成资源/实例/Java/原独立缓存。
+
+### 界面、数据界限和待验收项
+
+- “下载与任务”主区为紧凑行列表：暂停、继续/重试、取消、文件详情、错误类别及查看实例；右上角刷新/维护菜单，不放空态长文或额外解释Label。会话、日志、目录迁移和本地扫描等非下载任务留在“会话与其他任务”，旧功能入口仍可返回统一任务页。
+- 文件详情为显式读取快照并可刷新；全局组进度事件驱动。页面身份只含所选组，不含进度或busy；过期详情/离页/关闭拒绝旧回调。暂停时启动页、Java/市场/包修复等可见旧页面停止循环加载，不把暂停误显示为工作进行。
+- 同时最多32个运行/暂停根任务，历史最多256项；单组最多110000个文件（覆盖原assets上限100000+库/Java等），Intent 4MiB/记录48MiB、part marker 8KiB、单文件仍2GiB/Java目录原1GiB。历史与分片不是无限存储，不自动清掉用户未处理的失败/暂停任务，满额时显式提示维护。
+- 本次不保存访问/刷新令牌、CF Key、代理凭据、账户ID或完整认证URL；只保留已知公共无凭据/无查询URL。签名/未知私有URL从任务JSON移除，市场/pack等从原目录重新授权重建；没有可重建身份的原始文件任务须回原功能重新确认，不能编造CDN或借别的Key。子对象marker只存来源散列，不把URL误当可信文件身份。
+- JSON历史是有界原子文件格式，不使用参考的SQLite/ORM；损坏/未知版本/链接记录保留报错，不空覆盖。Unix同步目录、Windows使用已同步文件及系统元数据保证；不宣称多文件硬件断电原子性。恢复仍复查摘要、实例占用及已有业务发布证据。
+- 新增离线回归源码覆盖正确Range/强validator、错误offset/total/ETag/416/不支持Range/忽略Range、短读新Client续传、前缀/最终摘要损坏、链接/非法协议、暂停排空/旧worker互斥、重开不自动执行、检查点失败、秘密剥离与大整数、发布阶段拒绝暂停、任务损坏保留/锁/历史、更新与所选optional身份、包载荷冲突、UI过期回调/额外帧/缩放/导航。全部未执行且未编译测试目标。
+- 遵循用户统一验收安排：仅gofmt、git diff --check、生产build与主程序交叉编译和macOS体验包；不运行test/vet/race、httptest、Tester、UI自动化、真实网络下载/Java/加载器处理器/游戏、用户实例修改、真实断网/崩溃/断电模拟或分片清理。构建产物与结果在本节末追加；T实现范围收尾不等于功能验收完成，等待用户体验反馈，I尚未开始。
+
+
+### T最终构建与交付记录
+
+- 变更生产及回归Go源码已gofmt，git diff --check通过。CGO_ENABLED=0 ./scripts/go.sh build ./...退出0；没有运行或编译测试目标。
+- Windows/Linux/macOS amd64主程序交叉编译全部退出0：build/mcl-tasks-preview-windows-amd64.exe（33,935,872字节）、build/mcl-tasks-preview-linux-amd64（33,228,495字节）、build/mcl-tasks-preview-darwin-amd64（34,108,160字节）。这些是编译证据，不是对应平台行为验收。
+- CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -sign - -skip-notarize退出0，MyGo0.7.4报告app22.8MB/DMG9.6MB。独立体验包build/darwin-arm64/mcl-0.0.4-tasks-preview-arm64.dmg（10,027,520字节），临时签名、未公证；因未设置更新私钥，未生成签名自动更新，这与仅交付本地体验包的范围一致，不写入/索取私钥。
+- 未跑test/vet/race/httptest/Tester、UI自动化、公网资源下载、Java/处理器/游戏、真实断网/进程崩溃/断电模拟、用户实例导入/更新或分片清理。回归只有源码，格式/生产构建不证明这些回归可编译或通过。
+- 体验入口：“下载与任务”默认统一列表，可暂停/继续或重试/取消、查看文件快照、右上角刷新与维护；会话/日志/目录等从“会话与其他任务”进入。重开后明确点击继续；原启动任务冷恢复只准备资源，不自动运行游戏。
+- T1–T4按本节范围实现/构建交付，等用户统一验收；I尚未开始。代码留feature/persistent-download-tasks，未合并main、更新版本号、打标签或发布Release。Go/MyGo/依赖及只读SJMCL工作区未改。
+
+
+## 30. T体验反馈：Forge整合包被Fabric声明误拦截
+
+用户截图：Zombie Invade 100 Days导入已下载130/130文件，发布前报“没有匹配当前加载器的声明；fabric / forge”。静态定位guardStagedPackMods → mods.GuardTransition → check：只读取到其他loader的描述符时，直接产生结构性Error，导致合法辅助元数据/兼容层或当前读取器不认识的入口被当作已证实不兼容。未读取用户真实JAR，不能据此证明该包必定兼容或确定具体文件。
+
+- 未匹配当前loader的描述符统一为待确认诊断，保留原路径/声明loader/实例loader；既不当作当前已加载模块或provider，也不作为阻止整包发布的确定错误。相关完整性降为未知，不能由缺少已识别provider反推依赖必定缺失。
+- 仍优先匹配当前loader，Quilt的Fabric后备不变；已识别重复ID、确定的冲突，以及从Yes变No/Unknown的已有必需关系仍拦截。没有自动换loader/停用/删除JAR或增加兼容模组，没有跳过下载摘要或实例发布保护。
+- 本地声明阻塞增加稳定ErrUnsafeChange类别，持久任务显示安全固定原因，不把原始元数据/URL写入历史；即时错误包含对应文件路径，便于定位，不再只有“fabric/forge”。
+- 新增回归源码覆盖外部描述符不阻止发布/不冒充provider、缺失判断保持未知、已满足依赖失效仍拦截、重复与冲突仍拦截、双描述符按当前loader选择和Quilt后备。遵循既有偏好，全部未运行且未编译测试目标；只格式、生产build及体验包，不接触用户真实实例/公网/游戏。
+- 新包体验时在原任务点击“重试”，继续固定计划并复用通过摘要验证的已有缓存；不要求删除原任务/已下载资源或重建实例。重试后仍可能出现其他确切依赖/运行环境错误，不能把本次规则修正称作该包运行验收。
+
+
+本修正版构建：gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64主程序交叉编译成功（build/mcl-pack-declarations-fix-windows-amd64.exe，33,935,360字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-pack-declarations-fix-arm64.dmg，10,022,912字节，约9.6MiB，临时签名、未公证）。回归源码已格式整理，未执行/未编译测试目标；未运行公网、用户实例修改、Java/处理器/游戏或原生交互。仍在feature/persistent-download-tasks，未合并main/发版。
+
+
+## 31. T体验：Forge 47工具被误固定为Java8
+
+用户后续截图确认包已导入，但配置Forge47.4.10时提示“准备安装工具Java（至少8）：官方目录暂无osx/arm64的Java8”。此前Fabric/Forge声明拦截已经越过；当前失败发生在后续运行环境安装，不能删实例或重新导入掩盖。
+
+静态定位runProcessors把所有工具初始下限设成8，仅按class版本提高；processorRuntime/EnsureProcessor又为历史兼容把minimum8固定Java8。现代工具的Java8字节码并不等于现代游戏安装必须使用Java8，导致现代Forge错误走历史策略并查询缺失的ARM64 Java8目录。
+
+本次把处理器选择下限设为max(8, 官方游戏Java要求, 全部已固定工具classpath的class最低要求)。现代游戏17/21下的旧字节码工具复用已有兼容稳定游戏Java，或沿原服务安装稳定工具Java；如果工具要求更高，仍提升独立工具下限，不改变游戏major或用户偏好。历史游戏8/工具8仍固定Java8，历史游戏8/工具17仍使用独立工具17；未改游戏exact-major、架构/EA校验、处理器顺序、私有stage、输出摘要和process安全适配。
+
+新增回归源码通过synthetic class header + 假runner串联runProcessors/选择器，覆盖现代17+旧class8（osx/arm64）、现代21+旧class8、工具21+游戏17、历史8+工具8、历史8+工具17，并断言不更改game major、不执行Java。遵循用户现行偏好，源码未执行/未编译测试目标，不做真实网络/安装器/游戏/原生验收。
+
+体验修正版后，在现有页面点击“继续安装运行环境”或原任务重试；使用已导入的同一个实例，不重复创建、不要求手动装Java8。此前成功导入也不等于本次运行环境/真实游戏已经验收。
+
+
+本修正版构建记录：gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...通过。Windows amd64主程序交叉编译成功（build/mcl-forge-tool-java-fix-windows-amd64.exe，33,935,360字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-forge-tool-java-fix-arm64.dmg，10,022,912字节，约9.6MiB，临时签名、未公证）。回归仅格式整理，未执行/未编译测试目标；未运行Java/真实处理器、用户实例续装、公网下载或游戏。feature/persistent-download-tasks独立修复，不合并main/发版。
+
+
+## 32. T体验：导入成功直达实例
+
+用户要求删除截图中的“整合包已导入/运行环境已就绪/查看实例”成功结果页。finishPackImport在确认Imported和RuntimeReady成功、收据与实例摘要更新后，清除当前导入编辑器并通过selectInstance进入对应实例；地图成功也返回目标实例。导航只在用户仍看本次市场导入页或本地导入工作台时执行，离开去其他页面后不抢导航。原任务指针不符的晚到回调仍拒绝；文件导入但环境失败/取消保留继续安装入口，不冒称整体成功。所有成功导航发生在原完成回调，不在每帧渲染里操作。
+
+用户另询问删除实例后同包几乎秒完成，本次只静态核对并解释，不改缓存/删除策略：cache/market/<SHA1>保留原压缩包与包内下载文件；共享客户端/libraries/assets、loader代际及受管Java独立于实例；共享副本缓存也能按摘要恢复。实例删除仍回收专属载荷/中央记录/专属备份至系统废纸篓，不删其他实例共用资源。重新导入生成新实例、从已验证资源重建，不从缓存恢复旧存档。任务字节进度包含校验复用的对象体积，不能视作实际网络传输字节；本轮未读取用户磁盘或网络日志，不声称识别了该次每个命中的具体文件。
+
+遵循现行偏好，仅格式、生产构建及macOS体验包，不跑测试/自动化/原生导入验收。没有新配置/API/缓存行为变更，没有访问或清理用户真实数据。
+
+
+本次构建记录：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...成功；Windows amd64主程序交叉编译成功（build/mcl-import-navigation-windows-amd64.exe，33,929,216字节）。MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功，独立体验包build/darwin-arm64/mcl-0.0.4-import-navigation-arm64.dmg（10,024,448字节，约9.6MiB，临时签名、未公证）。未运行test/vet/Tester/原生自动化或真实导入/删除/缓存清理，本次不新增测试；功能交互待用户体验。
+
+
+## 33. T体验：下载缓存常显占用和真实路径
+
+用户要求下载缓存占用自动显示，移除“默认位置”占位Label并直接显示实际路径。下载设置入口点击后显式发起后台Inspect，成功保存偏好、清理（含取消/部分失败后）和任务完成时在当前页刷新，不从渲染里读磁盘或启动扫描；没有新增轮询/计时器。统计中显示“正在统计…”，完成后始终显示字节格式（空缓存0B），未获取显示—，移除菜单“查看占用”。
+
+路径由入口注入DownloadCache.DirectoryFor纯函数解析，空配置显示真实默认受管子目录，自定义显示选定父目录下的真实受管子目录；已成功统计时用Info.Directory。没有在UI猜缓存根/复制存储常量或把父目录标签当真实缓存路径，长路径沿原单行截断样式，保留可访问文本和打开目录按钮。
+
+统计复用原有取消/generation保护，离页拒绝晚到结果，关闭窗口主动取消并屏蔽回调；设置写入成功后才更新提交快照并重查，新草稿不冒用旧位置占用。清理确认/范围/系统锁未变，失败或部分清理仍Toast，不把未知统计显示成0。不修改schema、缓存范围、用户实例或其他下载行为；只格式构建，无测试/自动化/实机扫描验收。
+
+
+本批构建：gofmt、git diff --check及CGO_ENABLED=0 ./scripts/go.sh build ./...通过，Windows amd64主程序编译成功（build/mcl-cache-display-windows-amd64.exe，33,928,704字节），MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-cache-display-arm64.dmg，10,023,936字节，临时签名、未公证）。未跑测试/vet/Tester/自动化/原生/用户真实缓存扫描或清理，未新增回归，不把构建称为交互验收。留在feature/persistent-download-tasks，不合并main/发版。
+
+
+## 34. T体验：精简整合包确认流程与项目图标
+
+用户连续反馈：移除常驻“从本地补齐”、优化确认页和描述输入、使用对应市场整合包icon；同时明确删除只有名称/游戏目录/继续的中间页。
+
+- 在线选择整合包版本后直接发起原后台Inspect并固定当前游戏目录，进入读取状态后到最终确认；不会自动发布或跳过可选文件/固定清单确认。成功后仍直达实例。读取失败提供重新读取，返回直接离开当前导入，不恢复多余中间页。地图仍需真实目标实例/存档选择。
+- 确认页48DIP图标、可编辑名称与单行来源/版本/Minecraft/loader元信息集中在顶部；删除重复整合包名称/大输入框和独立元信息块。描述改MyGo原生TextAreaBase，64DIP可换行编辑，使用共同内容组的内边距和细边框，不嵌单行灰输入框；目录行仍紧凑。清单圆角细边框和自身滚动，底部右对齐30DIP安装按钮，无外层表单Scroll。
+- 移除无条件“从本地补齐”和空工具栏。真实受限/缺失文件仍明确阻止安装、保留原项目页，并只在对应缺失文件行提供选择文件图标；不跳摘要、不绕分发，不删除原手动补齐后端或限制说明。原始包受限时仍须选择对应压缩包。
+- 新增显式InstanceIcon异步动作，与原市场图片共用四项并发和平台图片适配：仅公共Modrinth/CF图像CDN、2MiB/2048x2048、80x80归一化、后台PNG编码、Window.Update交付；UI渲染不联网/读盘/编码。市场已有bitmap可先显示，完成后把PNG副本放入导入Request和Instance，下载/导入进度以及创建后实例均可使用，不依赖市场列表bitmap寿命或只存URL。
+- 详情中补全IconURL后按同来源项目ID带入；元信息回调不能重置先到的项目图标；手动预设/本地图片覆盖会取消网络任务并递增generation，迟到图标不能覆盖。切换导入、返回、关窗主动取消，旧任务指针/代际均拒绝。用户选择自动时可重新加载项目图标；失败Toast并明确回到默认图标，不能仅显示缓存缩略图却静默保存空图标。本地包没有远端市场身份时继续原图标规则。
+- 新增回归源码覆盖版本选择立即读取/固定目录、图标先到不被元信息重置、PNG进入固定导入快照与独立字节所有权、取消/手动预设/替换任务拒绝迟到回调；全部未运行、未编译测试目标。仅格式/生产构建/体验包，不访问公网或运行原生交互、真实包/Java/游戏验收；没有新增依赖或配置schema。
+
+
+本批构建记录：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64主程序交叉编译成功（build/mcl-pack-editor-windows-amd64.exe，33,943,040字节）。MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-pack-editor-arm64.dmg，10,026,496字节，临时签名、未公证）。新增回归只源码、未执行/未编译测试目标，未跑vet/Tester/原生交互、公共图标请求/真实整合包导入或Java/游戏验收。无新依赖/配置schema，参考目录未动；留feature/persistent-download-tasks，不合并main/发版。
+
+
+## 35. T体验：整合包读取失败留下空白重读页
+
+用户FunDinoModpack（市场版本1.7.10）截图只剩标题/重新读取。已确认的界面回归：inspectMarketArchive把错误写入i.err，但archiveImportView不展示且Toast桥接未接该字段，因此失败原因完全不可见。仅凭截图无法确认实际错误属于版本接口/网络/清单/官方游戏元数据，不能直接声称1.7.10不支持或已修复该包兼容性；本轮没有读取用户缓存或公网重现。
+
+首次在线读取失败现在发出带具体原因的错误Toast，取消该次图标任务并退出空确认状态，恢复原项目版本列表；用户已离页时不修改当前page。主动取消静默，已替换任务的迟到回调忽略；已有确认清单的重新读取失败保留名称/图标/目录/可选项，显示Toast。异常未初始化状态的恢复动作缩为普通工具行，不再用占满页尾的大主按钮伪装正常步骤。
+
+应用层为原错误补读取版本/文件信息、获取压缩包、解析清单、官方游戏列表/指定版本及核对阶段上下文，仍使用%w保留取消/错误分类，不保存原始凭据或URL。没有放开ZIP边界、摘要、加载器、Java或平台限制，也不把市场显示版本当运行验收。新增回归源码覆盖首次失败退回+Toast、取消静默/离页不导航、旧回调拒绝和重读保留草稿，未执行/未编译测试目标。只格式构建体验包，不跑公网/原生/Java/游戏验收。
+
+
+本批构建记录：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64交叉编译成功（build/mcl-pack-read-feedback-windows-amd64.exe，33,946,624字节），MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-pack-read-feedback-arm64.dmg，10,025,984字节，临时签名、未公证）。回归源码未运行/未编译测试目标，未做公网/原生或该用户整合包实机验收，不把错误反馈修复称为已解决具体包底层失败。留feature/persistent-download-tasks，不合并main/发版。
+
+
+## 36. 用户再次明确：移除Forge导入常驻说明
+
+删除“Forge安装器将在导入后核验；文件可导入不代表游戏已可运行”的生成与确认页Warnings展示分支，旧任务中保留的该字段也不会重现提示。不改为Toast、Tooltip或替代说明，不留下布局空白。真实工作错误仍沿原Toast/任务诊断反馈。用户反复要求不要在UI加入这类提示，后续不得再以兼容边界/实现说明为由恢复。仅格式、生产构建及体验包，未运行测试/原生验收。
+
+构建记录：gofmt、git diff --check、CGO_ENABLED=0生产build及MyGo darwin/arm64临时签名打包成功；build/darwin-arm64/mcl-0.0.4-no-import-notice-arm64.dmg，10,024,960字节，未公证。未测试/原生验收。
+
+
+## 37. Java多发行商回退、国内镜像与旧版macOS架构回退
+
+### 用户授权与来源证据
+
+用户明确要求一个来源无包/不可用时继续尝试其他源，并考虑国内镜像；截图实际是旧LWJGL2.9.1没有ARM64 natives，不能通过换ARM Java伪装解决。覆盖早期“Java仅Temurin”和“旧版macOS ARM64直接拒绝”的实现限制。本批仍不跑测试/自动化/真实Java/游戏，I未开始，不合并main/发版。
+
+只读核对官方目录：Azul metadata v1的Java8/macOS/aarch64/GA/CA查询和UUID详情确实提供Zulu8.0.512 ARM64 JDK、固定SHA-256/103741000字节及cdn.azul.com地址。官方接口返回摘要和包身份，不由镜像提供信任根。也只读查看TUNA /Adoptium/8/jdk/x64/mac/公开目录，确认映射结构；未下载任何Java压缩包/执行Java，元数据核对不等于安装验收。实现动态取目录，不写死该版本或UUID。
+
+### Java目录与下载
+
+- Package增加Provider，空值兼容旧Temurin任务；官方提供者顺序Temurin → Azul Zulu，自动启动/安装工具使用相同Ensure链。每个来源无包/目录失败/安装失败后继续下一候选；同发行商先JRE再JDK，目录部分成功仍使用有效包；用户取消或任务取消立即结束，不将取消当失败继续联网。最后只有全部不可用才汇总错误。
+- Java管理目录合并两家可用发行包，自动选择懒读取各提供者，不为已可用的首选环境等待无关来源。本机兼容且稳定的显式偏好仍优先，游戏精确major、目标架构和EA拒绝规则不变，Java8不会改成17来冒充成功。
+- Zulu先通过有界列表取得UUID，再读取官方详情，核对UUID/product、OS、arch/bitness、major、kind、archive、GA/CA与非JavaFX，固定SHA-256与大小；只允许cdn.azul.com/zulu/bin的对应平台归档。未知来源/凭据/查询URL拒绝，下载后继续解压边界与实际Probe的major/arch/稳定性检查。安装目录temurin-/zulu-分开，旧Temurin目录和任务仍可发现/继续。
+- Java生产下载仍用sharedDownloads，共享并发、代理、总限速、摘要缓存、目标锁和分片恢复，不加私人下载代理。Temurin固定官方Github发布文件增加TUNA Adoptium镜像映射，严格对应major/kind/arch/os/文件名；支持官方tag中的%2B与新版本文件名下划线。镜像优先/官方优先/自动遵循现有下载设置，镜像404/落后/摘要不符按原下载候选回官方；默认“仅官方”仍只用两家官方源。
+- 仅有独立官方摘要的字节可镜像，未知Maven/CF/Modrinth/元数据或签名URL不因此被代理。Zulu直接使用其官方CDN，没有虚构Zulu镜像、借Key或取消来源限制；官方目录无法提供可靠身份时宁可进入下一来源。镜像目录核对不表示所有最新版本已同步。
+- 回退的无效Java候选记录skipped文件状态，文件详情可查看，汇总不把弃用归档体积算成最终所需进度；固定Java单包任务仍按原包重试，不静默换它的摘要。历史允许公共cdn.azul.com URL，仍不保存授权/代理/账户秘密。
+
+### 同一目标架构贯穿安装与启动
+
+- core.install为明确缺少ARM native的错误增加类型，SelectPlatform先完整建立宿主计划；仅macOS ARM64遭遇这种架构缺项、且完整x86-64计划可建立时，候选回退为amd64。其他损坏元数据、缺摘要、未知规则或Linux/Windows ARM不借此绕过。
+- InstallationService注入只读CheckExecutionPlatform，macOS适配检查Rosetta运行时标记；缺失时明确失败，不自动运行系统安装器/提权。原生ARM计划可用时继续ARM，不改版本元数据或偷偷注入替代LWJGL/Agent。
+- 目标平台传入JavaResolver、加载器Request/代际缓存、libraries/natives计划、安装Receipt、launch.Options和最终Plan；不只改Java路径或只移除native保护。重开识别同OS且受支持的x64收据，真实准备仍重新规划和校验。
+- RunLoaderProcessor重新Probe后和StartTracked交接前再次检查宿主/目标能力，仅显式允许的macOS ARM→x64转换放行；其余跨平台仍拒绝。原实例/OS锁、SessionRegistry、gated进程身份登记、优先级应用、停止/取消与真实游戏交接链不变，不回到低层Start/猜PID/通过shell启动。
+- Rosetta只解决CPU执行架构，不承诺任意旧模组/游戏/显卡兼容；本轮没有实际启动Java8/LWJGL2或游戏，不增加已验收版本组合，也不添加常驻说明或警告卡片。只在真正失败时沿现有错误路径展示。
+
+### 验证范围
+
+新增回归源码覆盖Temurin403回退Zulu、固定官方详情身份/GA/架构/摘要拒绝、目录取消、二进制失败后下一发行商/取消不继续、现代与Java8镜像映射及官方优先/镜像优先、带%2B官方地址、旧native整套x64计划/现代保持ARM/不掩盖元数据错误/无fallback库拒绝、注入缺Rosetta与平台一致性。全部未执行、未编译测试目标。只gofmt、git diff --check、生产build、主程序交叉编译与MyGo体验包；未跑test/vet/race/Tester/原生自动化、Java下载/解压/Probe/处理器/游戏或Rosetta实机验收。构建证据在本节末追加。
+
+
+### 本批最终构建证据
+
+gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...成功；Windows/Linux/macOS amd64主程序交叉编译及MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包全部退出0。
+
+- build/mcl-java-fallback-windows-amd64.exe：34,014,720字节。
+- build/mcl-java-fallback-linux-amd64：33,312,189字节。
+- build/mcl-java-fallback-darwin-amd64：34,198,096字节。
+- build/darwin-arm64/mcl-0.0.4-java-fallback-arm64.dmg：10,039,296字节。
+
+macOS体验包临时签名、未公证，未发签名自动更新或Release。新增回归只格式源码、未执行/未编译测试目标；没有test/vet/race/Tester、Java安装/Probe、加载器处理器、游戏、Rosetta/窗口自动化或用户真实实例操作。跨编译不代表对应平台功能已验收。只读核对官方JSON/镜像目录与真实二进制下载/执行分开记录，后者仍待用户体验。
+
+
+## 38. 用户截图：Forge10.13.4.1614安装包摘要请求404
+
+用户截图从ARM native问题越过到Forge安装包摘要/大小请求404。静态定位：整合包要求短build10.13.4.1614，app.LoaderService未调用已有官方发行目录，直接forgeInstaller拼成1.7.10-10.13.4.1614；旧代际官方目录可能以同构建游戏分支10.13.4.1614-1.7.10标识。此前目录列表保留后缀，但整合包/已有实例启动未做短版本到完整分支映射。
+
+新增CanonicalForgeRequest，仅历史Forge数字短build读取官方索引，优先精确条目，否则只接受同build且branch完全等于GameVersion的条目；不拼猜后缀、不换高版本/别的MC/预发布分支。显式分支和现代Forge不增加索引请求。JSON目录不可用时回退同官方Maven XML，输入仍4MiB/有界版本数/取消保护。
+
+LoaderService先读原缓存和受保护别名，再在缓存未命中时规范化请求；完整分支连同BaseSHA1/完整继承摘要/OS/架构进入原profile/runtime缓存key，安装器Universal/版本ID仍按完整身份核验。实例/整合包记录及任务指纹保留原短build，不改用户固定要求、不重建实例。成功合并、原运行库校验通过后才写cache/loader-aliases/<requested.Key>.json（schema1/8KiB/私有原子写与目录sync），已缓存映射不每次查索引/重复写；损坏/错build/平台/基底映射拒绝且保留，不在离线时重新猜版本。
+
+新增回归源码覆盖短build精确映射与Maven文件名、未知/其他build/跨游戏分支拒绝、完整基底/平台保护、官方XML回退、显式/现代不查索引、取消不继续、映射无对应完整profile不发布及损坏记录保留。全部未执行/未编译测试目标。本轮只读核对官方JSON及两种候选.sha1/HEAD时，开发环境均返回HTTP403，未取得公网成功证据；不能把合成fixture写成真实10.13.4.1614安装器验收。只格式/生产编译/体验包，不跑Java/安装器/游戏或真实用户目录操作。无新增常驻UI提示、依赖或配置schema；等待用户现有实例重试反馈。
+
+
+本批构建：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64主程序编译成功（build/mcl-forge-branch-fix-windows-amd64.exe，34,045,440字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功（build/darwin-arm64/mcl-0.0.4-forge-branch-fix-arm64.dmg，10,052,096字节，临时签名、未公证）。新增回归只源码未运行/未编译测试目标，无test/vet/自动化/真实Forge/Java/游戏验收；公开元数据请求403的限制保留。不合并main、不发版。
+
+
+## 39. 用户截图：旧Forge安装展示版本误当目标ID
+
+用户在前一版越过Maven404后报“旧Forge客户端版本、父身份、主类或参数格式不受支持”。本次使用固定官方URL只读获取1.7.10-10.13.4.1614-1.7.10-installer.jar（HTTP200，3,699,647字节），仅在内存读取install_profile.json，不运行/安装JAR、不修改用户数据。该GET诊断与早前JSON索引/.sha1/HEAD返回403是不同请求，不能把此前403记成所有官方资源不可访问，也不能把读取元数据记成完整安装验收。
+
+真实清单关键事实：install.version是展示文字“Forge 10.13.4.1614-1.7.10”，install.target与versionInfo.id均为“1.7.10-Forge10.13.4.1614-1.7.10”；install.minecraft/inheritsFrom/jar是1.7.10，主类net.minecraft.launchwrapper.Launch，旧minecraftArguments及cpw.mods.fml.common.launcher.FMLTweaker。失败来自旧解析器强求install.version==versionInfo.id，先前纯合成夹具把两者写成相同ID，遗漏真实字段区别。
+
+修复按install.target核验客户端ID；只有确实缺省target的旧生产者才允许用install.version作为精确ID。显式target:null/空/错误类型/错版本均拒绝，不回退到显示标签。完整build/分支、父版本、主类、旧参数、Universal/LaunchWrapper和Java8等保护保持；原合并大错误拆为具体失败字段，仍只走实际错误路径，不增加常驻提示。
+
+1.7.10合成夹具改为独立展示版本+target形态（不复制官方源码/完整元信息），原准备/缓存/启动计划回归随之覆盖该形态；新增target与display区别、缺省target的旧ID兼容、显式坏target不能回退、正确target不能放行错build/父/主类的回归源码。全部未运行/未编译测试目标，仅gofmt、生产编译、交叉编译及体验包；没有执行Java、安装器、游戏或原生自动化。现有实例直接重试，不要求重建。
+
+
+本批构建记录：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64主程序交叉编译成功（build/mcl-forge-target-fix-windows-amd64.exe，34,046,464字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功（build/darwin-arm64/mcl-0.0.4-forge-target-fix-arm64.dmg，10,057,216字节，临时签名、未公证）。新增及既有回归未运行/未编译测试目标；只读取得官方清单未执行其代码，不是Java/Forge安装或游戏主菜单验收。留feature/persistent-download-tasks，不合并main/发版。
+
+## 40. 用户截图：旧Forge Scala依赖.sha1旁车404
+
+截图固定org.scala-lang:scala-parser-combinators_2.11:1.0.1的加载器请求404。本次只读获取同一官方1.7.10/10.13.4.1614安装清单，核对目标坐标的.jar.sha1 GET与.jar HEAD：Forge旁车404但JAR HEAD200、419701字节；Mojang库与Maven Central同坐标都404。官方清单已有两个合法checksums；不能改group到org.scala-lang.modules、换版本、换文件或用文件名/HEAD冒充摘要。旁查同批scala-xml_2.11:1.0.2也为旁车404/JAR HEAD200、648679字节；scala-swing_2.11:1.0.1旁车200且摘要在清单允许集合、JAR HEAD200、726500字节。
+
+新增旧Forge清单摘要后备：原.sha1+HEAD路径仍优先，旁车只有404/410且固定安装清单存在有效checksum时才后备。先HEAD固定大小及单项/整组剩余预算，再仅尝试清单最多16个去重SHA-1。每个候选经过同一共享download.Client及私有摘要路径、并发/限速/代理/副本缓存/分片/系统锁/完整校验；只有实际完整内容不匹配才换下一允许摘要，旧候选置skipped不充当必需完成文件。取消、网络/权限/磁盘/发布失败不借机轮换或放行；无checksum、畸形摘要、鉴权403/401、旁车非摘要内容、大小异常仍明确失败。成功选定的文件继续原总量约束、完整校验/清单checksum校验、暂存和独立运行库发布，不增加未校验下载，也不改Java/会话身份流程。
+
+共享下载仅给完整摘要/大小错误加可errors.Is识别类型，并保留分片丢弃后包装传播；不把任意IO错误冒充摘要差异。正常旁车元数据、显式artifact和官方base同名固定依赖仍保持原路径。新增缺旁车/多摘要第二候选、正常旁车、无pin/坏pin/数量边界/非法旁车/错摘要/鉴权/缺文件/错误大小/网络不轮换/取消/剩余预算回归源码，全部未执行/未编译测试目标。
+
+范围仍是格式/生产构建/体验包，官方请求只读元信息，未下载运行Scala依赖、Java、Forge安装器或游戏；不操作真实实例、不添加UI说明、不合并main/发版。现有实例可直接重试。
+
+本批构建记录：gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64交叉编译成功（build/mcl-forge-checksum-fix-windows-amd64.exe，34,055,168字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功（build/darwin-arm64/mcl-0.0.4-forge-checksum-fix-arm64.dmg，10,058,240字节，临时签名、未公证）。未运行或编译测试目标，未执行Java/Forge/游戏或原生验收。公开请求仅清单/摘要/HEAD，未实际验收依赖下载和整包启动。
+
+## 41. 用户反馈：1.7.10音乐响起但没有可见窗口
+
+用户提供运行截图及音乐已经响起的反馈：状态“等待游戏窗口”，日志有OpenAL初始化/声音引擎启动及FalsePatternLib配置回退。不将单条AL错误当作窗口失败的已证实原因，也不把音乐当已进入可见主菜单；仅凭截图无法判断图形线程阻塞、隐藏/其他空间窗口或Quartz未识别。
+
+静态发现明确参数问题：meta.legacyJVMArguments对所有旧minecraftArguments模板自动添加macOS -XstartOnFirstThread，把现代LWJGL3/GLFW首线程启动方式套到旧LWJGL2的AWT/Cocoa路径。参考SJMCL command_generator.rs Part3的旧模板分支只补natives/launcher属性，并不补首线程参数；b-launcher却给所有mac旧模板添加，不继续照搬此默认。修复移除旧模板自动注入，现代官方arguments.jvm原有首线程规则完整保留；不按用户Java偏好或Forge版本替换图形库、不打补丁/Agent、不改natives或安装/会话身份。
+
+官方缓存是原始摘要元数据，每次读取重新规范化；Forge Profile.Merge每次从当前base.Arguments拷贝JVM参数，旧Forge缓存不持久化新旧base的默认JVM。所以既有实例/原始缓存和已安装Forge无需删除重建，下一次启动即使用修正。Java8 manifest-only classpath传输不变。窗口状态仍依同一登记进程的真实Quartz可见窗口，不用声音日志/超时伪装窗口已出现，不抢前台或改变用户运行中的窗口。
+
+更新旧参数合成回归预期，新增1.6.1/1.7.10/1.12.2缓存重读及OS边界、natives/classpath保留、现代显式首线程规则保留、Java8最终ProcessArguments不重新加首线程的回归源码。全部未运行/未编译测试目标。仅格式/生产构建/体验包，不探测/结束/重启用户正在运行的游戏，不运行Java/原生自动化或实机验收；本次参数缺陷确实存在，但该运行实例是否由它导致无窗口尚待用户重试确认。保持不合并main/不发版。
+
+本批构建记录：gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64交叉编译成功（build/mcl-legacy-mac-window-fix-windows-amd64.exe，34,055,168字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功（build/darwin-arm64/mcl-0.0.4-legacy-mac-window-fix-arm64.dmg，10,055,680字节，临时签名、未公证）。未运行/编译测试目标或执行Java/游戏/原生验收；未读取或改变用户运行会话，当前无窗口的唯一原因和修复效果待用户体验。
+
+## 42. 用户授权：全部未合并分支汇入main
+
+用户要求把已有改动提交远端后，明确要求所有尚未合并分支合入main并继续。fetch后origin/main已包含PR#11的分架构打包/portable更新（b3d1016）；所有本地与远端分支仅feature/persistent-download-tasks（7b12148）未包含于主线。先快进本地main到远端最新，再以merge commit汇入T1–T4及第30–41节体验反馈修正；没有重复合并已包含分支，没有删除分支/历史。
+
+main.go唯一文本冲突位于窗口绑定后的更新/任务接入：保留主线connectUpdates(window,shell,portable)，同时加入connectDownloadTasks及分支原有共享下载TaskService；portable初始化/退出清理、原更新适配与原任务生命周期均保留，不选一侧覆盖另一侧。
+
+main.go gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...以及Windows amd64/Linux amd64主程序交叉编译通过。本次仅合并与必要编译，未运行test/vet/race、测试目标编译、UI自动化/安装器/Java/真实游戏/用户数据操作；先前窗口修复及T行为仍待用户验收，不把合并或编译当验收。未修改版本号/打标签/发布Release。用户已暂缓I，R只介绍未获开发授权，不自动启动后续阶段。

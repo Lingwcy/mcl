@@ -2,16 +2,19 @@ package main
 
 import (
 	"context"
+	"sync"
+
 	"github.com/egoist/mygo"
+
 	"mcl/internal/app"
 	"mcl/internal/core/download"
 	"mcl/internal/storage"
 	launcherui "mcl/internal/ui"
-	"sync"
 )
 
 func connectDownloads(ctx context.Context, workers *sync.WaitGroup, window *mygo.Window, shell *launcherui.Shell, service *app.DownloadService, cache *storage.DownloadCache) {
 	shell.ConnectDownloads(launcherui.DownloadActions{
+		Directory: cache.DirectoryFor,
 		Pick: func(done func(string, error)) func() {
 			return marketWork(ctx, workers, window, func(task context.Context) (string, error) {
 				paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: window, Title: "选择下载副本缓存位置", ButtonLabel: "选择", Directory: true, CreateDirectories: true})

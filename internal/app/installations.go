@@ -32,18 +32,20 @@ type InstanceReader interface {
 // reservation to a live game. The registry combines an OS lock with persisted
 // kernel process identity to protect sessions left by a previous launcher.
 type InstallationService struct {
-	openGameDirectory func(context.Context, string) (*os.Root, error)
-	gameDirectory     GameDirectoryResolver
-	catalog           VersionCatalog
-	instances         InstanceReader
-	receipts          InstallationRepository
-	client            *download.Client
-	platform          meta.Platform
-	registry          SessionRegistry
-	loaders           *LoaderService
-	mu                sync.Mutex
-	active            map[string]bool
-	slot              chan struct{}
+	Tasks                  *TaskService
+	CheckExecutionPlatform func(context.Context, meta.Platform, meta.Platform) error
+	openGameDirectory      func(context.Context, string) (*os.Root, error)
+	gameDirectory          GameDirectoryResolver
+	catalog                VersionCatalog
+	instances              InstanceReader
+	receipts               InstallationRepository
+	client                 *download.Client
+	platform               meta.Platform
+	registry               SessionRegistry
+	loaders                *LoaderService
+	mu                     sync.Mutex
+	active                 map[string]bool
+	slot                   chan struct{}
 }
 
 func NewInstallationService(catalog VersionCatalog, instances InstanceReader, receipts InstallationRepository, client *download.Client, platform meta.Platform, registry SessionRegistry, loaders *LoaderService, directories ...GameDirectoryResolver) *InstallationService {
@@ -79,7 +81,15 @@ func (s *InstallationService) Load(ctx context.Context) (map[string]install.Rece
 			failures = append(failures, fmt.Errorf("实例 %s 的安装记录无法读取: %w", value.Name, err))
 			continue
 		}
-		if receipt.Matches(value, s.platform) {
+		target := s.platform
+		if target.OS == "osx" && meta.NormalizeArch(target.Arch) == "arm64" && receipt.OS == "osx" && receipt.Arch == "amd64" && s.CheckExecutionPlatform != nil {
+			candidate := target
+			candidate.Arch = "amd64"
+			if s.CheckExecutionPlatform(ctx, s.platform, candidate) == nil {
+				target = candidate
+			}
+		}
+		if receipt.Matches(value, target) {
 			result[value.ID] = receipt
 		}
 	}
@@ -91,11 +101,30 @@ func (s *InstallationService) Run(ctx context.Context, id string, report func(in
 }
 
 func (s *InstallationService) RunWithJava(ctx context.Context, id, fallbackJava string, report func(install.Progress)) (install.Receipt, error) {
+	if s.Tasks != nil && taskScope(ctx) == nil {
+		intent, err := taskGameIntent(ctx, s.instances, id, "game")
+		if err != nil {
+			return install.Receipt{}, err
+		}
+		return performTask(ctx, s.Tasks, intent, func(task context.Context) (install.Receipt, error) {
+			if err := checkTaskTarget(task, s.instances, intent); err != nil {
+				return install.Receipt{}, err
+			}
+			return s.RunWithJava(task, id, fallbackJava, report)
+		})
+	}
 	reserved, err := s.reserve(ctx, id)
 	if err != nil {
 		return install.Receipt{}, err
 	}
 	defer reserved.Close()
+	value, err := s.instances.Get(ctx, id)
+	if err != nil {
+		return install.Receipt{}, err
+	}
+	if err := checkTaskInstance(ctx, value); err != nil {
+		return install.Receipt{}, err
+	}
 	return s.run(ctx, id, fallbackJava, report)
 }
 
@@ -135,6 +164,9 @@ func (s *InstallationService) run(ctx context.Context, id, fallbackJava string, 
 	if err != nil {
 		return install.Receipt{}, err
 	}
+	if err := checkTaskInstance(ctx, value); err != nil {
+		return install.Receipt{}, err
+	}
 	if s.gameDirectory != nil {
 		if _, err := s.gameDirectory(ctx, id); err != nil {
 			return install.Receipt{}, fmt.Errorf("读取实例游戏目录: %w", err)
@@ -150,6 +182,9 @@ func (s *InstallationService) run(ctx context.Context, id, fallbackJava string, 
 }
 
 func (s *InstallationService) resolveVersion(ctx context.Context, value instance.Instance, fallbackJava string, report func(install.Progress)) (resolvedVersion, error) {
+	if err := TaskStage(ctx, "读取官方元数据"); err != nil {
+		return resolvedVersion{}, err
+	}
 	if report != nil {
 		report(install.Progress{Stage: "metadata"})
 	}
@@ -157,15 +192,22 @@ func (s *InstallationService) resolveVersion(ctx context.Context, value instance
 	if err != nil {
 		return resolvedVersion{}, err
 	}
+	if err := taskBaseIdentity(ctx, value, version); err != nil {
+		return resolvedVersion{}, err
+	}
 	return s.resolveLoader(ctx, value, version, fallbackJava, report)
 }
 
 func (s *InstallationService) resolveLoader(ctx context.Context, value instance.Instance, version meta.Version, fallbackJava string, report func(install.Progress)) (resolvedVersion, error) {
-	if _, err := install.Build(version, s.platform); err != nil {
-		return resolvedVersion{}, fmt.Errorf("客户端平台兼容性: %w", err)
+	if err := TaskStage(ctx, "准备加载器"); err != nil {
+		return resolvedVersion{}, err
+	}
+	target, err := s.targetPlatform(ctx, version)
+	if err != nil {
+		return resolvedVersion{}, err
 	}
 	if _, required := value.RequiredLoader(); !required {
-		return resolvedVersion{version: version}, nil
+		return resolvedVersion{version: version, platform: target}, nil
 	}
 	if s.loaders == nil {
 		return resolvedVersion{}, errors.New("此实例要求的加载器服务未配置")
@@ -173,7 +215,9 @@ func (s *InstallationService) resolveLoader(ctx context.Context, value instance.
 	if report != nil {
 		report(install.Progress{Stage: "loader"})
 	}
-	return s.loaders.resolve(ctx, value, version, fallbackJava, s.platform, report)
+	resolved, err := s.loaders.resolve(ctx, value, version, fallbackJava, target, report)
+	resolved.platform = target
+	return resolved, err
 }
 
 // execute receives the exact metadata already used for Java validation and
@@ -193,7 +237,7 @@ func (s *InstallationService) execute(ctx context.Context, value instance.Instan
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return install.Receipt{}, fmt.Errorf("安装记录损坏，原文件已保留: %w", err)
 	}
-	plan, err := install.Build(resolved.version, s.platform)
+	plan, err := install.Build(resolved.version, s.resolvedPlatform(resolved))
 	if err != nil {
 		return install.Receipt{}, err
 	}
@@ -228,9 +272,12 @@ func (s *InstallationService) execute(ctx context.Context, value instance.Instan
 	if err != nil {
 		return install.Receipt{}, err
 	}
-	receipt := install.Receipt{InstanceID: id, VersionID: value.Version.ID, VersionSHA1: value.Version.SHA1, OS: s.platform.OS, Arch: meta.NormalizeArch(s.platform.Arch), NativeDirectory: result.NativeDirectory, LegacyAssetsDirectory: result.LegacyAssetsDirectory, CompletedAt: time.Now().UTC()}
+	receipt := install.Receipt{InstanceID: id, VersionID: value.Version.ID, VersionSHA1: value.Version.SHA1, OS: plan.Platform.OS, Arch: meta.NormalizeArch(plan.Platform.Arch), NativeDirectory: result.NativeDirectory, LegacyAssetsDirectory: result.LegacyAssetsDirectory, CompletedAt: time.Now().UTC()}
 	if required, ok := value.RequiredLoader(); ok {
 		receipt.Loader, receipt.LoaderFingerprint = &required, resolved.profileFingerprint
+	}
+	if err := TaskStage(ctx, "发布"); err != nil {
+		return install.Receipt{}, err
 	}
 	if err := s.receipts.Save(ctx, receipt); err != nil {
 		install.RemoveNativeDirectory(root, parent, result.NativeDirectory)
@@ -251,6 +298,18 @@ func (s *InstallationService) execute(ctx context.Context, value instance.Instan
 // RunAutomatic installs a pack's client and fixed loader using a verified Java
 // runtime. No game/account is launched and no heap budget is needed to install.
 func (s *InstallationService) RunAutomatic(ctx context.Context, id string, resolveJava JavaResolver, report func(install.Progress)) (install.Receipt, error) {
+	if s.Tasks != nil && taskScope(ctx) == nil {
+		intent, err := taskGameIntent(ctx, s.instances, id, "game")
+		if err != nil {
+			return install.Receipt{}, err
+		}
+		return performTask(ctx, s.Tasks, intent, func(task context.Context) (install.Receipt, error) {
+			if err := checkTaskTarget(task, s.instances, intent); err != nil {
+				return install.Receipt{}, err
+			}
+			return s.RunAutomatic(task, id, resolveJava, report)
+		})
+	}
 	if resolveJava == nil {
 		return install.Receipt{}, errors.New("Java 自动安装服务尚未配置")
 	}
@@ -263,6 +322,9 @@ func (s *InstallationService) RunAutomatic(ctx context.Context, id string, resol
 	if err != nil {
 		return install.Receipt{}, err
 	}
+	if err := checkTaskInstance(ctx, value); err != nil {
+		return install.Receipt{}, err
+	}
 	if s.gameDirectory != nil {
 		if _, err := s.gameDirectory(ctx, id); err != nil {
 			return install.Receipt{}, err
@@ -273,7 +335,17 @@ func (s *InstallationService) RunAutomatic(ctx context.Context, id string, resol
 	if report != nil {
 		report(install.Progress{Stage: "metadata"})
 	}
+	if err := TaskStage(ctx, "读取官方元数据"); err != nil {
+		return install.Receipt{}, err
+	}
 	base, err := s.catalog.Version(ctx, value.Version)
+	if err != nil {
+		return install.Receipt{}, err
+	}
+	if err := taskBaseIdentity(ctx, value, base); err != nil {
+		return install.Receipt{}, err
+	}
+	target, err := s.targetPlatform(ctx, base)
 	if err != nil {
 		return install.Receipt{}, err
 	}
@@ -283,11 +355,11 @@ func (s *InstallationService) RunAutomatic(ctx context.Context, id string, resol
 			report(install.Progress{Stage: p.Stage, Progress: download.Progress{Bytes: p.Bytes, TotalBytes: p.Total}})
 		}
 	}
-	runtime, err := resolveJava(ctx, base.Java.Major, s.platform, preferred, javaProgress)
+	runtime, err := resolveJava(ctx, base.Java.Major, target, preferred, javaProgress)
 	if err != nil {
 		return install.Receipt{}, err
 	}
-	if err := runtime.Check(base.Java.Major, s.platform); err != nil {
+	if err := runtime.Check(base.Java.Major, target); err != nil {
 		return install.Receipt{}, err
 	}
 	loaderInstance := value
@@ -297,12 +369,12 @@ func (s *InstallationService) RunAutomatic(ctx context.Context, id string, resol
 		return install.Receipt{}, err
 	}
 	if resolved.version.Java.Major > runtime.Major {
-		runtime, err = resolveJava(ctx, resolved.version.Java.Major, s.platform, preferred, javaProgress)
+		runtime, err = resolveJava(ctx, resolved.version.Java.Major, target, preferred, javaProgress)
 		if err != nil {
 			return install.Receipt{}, err
 		}
 	}
-	if err := runtime.Check(resolved.version.Java.Major, s.platform); err != nil {
+	if err := runtime.Check(resolved.version.Java.Major, target); err != nil {
 		return install.Receipt{}, err
 	}
 	return s.execute(ctx, value, resolved, report)

@@ -4,6 +4,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,16 +15,34 @@ import (
 
 const mirrorOrigin = "https://bmclapi2.bangbang93.com"
 
+var temurinArchive = regexp.MustCompile(`^OpenJDK([0-9]+)U-(jdk|jre)_(x64|aarch64|x86-32)_(mac|linux|windows)_hotspot_([A-Za-z0-9._+-]+)\.(tar\.gz|zip)$`)
+
 type sourceHealth struct {
 	mirror bool
 	until  time.Time
 }
 
 // mirrorURL deliberately excludes platform files, signed query URLs, credentials
-// and arbitrary Maven repositories. Callers must already hold a pinned digest.
+// and arbitrary Maven repositories. The fixed Temurin archive mapping is the
+// only Java mirror route. Callers must already hold an independent pinned digest.
 func mirrorURL(original string) string {
 	u, err := url.Parse(original)
-	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.RawPath != "" || !meta.ValidPath(strings.TrimPrefix(u.Path, "/")) {
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || !meta.ValidPath(strings.TrimPrefix(u.Path, "/")) {
+		return ""
+	}
+	if strings.EqualFold(u.Hostname(), "github.com") {
+		parts := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
+		if len(parts) == 6 && parts[0] == "adoptium" && parts[2] == "releases" && parts[3] == "download" {
+			majorText := strings.TrimSuffix(strings.TrimPrefix(parts[1], "temurin"), "-binaries")
+			major, err := strconv.Atoi(majorText)
+			matches := temurinArchive.FindStringSubmatch(path.Base(u.Path))
+			if err == nil && parts[1] == "temurin"+majorText+"-binaries" && major >= 8 && major <= 100 && len(matches) == 7 && matches[1] == strconv.Itoa(major) && ((matches[4] == "windows" && matches[6] == "zip") || (matches[4] != "windows" && matches[6] == "tar.gz")) {
+				return "https://mirrors.tuna.tsinghua.edu.cn/Adoptium/" + majorText + "/" + matches[2] + "/" + matches[3] + "/" + matches[4] + "/" + parts[5]
+			}
+		}
+		return ""
+	}
+	if u.RawPath != "" {
 		return ""
 	}
 	switch strings.ToLower(u.Hostname()) {

@@ -26,6 +26,7 @@ type Progress struct {
 
 // Installer publishes a verified private runtime without changing system Java.
 type Installer struct {
+	Downloads *download.Client
 	Directory string
 	Transfers *download.TransferControl
 	Transport http.RoundTripper
@@ -44,7 +45,7 @@ func (i *Installer) Install(ctx context.Context, p Package, report func(Progress
 		return Runtime{}, err
 	}
 	defer root.Close()
-	name := "temurin-" + p.ID()
+	name := p.Vendor() + "-" + p.ID()
 	inspect := func(directory string) (Runtime, error) {
 		executable, err := installedExecutable(ctx, directory)
 		if err != nil {
@@ -96,6 +97,37 @@ func (i *Installer) Install(ctx context.Context, p Package, report func(Progress
 			return Runtime{}, err
 		}
 	}
+	if reused && i.Downloads != nil {
+		f := p.DownloadFile()
+		if err := download.Observe(task, download.Event{Key: download.FileKey(f), Path: f.Path, State: "done", Received: p.Size, Verified: p.Size, Total: p.Size}); err != nil {
+			return Runtime{}, err
+		}
+	}
+	if !reused && i.Downloads != nil {
+		f := p.DownloadFile()
+		if err := i.Downloads.Run(task, []download.File{f}, func(value download.Progress) {
+			if report != nil {
+				report(Progress{Stage: "下载 Java", Bytes: value.Bytes, Total: p.Size})
+			}
+		}); err != nil {
+			return Runtime{}, err
+		}
+		managed, err := os.OpenRoot(i.Downloads.Root)
+		if err != nil {
+			return Runtime{}, err
+		}
+		source, err := managed.Open(f.Path)
+		managed.Close()
+		if err != nil {
+			return Runtime{}, err
+		}
+		err = object.Copy(task, archive, source)
+		source.Close()
+		if err != nil {
+			return Runtime{}, err
+		}
+		reused = true
+	}
 	if !reused {
 		if err := downloadPackage(task, archive, p, report, i.Transfers, i.Transport); err != nil {
 			return Runtime{}, err
@@ -115,6 +147,9 @@ func (i *Installer) Install(ctx context.Context, p Package, report func(Progress
 	if report != nil {
 		report(Progress{Stage: "解压并检查 Java", Bytes: p.Size, Total: p.Size})
 	}
+	if err := download.Phase(task, "解压并检查 Java"); err != nil {
+		return Runtime{}, err
+	}
 	extraction, finishExtraction := context.WithTimeout(task, 5*time.Minute)
 	defer finishExtraction()
 	if err := extractPackage(extraction, archive, stage, p.OS == "windows"); err != nil {
@@ -133,6 +168,9 @@ func (i *Installer) Install(ctx context.Context, p Package, report func(Progress
 		return Runtime{}, errors.New("Java Home 超出安装目录")
 	}
 	if err := task.Err(); err != nil {
+		return Runtime{}, err
+	}
+	if err := download.Phase(task, "发布"); err != nil {
 		return Runtime{}, err
 	}
 	if err := fileio.PublishDirectory(root, filepath.Base(stage), name); err != nil {
@@ -219,7 +257,7 @@ func officialJavaDownload(u *url.URL) bool {
 		return false
 	}
 	switch u.Host {
-	case "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com":
+	case "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com", "cdn.azul.com":
 		return true
 	}
 	return false
@@ -310,7 +348,7 @@ func ManagedCandidates(ctx context.Context, directory string) ([]string, error) 
 	}
 	var paths []string
 	for _, entry := range entries {
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), "temurin-") {
+		if entry.IsDir() && (strings.HasPrefix(entry.Name(), "temurin-") || strings.HasPrefix(entry.Name(), "zulu-")) {
 			if executable, err := installedExecutable(ctx, filepath.Join(directory, entry.Name())); err == nil {
 				paths = append(paths, executable)
 			}

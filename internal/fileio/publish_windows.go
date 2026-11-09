@@ -16,6 +16,12 @@ type renameInformation struct {
 }
 
 func moveNoReplace(source *os.Root, old string, target *os.Root, name string) error {
+	return renameManaged(source, old, target, name, false)
+}
+func replaceManagedFile(source *os.Root, old string, target *os.Root, name string) error {
+	return renameManaged(source, old, target, name, true)
+}
+func renameManaged(source *os.Root, old string, target *os.Root, name string, replace bool) error {
 	// Use the directory handle for both opens and rename. A filesystem path
 	// derived from Root.Name would lose Root's confinement under reparse races.
 	dir, err := source.Open(".")
@@ -48,6 +54,9 @@ func moveNoReplace(source *os.Root, old string, target *os.Root, name string) er
 	size := int(unsafe.Offsetof(renameInformation{}.FileName)) + length
 	buffer := make([]byte, size)
 	info := (*renameInformation)(unsafe.Pointer(&buffer[0]))
+	if replace {
+		info.ReplaceIfExists = 1
+	}
 	info.RootDirectory = windows.Handle(destination.Fd())
 	info.FileNameLength = uint32(length)
 	copy(unsafe.Slice((*uint16)(unsafe.Pointer(&info.FileName[0])), length/2), encoded[:len(encoded)-1])

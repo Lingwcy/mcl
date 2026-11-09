@@ -3,10 +3,6 @@ package download
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha1"
-	"crypto/sha512"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/text/unicode/norm"
+
 	"mcl/internal/core/meta"
 )
 
@@ -27,6 +25,7 @@ const MaxFileSize int64 = 2 << 30
 type File struct {
 	Path         string
 	SHA512       string
+	SHA256       string
 	AllowedHosts []string
 	meta.Download
 }
@@ -35,14 +34,17 @@ func (f File) Validate() error {
 	if !meta.ValidPath(f.Path) || f.Size > MaxFileSize {
 		return errors.New("unsafe download path or excessive file size")
 	}
-	if f.SHA512 != "" {
-		decoded, err := hex.DecodeString(f.SHA512)
-		if err != nil || len(decoded) != sha512.Size {
-			return errors.New("invalid SHA-512 digest")
-		}
+	if _, err := objectForFile(f).Key(); err != nil {
+		return err
 	}
 	if len(f.AllowedHosts) > 0 && !allowedFileURL(f.URL, f.AllowedHosts) {
 		return errors.New("download host is not permitted")
+	}
+	if f.SHA256 != "" {
+		if f.SHA1 != "" || f.Size < 0 {
+			return errors.New("invalid SHA256 download")
+		}
+		return meta.ValidateURL(f.URL)
 	}
 	return f.Download.Validate()
 }
@@ -63,14 +65,16 @@ type gate struct {
 // Client coordinates concurrent requests for the same target across installs.
 // Configuration must be fixed before use. Use one shared client per data root.
 type Client struct {
-	Root        string
-	HTTP        *http.Client
-	Concurrency int
-	Attempts    int
-	Transfers   *TransferControl
-	Cache       ObjectCache
-	mu          sync.Mutex
-	locks       map[string]*gate
+	Coordination Coordination
+	Track        func(context.Context, []File, func(context.Context) error) error
+	Root         string
+	HTTP         *http.Client
+	Concurrency  int
+	Attempts     int
+	Transfers    *TransferControl
+	Cache        ObjectCache
+	mu           sync.Mutex
+	locks        map[string]*gate
 }
 
 func NewClient(root string) *Client {
@@ -112,6 +116,9 @@ func (c *Client) lock(ctx context.Context, name string) (func(), error) {
 // Run validates the whole input before mutating the cache, bounds its workers,
 // cancels siblings on failure and joins every worker before returning.
 func (c *Client) Run(ctx context.Context, files []File, report func(Progress)) error {
+	if c.Track != nil && ctx.Value(observerKey{}) == nil {
+		return c.Track(ctx, append([]File(nil), files...), func(next context.Context) error { return c.Run(next, files, report) })
+	}
 	if c.Concurrency < 1 || c.Concurrency > 32 || c.Attempts < 1 || c.Attempts > 5 || c.HTTP == nil {
 		return errors.New("invalid download client configuration")
 	}
@@ -122,9 +129,9 @@ func (c *Client) Run(ctx context.Context, files []File, report func(Progress)) e
 		if err := f.Validate(); err != nil {
 			return fmt.Errorf("download %s: %w", f.Path, err)
 		}
-		key := strings.ToLower(f.Path)
+		key := strings.ToLower(norm.NFC.String(f.Path))
 		if previous, ok := seen[key]; ok {
-			if previous.Path != f.Path || previous.Size != f.Size || !strings.EqualFold(previous.SHA1, f.SHA1) || !strings.EqualFold(previous.SHA512, f.SHA512) {
+			if previous.Path != f.Path || previous.Size != f.Size || !strings.EqualFold(previous.SHA1, f.SHA1) || !strings.EqualFold(previous.SHA512, f.SHA512) || !strings.EqualFold(previous.SHA256, f.SHA256) {
 				return fmt.Errorf("conflicting download target %s", f.Path)
 			}
 			continue
@@ -134,6 +141,11 @@ func (c *Client) Run(ctx context.Context, files []File, report func(Progress)) e
 		p.TotalBytes += f.Size
 	}
 	p.TotalFiles = len(unique)
+	for _, f := range unique {
+		if err := Observe(ctx, eventFor(f, "pending", 0)); err != nil {
+			return err
+		}
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -202,24 +214,41 @@ dispatch:
 }
 
 func (c *Client) get(ctx context.Context, root *os.Root, f File, cache CacheLease) (bool, error) {
-	unlock, err := c.lock(ctx, strings.ToLower(f.Path))
+	unlock, err := c.lock(ctx, strings.ToLower(norm.NFC.String(f.Path)))
 	if err != nil {
 		return false, err
 	}
 	defer unlock()
+	release, err := c.targetLease(ctx, f.Path)
+	if err != nil {
+		return false, err
+	}
+	defer release()
+	if err := Observe(ctx, eventFor(f, "checking", 0)); err != nil {
+		return false, err
+	}
 	if err := Verify(ctx, root, f); err == nil {
+		if err := Observe(ctx, eventFor(f, "done", f.Size)); err != nil {
+			return true, err
+		}
 		return true, nil
 	}
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	if err := root.MkdirAll(path.Dir(f.Path), 0o700); err != nil {
+	directory, err := targetDirectory(root, path.Dir(f.Path), true)
+	if err != nil {
 		return false, err
 	}
+	directory.Close()
+
 	if cache != nil {
 		reused, err := restoreCachedFile(ctx, cache, root, f)
-		if err != nil || reused {
+		if err != nil {
 			return reused, err
+		}
+		if reused {
+			return true, Observe(ctx, eventFor(f, "done", f.Size))
 		}
 	}
 	sources := c.Transfers.candidates(f.URL)
@@ -239,7 +268,7 @@ func (c *Client) get(ctx context.Context, root *os.Root, f File, cache CacheLeas
 					return false, fmt.Errorf("保存下载副本: %w", cacheErr)
 				}
 			}
-			return false, nil
+			return false, Observe(ctx, eventFor(f, "done", f.Size))
 		}
 		if ctx.Err() != nil {
 			return false, ctx.Err()
@@ -267,7 +296,19 @@ func Verify(ctx context.Context, root *os.Root, f File) error {
 	if err := f.Validate(); err != nil {
 		return err
 	}
-	file, err := root.Open(f.Path)
+	directory, err := targetDirectory(root, path.Dir(f.Path), false)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	before, err := directory.Lstat(path.Base(f.Path))
+	if err != nil {
+		return err
+	}
+	if !before.Mode().IsRegular() {
+		return errors.New("cached target is not a regular file")
+	}
+	file, err := directory.Open(path.Base(f.Path))
 	if err != nil {
 		return err
 	}
@@ -279,91 +320,24 @@ func Verify(ctx context.Context, root *os.Root, f File) error {
 	if !info.Mode().IsRegular() || info.Size() != f.Size {
 		return errors.New("cached file size or type mismatch")
 	}
-	h := sha1.New()
-	h512 := sha512.New()
-	var writer io.Writer = h
-	if f.SHA512 != "" {
-		writer = io.MultiWriter(h, h512)
+	if !os.SameFile(before, info) {
+		return errors.New("cached file identity changed")
 	}
-	if _, err := io.Copy(writer, &contextReader{ctx, io.LimitReader(file, f.Size+1)}); err != nil {
+	if err := objectForFile(f).Copy(ctx, io.Discard, file); err != nil {
 		return err
 	}
-	if !strings.EqualFold(hex.EncodeToString(h.Sum(nil)), f.SHA1) {
-		return errors.New("cached file SHA-1 mismatch")
+	after, err := file.Stat()
+	if err != nil {
+		return err
 	}
-	if f.SHA512 != "" && !strings.EqualFold(hex.EncodeToString(h512.Sum(nil)), f.SHA512) {
-		return errors.New("cached file SHA-512 mismatch")
+	current, err := directory.Lstat(path.Base(f.Path))
+	if err != nil {
+		return err
+	}
+	if !current.Mode().IsRegular() || !os.SameFile(before, current) || !os.SameFile(before, after) || current.Size() != before.Size() || after.Size() != before.Size() || !before.ModTime().Equal(current.ModTime()) || !before.ModTime().Equal(after.ModTime()) {
+		return errors.New("cached file changed while verifying")
 	}
 	return ctx.Err()
-}
-
-func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address string, alternate bool) (bool, time.Duration, error) {
-	if c.Transfers != nil {
-		release, err := c.Transfers.Acquire(ctx)
-		if err != nil {
-			return false, 0, err
-		}
-		defer release()
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
-	if err != nil {
-		return false, 0, err
-	}
-	req.Header.Set("User-Agent", "mcl/0.1.0")
-	req.Header.Set("Accept-Encoding", "identity")
-	client := c.requestClient(f.URL, f.AllowedHosts, address != f.URL)
-	var response *http.Response
-	if c.Transfers != nil {
-		response, err = c.Transfers.Do(client, req)
-	} else {
-		response, err = client.Do(req)
-	}
-	if err != nil {
-		var urlErr *url.Error
-		if errors.As(err, &urlErr) {
-			err = urlErr.Err
-		}
-		return true, 0, fmt.Errorf("request failed: %w", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		retry := response.StatusCode == 408 || response.StatusCode == 429 || response.StatusCode == 500 || response.StatusCode == 502 || response.StatusCode == 503 || response.StatusCode == 504 || alternate && (response.StatusCode == 403 || response.StatusCode == 404)
-		delay, acceptable := retryDelay(response.Header.Get("Retry-After"), time.Now())
-		return retry && acceptable, delay, fmt.Errorf("server returned HTTP %d", response.StatusCode)
-	}
-	if response.ContentLength >= 0 && response.ContentLength != f.Size {
-		return true, 0, errors.New("response size does not match metadata")
-	}
-	temporary := path.Join(path.Dir(f.Path), ".mcl-"+rand.Text()+".tmp")
-	file, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return false, 0, err
-	}
-	defer root.Remove(temporary)
-	defer file.Close()
-	h := sha1.New()
-	h512 := sha512.New()
-	var writer io.Writer = io.MultiWriter(file, h)
-	if f.SHA512 != "" {
-		writer = io.MultiWriter(file, h, h512)
-	}
-	n, err := io.Copy(writer, &contextReader{ctx, io.LimitReader(response.Body, f.Size+1)})
-	if err != nil {
-		return true, 0, fmt.Errorf("transfer failed: %w", err)
-	}
-	if n != f.Size || !strings.EqualFold(hex.EncodeToString(h.Sum(nil)), f.SHA1) || (f.SHA512 != "" && !strings.EqualFold(hex.EncodeToString(h512.Sum(nil)), f.SHA512)) {
-		return true, 0, errors.New("download size or SHA-1 mismatch")
-	}
-	if err := file.Sync(); err != nil {
-		return false, 0, err
-	}
-	if err := file.Close(); err != nil {
-		return false, 0, err
-	}
-	if err := ctx.Err(); err != nil {
-		return false, 0, err
-	}
-	return false, 0, root.Rename(temporary, f.Path)
 }
 
 func allowedFileURL(address string, hosts []string) bool {
