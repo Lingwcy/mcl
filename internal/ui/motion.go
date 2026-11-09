@@ -231,6 +231,9 @@ func (s *Shell) contentIdentity() contentIdentity {
 				id.version = m.version.version.ID
 			}
 		}
+	case existingGamesPage:
+		id.source = s.existing.sourceID
+		id.instance = s.existing.selectedID
 	case newInstancePage:
 		switch s.creation.mode {
 		case 1:

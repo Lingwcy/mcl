@@ -187,6 +187,7 @@ func run() error {
 		connectJava(ctx, &workers, window, shell, javaService)
 		connectDownloads(ctx, &workers, window, shell, downloadService, downloadCache)
 		connectGameDirectories(ctx, &workers, window, shell, app.NewGameDirectoryService(storage.NewGameDirectoryStore(paths.Root)), assetStore)
+		connectExistingGames(ctx, &workers, window, shell, app.NewExistingGamesService(storage.NewExistingGamesStore(paths.Root)))
 		connectMemory(ctx, &workers, window, shell, memoryService)
 		connectAccounts(ctx, &workers, window, shell, accounts, microsoftErr == nil)
 		// This subscription has the application's lifetime, like its single window.

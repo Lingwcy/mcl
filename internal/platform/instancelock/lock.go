@@ -43,6 +43,12 @@ func AcquireAccounts(directory string) (*Lock, error) {
 	return acquireDirectory(directory, "accounts.lock")
 }
 
+// AcquireExistingSources serializes only app-owned discovery registrations.
+// It never creates a lock file in any chosen foreign Minecraft root.
+func AcquireExistingSources(directory string) (*Lock, error) {
+	return acquireDirectory(directory, "existing-sources.lock")
+}
+
 // AcquireJava serializes Java registration changes across launcher processes.
 func AcquireJava(directory string) (*Lock, error) {
 	return acquireDirectory(directory, "java.lock")
