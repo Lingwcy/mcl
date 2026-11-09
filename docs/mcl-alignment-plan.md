@@ -896,3 +896,15 @@ C阶段实现矩阵见第24节，用户1.6.1反馈修复见第25节；D1已开�
 
 
 本批构建记录：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64主程序交叉编译成功（build/mcl-pack-editor-windows-amd64.exe，33,943,040字节）。MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-pack-editor-arm64.dmg，10,026,496字节，临时签名、未公证）。新增回归只源码、未执行/未编译测试目标，未跑vet/Tester/原生交互、公共图标请求/真实整合包导入或Java/游戏验收。无新依赖/配置schema，参考目录未动；留feature/persistent-download-tasks，不合并main/发版。
+
+
+## 35. T体验：整合包读取失败留下空白重读页
+
+用户FunDinoModpack（市场版本1.7.10）截图只剩标题/重新读取。已确认的界面回归：inspectMarketArchive把错误写入i.err，但archiveImportView不展示且Toast桥接未接该字段，因此失败原因完全不可见。仅凭截图无法确认实际错误属于版本接口/网络/清单/官方游戏元数据，不能直接声称1.7.10不支持或已修复该包兼容性；本轮没有读取用户缓存或公网重现。
+
+首次在线读取失败现在发出带具体原因的错误Toast，取消该次图标任务并退出空确认状态，恢复原项目版本列表；用户已离页时不修改当前page。主动取消静默，已替换任务的迟到回调忽略；已有确认清单的重新读取失败保留名称/图标/目录/可选项，显示Toast。异常未初始化状态的恢复动作缩为普通工具行，不再用占满页尾的大主按钮伪装正常步骤。
+
+应用层为原错误补读取版本/文件信息、获取压缩包、解析清单、官方游戏列表/指定版本及核对阶段上下文，仍使用%w保留取消/错误分类，不保存原始凭据或URL。没有放开ZIP边界、摘要、加载器、Java或平台限制，也不把市场显示版本当运行验收。新增回归源码覆盖首次失败退回+Toast、取消静默/离页不导航、旧回调拒绝和重读保留草稿，未执行/未编译测试目标。只格式构建体验包，不跑公网/原生/Java/游戏验收。
+
+
+本批构建记录：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64交叉编译成功（build/mcl-pack-read-feedback-windows-amd64.exe，33,946,624字节），MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-pack-read-feedback-arm64.dmg，10,025,984字节，临时签名、未公证）。回归源码未运行/未编译测试目标，未做公网/原生或该用户整合包实机验收，不把错误反馈修复称为已解决具体包底层失败。留feature/persistent-download-tasks，不合并main/发版。

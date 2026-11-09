@@ -48,7 +48,7 @@ func (s *Shell) inspectMarketArchive() {
 		}
 		i.busy, i.cancel, i.canceling = false, nil, false
 		if err != nil {
-			i.err = err.Error()
+			s.failArchiveInspection(i, err)
 			return
 		}
 		s.initializeArchiveEditor(i, plan)
@@ -64,6 +64,27 @@ func (s *Shell) inspectMarketArchive() {
 		}
 		i.archiveList = ui.ListState{}
 	})
+}
+
+// A failed first read has no confirmation editor to return to. Keep its
+// actionable error in a Toast and expose the original project versions again.
+// Re-reading an existing plan keeps that editor and its unsubmitted choices.
+func (s *Shell) failArchiveInspection(i *marketInstallState, err error) {
+	if s.market.install != i {
+		return
+	}
+	if !errors.Is(err, context.Canceled) {
+		i.err = err.Error()
+		s.Notify(ToastError, "读取整合包失败："+i.err)
+	}
+	if i.archivePlan == nil && i.localArchive == nil && i.project.Kind == market.Modpack {
+		s.cancelArchiveIcon(i)
+		s.market.install = nil
+		s.market.showInstall = false
+		if s.market.selected != nil && s.market.selected.ID == i.project.ID && s.market.selected.Source == i.project.Source {
+			s.market.tab = 1
+		}
+	}
 }
 
 func (s *Shell) supplyMarketArchive() {
@@ -275,8 +296,11 @@ func (s *Shell) archiveImportView(c *ui.Context) {
 
 	if i.archivePlan == nil {
 		if i.project.Kind == market.Modpack {
-			ui.Spacer(c)
-			ui.PrimaryButton(c.Key("archive-retry"), "重新读取").Height(28).Disabled(s.market.actions.InspectArchive == nil).OnClick(s.inspectMarketArchive)
+			ui.Row(c).FillWidth().Height(30).Gap(8).Children(func() {
+				ui.Button(c.Key("archive-return-versions"), "返回版本列表").Height(26).OnClick(func() { s.cancelArchiveIcon(i); s.market.install = nil; s.market.showInstall = false; s.market.tab = 1 })
+				ui.Spacer(c)
+				ui.Button(c.Key("archive-retry"), "重新读取").Height(26).Disabled(s.market.actions.InspectArchive == nil).OnClick(s.inspectMarketArchive)
+			})
 			return
 		} else {
 			name := "选择实例"

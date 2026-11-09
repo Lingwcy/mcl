@@ -76,7 +76,7 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 	if s.Tasks != nil && taskScope(ctx) == nil {
 		file, _, _, err := s.resolveArchive(ctx, request)
 		if err != nil {
-			return ArchiveImportPlan{}, err
+			return ArchiveImportPlan{}, fmt.Errorf("读取整合包版本信息: %w", err)
 		}
 		directory := settings.GameDirectoryID
 		if request.GameDirectoryID != nil {
@@ -110,7 +110,7 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 	client := s.catalog.Client()
 	file, page, version, err := s.resolveArchive(ctx, request)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("读取压缩包文件信息: %w", err)
 	}
 	if err := s.checkArchiveTask(ctx, file); err != nil {
 		return plan, err
@@ -154,7 +154,7 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 			return plan, nil
 		}
 	} else if err := s.downloads.Run(ctx, []download.File{archiveDownload(file)}, report); err != nil {
-		return plan, err
+		return plan, fmt.Errorf("获取整合包压缩文件: %w", err)
 	}
 	if request.Kind == market.World {
 		plan.WorldFiles, err = s.store.InspectWorld(ctx, file)
@@ -162,7 +162,7 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 	}
 	manifest, err := s.store.InspectPack(ctx, file)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("解析整合包清单: %w", err)
 	}
 	if request.LocalArchive != nil && manifest.Format != string(request.Source) {
 		return plan, errors.New("本地整合包格式与固定记录不匹配")
@@ -170,7 +170,7 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 	plan.Manifest = manifest
 	versions, err := s.metadata.Manifest(ctx, false)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("读取官方游戏版本列表: %w", err)
 	}
 	entry, found := versions.Manifest.Find(manifest.Minecraft)
 	if !found || (entry.Type != "release" && entry.Type != "snapshot") {
@@ -178,10 +178,10 @@ func (s *ArchiveImporter) Inspect(ctx context.Context, request ArchiveImportRequ
 	}
 	game, err := s.metadata.Version(ctx, entry)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("读取官方游戏版本 %s: %w", entry.ID, err)
 	}
 	if err := game.ValidateVanilla(); err != nil {
-		return plan, err
+		return plan, fmt.Errorf("核对官方游戏版本 %s: %w", entry.ID, err)
 	}
 	if err := manifest.CheckRuntime(game); err != nil {
 		return plan, err
