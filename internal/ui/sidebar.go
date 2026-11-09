@@ -220,6 +220,9 @@ func (s *Shell) settingsEntry(c *ui.Context, key, label string, icon *ui.SVG, de
 			s.closeJavaDownloads()
 		}
 		s.page = destination
+		if destination == downloadSettingsPage {
+			s.refreshDownloadCacheUsage()
+		}
 	}).Children(func() {
 		ui.Icon(c, icon).Size(14, 14).Shrink(0).TextColor(iconColor)
 		ui.Text(c, label).FontSize(12).TextColor(textColor).MinWidth(0).MaxLines(1).Ellipsis("…")

@@ -4,28 +4,42 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/egoist/mygo/ui"
+
 	"mcl/internal/core/download"
 )
 
 type DownloadActions struct {
-	Pick    func(func(string, error)) func()
-	Inspect func(func(download.CacheInfo, error)) func()
-	Clear   func(download.CacheInfo, func(download.CacheInfo, error)) func()
-	Check   func(download.SourceMode, func([]download.ConnectivityResult, error)) func()
-	Open    func(func(error)) func()
+	// Directory resolves a configured parent without touching the filesystem.
+	Directory func(string) string
+	Pick      func(func(string, error)) func()
+	Inspect   func(func(download.CacheInfo, error)) func()
+	Clear     func(download.CacheInfo, func(download.CacheInfo, error)) func()
+	Check     func(download.SourceMode, func([]download.ConnectivityResult, error)) func()
+	Open      func(func(error)) func()
 }
 type downloadToolsState struct {
 	actions            DownloadActions
 	operation, message string
-	failed             bool
+	failed, closed     bool
 	generation         uint64
 	cancel             func()
 	info               download.CacheInfo
 	results            []download.ConnectivityResult
 }
 
-func (s *Shell) ConnectDownloads(actions DownloadActions) { s.downloadTools.actions = actions }
+func (s *Shell) ConnectDownloads(actions DownloadActions) {
+	s.downloadTools.actions = actions
+	s.refreshDownloadCacheUsage()
+}
+
+// Called by navigation and committed preference changes, never by rendering.
+func (s *Shell) refreshDownloadCacheUsage() {
+	if s.page == downloadSettingsPage && !s.downloadTools.closed {
+		s.inspectDownloadCache()
+	}
+}
 func (s *Shell) cancelDownloadTools() {
 	d := &s.downloadTools
 	if d.cancel != nil {
@@ -47,6 +61,7 @@ func (s *Shell) downloadPreferencesCommitted() {
 	}
 
 	d.failed = false
+	s.refreshDownloadCacheUsage()
 }
 func (s *Shell) beginDownloadTool(operation string) uint64 {
 	s.cancelDownloadTools()
@@ -61,7 +76,7 @@ func (s *Shell) beginDownloadTool(operation string) uint64 {
 }
 func (s *Shell) finishDownloadTool(generation uint64, err error) bool {
 	d := &s.downloadTools
-	if generation != d.generation {
+	if d.closed || generation != d.generation {
 		return false
 	}
 	d.operation = ""
@@ -88,11 +103,14 @@ func (s *Shell) pickDownloadCache() {
 }
 func (s *Shell) inspectDownloadCache() {
 	d := &s.downloadTools
-	if d.operation != "" || d.actions.Inspect == nil {
+	if d.closed || d.operation != "" || d.actions.Inspect == nil {
 		return
 	}
 	gen := s.beginDownloadTool("inspect")
 	d.cancel = d.actions.Inspect(func(info download.CacheInfo, err error) {
+		if s.page != downloadSettingsPage {
+			return
+		}
 		if s.finishDownloadTool(gen, err) {
 			d.info = info
 			d.message = fmt.Sprintf("%d 个下载副本 · %s", info.Files, formatBytes(info.Bytes))
@@ -135,7 +153,9 @@ func (s *Shell) clearDownloadCache() {
 				}
 			} else if err != nil && !errors.Is(err, context.Canceled) {
 				d.message = "清理未完成，可能已处理部分缓存。" + d.message
+				s.Notify(ToastError, d.message)
 			}
+			s.refreshDownloadCacheUsage()
 		})
 	})
 }
@@ -176,17 +196,21 @@ func (s *Shell) downloadToolsView(c *ui.Context, blocked bool) {
 	ui.Column(c.Key("download-utilities")).FillWidth().Radius(10).Border(0.5, colors(t).ListDivider).Clip().Children(func() {
 		gameSettingRow(c, "download-cache", "下载缓存", func() {
 			location := s.downloadSettings.cacheDirectory
-			if location == "" {
-				location = "默认位置"
+			if d.actions.Directory != nil {
+				location = d.actions.Directory(location)
+			}
+			if s.downloadSettings.cacheDirectory == s.settings.Download.CacheDirectory && d.info.Directory != "" {
+				location = d.info.Directory
 			}
 			ui.Text(c, location).FontSize(12).TextColor(colors(t).Metadata).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
-			if d.info.Directory != "" && d.operation == "" {
-				summary := formatBytes(d.info.Bytes + d.info.TemporaryBytes)
-				if d.info.Files+d.info.TemporaryFiles == 0 {
-					summary = "空"
-				}
-				ui.Text(c, summary).FontSize(11).TextColor(colors(t).Metadata).Shrink(0)
+			summary := "—"
+			if d.info.Directory != "" && s.downloadSettings.cacheDirectory == s.settings.Download.CacheDirectory {
+				summary = formatBytes(d.info.Bytes + d.info.TemporaryBytes)
 			}
+			if d.operation == "inspect" || d.operation == "inspect-clear" {
+				summary = "正在统计…"
+			}
+			ui.Text(c, summary).FontSize(11).TextColor(colors(t).Metadata).Shrink(0)
 			if d.operation == "inspect" || d.operation == "inspect-clear" || d.operation == "clear" || d.operation == "open" || d.operation == "pick" {
 				busyIndicator(c, 12)
 				iconButton(c, "cancel-cache-operation", "取消缓存操作", iconClose, s.cancelDownloadToolAction)
@@ -201,9 +225,6 @@ func (s *Shell) downloadToolsView(c *ui.Context, blocked bool) {
 						s.saveSettings()
 					}
 					menu.Separator()
-					if menu.Item("查看占用").Disabled(unsaved || d.actions.Inspect == nil).Chosen() {
-						s.inspectDownloadCache()
-					}
 					if menu.Item("清理缓存…").Disabled(unsaved || d.actions.Inspect == nil || d.actions.Clear == nil).Chosen() {
 						s.clearDownloadCache()
 					}

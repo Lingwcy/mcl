@@ -56,6 +56,7 @@ func (s *Shell) SetDownloadTasks(groups []tasks.Group) {
 	if refresh {
 		s.refreshLibrary(false)
 		s.refreshSessions()
+		s.refreshDownloadCacheUsage()
 	}
 	if javaChanged {
 		s.refreshJava()

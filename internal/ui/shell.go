@@ -101,6 +101,8 @@ func (s *Shell) BindWindow(window *mygo.Window) {
 	window.OnFocus(func() { s.memory.blurred = false; s.syncMemoryObservation(); window.Invalidate() })
 	window.OnBlur(func() { s.memory.blurred = true; s.syncMemoryObservation(); window.Invalidate() })
 	window.OnClosed(func() {
+		s.downloadTools.closed = true
+		s.cancelDownloadTools()
 		s.memory.blurred = true
 		s.syncMemoryObservation()
 		s.downloadJobs.closed = true
@@ -285,10 +287,11 @@ func (s *Shell) saveSettings() {
 		if err != nil {
 			s.notice, s.noticeFail = err.Error(), true
 		} else {
-			if s.settings.Download != snapshot.Download {
+			downloadsChanged := s.settings.Download != snapshot.Download
+			s.settings = snapshot
+			if downloadsChanged {
 				s.downloadPreferencesCommitted()
 			}
-			s.settings = snapshot
 		}
 		if s.savePending {
 			s.saveSettings()

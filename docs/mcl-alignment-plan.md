@@ -869,3 +869,15 @@ C阶段实现矩阵见第24节，用户1.6.1反馈修复见第25节；D1已开�
 
 
 本次构建记录：gofmt、git diff --check与CGO_ENABLED=0 ./scripts/go.sh build ./...成功；Windows amd64主程序交叉编译成功（build/mcl-import-navigation-windows-amd64.exe，33,929,216字节）。MyGo0.7.4 darwin/arm64 -sign - -skip-notarize成功，独立体验包build/darwin-arm64/mcl-0.0.4-import-navigation-arm64.dmg（10,024,448字节，约9.6MiB，临时签名、未公证）。未运行test/vet/Tester/原生自动化或真实导入/删除/缓存清理，本次不新增测试；功能交互待用户体验。
+
+
+## 33. T体验：下载缓存常显占用和真实路径
+
+用户要求下载缓存占用自动显示，移除“默认位置”占位Label并直接显示实际路径。下载设置入口点击后显式发起后台Inspect，成功保存偏好、清理（含取消/部分失败后）和任务完成时在当前页刷新，不从渲染里读磁盘或启动扫描；没有新增轮询/计时器。统计中显示“正在统计…”，完成后始终显示字节格式（空缓存0B），未获取显示—，移除菜单“查看占用”。
+
+路径由入口注入DownloadCache.DirectoryFor纯函数解析，空配置显示真实默认受管子目录，自定义显示选定父目录下的真实受管子目录；已成功统计时用Info.Directory。没有在UI猜缓存根/复制存储常量或把父目录标签当真实缓存路径，长路径沿原单行截断样式，保留可访问文本和打开目录按钮。
+
+统计复用原有取消/generation保护，离页拒绝晚到结果，关闭窗口主动取消并屏蔽回调；设置写入成功后才更新提交快照并重查，新草稿不冒用旧位置占用。清理确认/范围/系统锁未变，失败或部分清理仍Toast，不把未知统计显示成0。不修改schema、缓存范围、用户实例或其他下载行为；只格式构建，无测试/自动化/实机扫描验收。
+
+
+本批构建：gofmt、git diff --check及CGO_ENABLED=0 ./scripts/go.sh build ./...通过，Windows amd64主程序编译成功（build/mcl-cache-display-windows-amd64.exe，33,928,704字节），MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-cache-display-arm64.dmg，10,023,936字节，临时签名、未公证）。未跑测试/vet/Tester/自动化/原生/用户真实缓存扫描或清理，未新增回归，不把构建称为交互验收。留在feature/persistent-download-tasks，不合并main/发版。
