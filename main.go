@@ -118,7 +118,7 @@ func run() error {
 	installations := app.NewInstallationServiceWithGameDirectory(catalog, instances, storage.NewInstallationStore(paths.Root), sharedDownloads, host, sessions, loaders, assetStore.Directory, assetStore.OpenGame)
 	instanceSettings := app.NewInstanceSettingsService(instances, sessions)
 	instanceDeletion := app.NewInstanceDeletionService(storage.NewInstanceDeletionStore(paths.Root), sessions, mygo.Shell.TrashItem)
-	directoryService := app.NewDirectoryService(storage.NewDirectoryTransferStore(paths.Root), sessions, catalog, loaderCatalog, mygo.Shell.TrashItem)
+	directoryService := app.NewDirectoryService(storage.NewDirectoryTransferStore(paths.Root, platform.ReadSwiftProfiles), sessions, catalog, loaderCatalog, mygo.Shell.TrashItem)
 	memoryProbe := platform.NewMemoryProbe()
 	memoryService := app.NewMemoryService(memoryProbe, host.Arch)
 	launcher := app.NewLaunchService(installations, javaService.Ensure, memoryProbe, func(plan launch.Plan, register func(launch.ProcessIdentity) error) (launch.Game, error) {
@@ -188,7 +188,7 @@ func run() error {
 		connectJava(ctx, &workers, window, shell, javaService)
 		connectDownloads(ctx, &workers, window, shell, downloadService, downloadCache)
 		connectGameDirectories(ctx, &workers, window, shell, app.NewGameDirectoryService(storage.NewGameDirectoryStore(paths.Root)), assetStore)
-		connectExistingGames(ctx, &workers, window, shell, app.NewExistingGamesService(storage.NewExistingGamesStore(paths.Root)))
+		connectExistingGames(ctx, &workers, window, shell, app.NewExistingGamesService(storage.NewExistingGamesStore(paths.Root, platform.ReadSwiftProfiles)))
 		connectDirectories(ctx, &workers, window, shell, directoryService)
 		connectMemory(ctx, &workers, window, shell, memoryService)
 		connectAccounts(ctx, &workers, window, shell, accounts, microsoftErr == nil)

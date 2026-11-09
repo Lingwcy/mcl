@@ -27,9 +27,18 @@ type existingSourcesDocument struct {
 
 // ExistingGamesStore writes registration JSON ONLY below the application root.
 // No source owner, receipt, lock, launcher config, or instance record is written.
-type ExistingGamesStore struct{ root string }
+type ExistingGamesStore struct {
+	root        string
+	swiftReader discovery.SwiftIndexReader
+}
 
-func NewExistingGamesStore(root string) *ExistingGamesStore { return &ExistingGamesStore{root} }
+func NewExistingGamesStore(root string, readers ...discovery.SwiftIndexReader) *ExistingGamesStore {
+	s := &ExistingGamesStore{root: root}
+	if len(readers) > 0 {
+		s.swiftReader = readers[0]
+	}
+	return s
+}
 func validExistingPath(value string) bool {
 	return filepath.IsAbs(value) && filepath.Clean(value) == value && len(value) <= 4096 && utf8.ValidString(value) && !strings.ContainsFunc(value, unicode.IsControl)
 }
@@ -131,6 +140,11 @@ func normalizeExistingRoot(ctx context.Context, directory string) (string, error
 	if hasVersions(root) {
 		return canonical, nil
 	}
+	if layout, err := swiftSourceLayout(canonical); err != nil {
+		return "", err
+	} else if layout != nil {
+		return canonical, nil
+	}
 	var choices []string
 	for _, name := range []string{".minecraft", "minecraft"} {
 		info, err := root.Lstat(name)
@@ -153,7 +167,7 @@ func normalizeExistingRoot(ctx context.Context, directory string) (string, error
 	if len(choices) == 1 {
 		return choices[0], ctx.Err()
 	}
-	return "", errors.New("所选位置没有普通versions目录；请选择Minecraft根目录")
+	return "", errors.New("未识别到Minecraft或Swift实例，请选择游戏目录或启动器目录")
 }
 
 // Resolve the nearest existing ancestor too: --data-dir may not yet exist
@@ -194,6 +208,11 @@ func (s *ExistingGamesStore) Add(ctx context.Context, directory string) (app.Exi
 	if err != nil {
 		return value, err
 	}
+	if layout, err := swiftSourceLayout(canonical); err != nil {
+		return value, err
+	} else if layout != nil && sourcePathsOverlap(layout.launcher, protected) {
+		return value, errors.New("mcl应用数据不能位于该Swift来源及其关联元数据目录中")
+	}
 	if sourcePathsOverlap(canonical, protected) {
 		return value, errors.New("不能将mcl应用数据目录或其父子目录登记为外部来源")
 	}
@@ -207,7 +226,7 @@ func (s *ExistingGamesStore) Add(ctx context.Context, directory string) (app.Exi
 		return value, err
 	}
 	if len(doc.Sources) >= 32 {
-		return value, errors.New("最多登记32个只读来源")
+		return value, errors.New("最多登记32个来源")
 	}
 	for _, previous := range doc.Sources {
 		if sourcePathsOverlap(previous.Path, canonical) {
@@ -228,7 +247,7 @@ func (s *ExistingGamesStore) Add(ctx context.Context, directory string) (app.Exi
 }
 func (s *ExistingGamesStore) Remove(ctx context.Context, id string) error {
 	if !instance.ValidID(id) {
-		return errors.New("只读来源ID无效")
+		return errors.New("来源ID无效")
 	}
 	lock, err := instancelock.AcquireExistingSources(s.root)
 	if err != nil {
@@ -240,7 +259,7 @@ func (s *ExistingGamesStore) Remove(ctx context.Context, id string) error {
 		return err
 	}
 	if !slices.ContainsFunc(doc.Sources, func(value app.ExistingSource) bool { return value.ID == id }) {
-		return errors.New("只读来源已不在登记中")
+		return errors.New("来源已不在登记中")
 	}
 	operations, err := NewDirectoryTransferStore(s.root).ListOperations(ctx)
 	if err != nil {
@@ -268,7 +287,7 @@ func (s *ExistingGamesStore) Scan(ctx context.Context, id string) (discovery.Rep
 			return discovery.Report{Root: source.Path, Problems: []string{"来源不可读取（可能离线、移动或链接改变）：" + err.Error()}}, ctx.Err()
 		}
 		defer root.Close()
-		result, err := discovery.Scan(ctx, root)
+		result, err := s.scanRoot(ctx, root)
 		current, pathErr := os.Lstat(source.Path)
 		opened, openErr := root.Stat(".")
 		if pathErr != nil || openErr != nil || !current.IsDir() || current.Mode()&os.ModeSymlink != 0 || !os.SameFile(current, opened) {
@@ -276,5 +295,5 @@ func (s *ExistingGamesStore) Scan(ctx context.Context, id string) (discovery.Rep
 		}
 		return result, err
 	}
-	return discovery.Report{}, errors.New("只读来源未登记")
+	return discovery.Report{}, errors.New("来源未登记")
 }

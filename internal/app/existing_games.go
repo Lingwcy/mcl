@@ -34,7 +34,7 @@ func (s *ExistingGamesService) List(ctx context.Context) ([]ExistingSource, erro
 func (s *ExistingGamesService) Add(ctx context.Context, directory string) (ExistingSource, error) {
 	value, err := s.store.Add(ctx, directory)
 	if err != nil {
-		return value, fmt.Errorf("添加只读来源: %w", err)
+		return value, fmt.Errorf("添加来源: %w", err)
 	}
 	return value, nil
 }

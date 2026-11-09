@@ -1,7 +1,7 @@
 # mcl 能力补齐与参考对齐 Plan
 
 日期：2026-11-09
-状态：C1–C4与D1–D3在明确范围内实现/构建收尾，D统一交付见第27节；新增回归、跨盘/崩溃/原生交互及真实游戏验收仍未运行。原地管理未实现且不提供入口；T尚未开始。D分支不改已发布v0.0.3。
+状态：C1–C4与D1–D3在明确范围内实现/构建收尾，D统一交付见第27节；Swift布局缺口与UI反馈修正见第28节；新增回归、跨盘/崩溃/原生交互及真实游戏验收仍未运行。原地管理未实现且不提供入口；T尚未开始。D分支不改已发布v0.0.3。
 主要参考：SJMCL，基线 d5b109e0abb42460a8fd665c58ca4b0cc9982182。
 
 ## 1. 目标与现状
@@ -744,3 +744,22 @@ C阶段实现矩阵见第24节，用户1.6.1反馈修复见第25节；D1已开�
 - CGO_ENABLED=0 ./scripts/go.sh build ./...成功（仅生产目标）。Windows/Linux/macOS amd64使用同一Go1.27.3主程序交叉编译均成功，产物分别为build/mcl-d-directory-windows-amd64.exe（28,504,576字节）、build/mcl-d-directory-linux-amd64（27,835,227字节）、build/mcl-d-directory-darwin-amd64（28,522,832字节）。
 - CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize成功；MyGo0.7.4报告app19.4MB、DMG8.6MB，临时签名且无公证。独立体验包build/darwin-arm64/mcl-0.0.3-directory-stage-preview-arm64.dmg（8,969,216字节），不替换GitHub v0.0.3 Release。
 - 未运行或编译测试目标，未跑test/vet/race、原生/UI自动化、真实目录扫描/改动/Trash、跨卷/断电模拟、Java/游戏或公网安装验收。新增回归仅源码，构建不证明这些行为已验收。D1–D3实现/构建收尾，T尚未开始。
+
+
+## 28. 用户体验反馈：Swift profiles布局与发现页减法
+
+- 用户反馈指定Swift Craft Launcher的Fabulously Optimized实例没有被发现，直接添加profile目录又报“没有普通versions目录”；并明确要求移除截图中的常驻提示、空态与“（只读）”。这是D交付后的真实缺口，不以此前“D完成”推导所有第三方布局均支持。
+- 已获授权对明确指出的目录做针对性只读诊断：该profile只有游戏资料，debug-profile.json为Minecraft HUD配置；Swift根下meta保存公共运行文件，data/data.db与WAL中的game_versions独立登记游戏/loader。只查看结构、实例表schema和指定实例的允许字段，未打开原库SQLite连接、写源目录或查询账户；调查时通过Python标准SQLite在内存中读取结构，新产品代码不依赖Python。
+- 新增core/discovery的WAL内存快照、Swift候选转换，storage的固定布局解析与稳定FD读取；macOS platform使用现有purego绑定系统SQLite，只读deserialize私有影像，固定SQL提取ID/working_path/game_name及gameVersion/modLoader/modVersion/mainClass，不选launchCommand/JVM/Java/认证字段，不执行外部命令。Go.mod/go.sum不变，没有新增SQLite Go驱动或运行时CLI。
+- 支持选择Swift根、profiles或具体profile；单个profile只查询/发现该名称，登记路径保持原选择、不提升到父目录。只允许实例位于当前根的profiles/<safe-name>，工作根必须匹配，不以DB任意路径重定向。UUID、目录别名、未知loader/入口、缺失实例目录都明确核对；不按名称/缓存版本猜身份。关联meta/data所在根也受mcl应用数据重叠保护。
+- 数据库和WAL同FD前后身份/大小/mtime核对，二者查询后再次复核，检查SQLite/WAL头、salt、checksum及最后commit；原文件不checkpoint、不建SHM/锁/临时文件。单文件及内存影像32MiB、累计读取64MiB、最多2048条。原始影像可能含其他配置，因此不落盘/缓存/日志，结束后清零Go缓冲。macOS只读内存读取器不使其他平台获得伪支持，Windows/Linux遇Swift索引明确报暂不支持；标准versions仍使用原链。
+- 复制来源复核与发现共用适配器，Swift game/loader声明仍须经原官方目录核对；只复制已选游戏资料，外部账户、启动参数、Java/JVM和原运行库不导入，不创建安装完成收据。Candidate新增format仅非空时序列化，旧标准来源pending指纹不因空字段变化。
+- 发现入口/原生目录对话框取消“（只读）”，隐藏无来源选择器，删除“只读发现…”常驻条、选择目录说明、无结果空态、重复来源路径和成功状态标签；详情仅保留实际版本/loader/实例路径及真实问题，不堆文档ID/主类/客户端JAR说明。实际异常/截断通过Toast，底层只读和危险操作确认不变。
+- 新增SQLite/WAL校验、最后提交/未提交帧隔离、原输入不变、三种Swift选择范围、D2重读、关联根保护、源变化拒绝、未知路径拒绝，以及页面无提示/空态的回归源码。全部仅格式整理，不执行或编译测试目标；不运行UI自动化/新原生读取器或导入/迁移/Trash/Java/游戏，用户复试仍待。最终构建记录见本节末，T仍未开始。
+
+
+### Swift修正版最终构建记录
+
+- gofmt与git diff --check通过；CGO_ENABLED=0 ./scripts/go.sh build ./...成功。Windows/Linux/macOS amd64主程序交叉编译成功，分别为build/mcl-swift-discovery-windows-amd64.exe（28,587,008字节）、build/mcl-swift-discovery-linux-amd64（27,924,281字节）、build/mcl-swift-discovery-darwin-amd64（28,620,288字节）。跨平台构建不表示Windows/Linux新增了Swift索引支持。
+- CGO_ENABLED=0 ./scripts/go.sh tool mygo build -platform darwin/arm64 -skip-notarize成功，MyGo0.7.4报告app19.4MB/DMG8.6MB；独立体验包build/darwin-arm64/mcl-0.0.3-swift-discovery-fix-arm64.dmg（8,982,016字节），临时签名、未公证。不修改已发布Release。
+- 新增回归/Tester未执行、未编译测试目标。仅做用户问题所需的原目录/登记格式只读诊断与SDK声明检查；新macOS索引读取器、mcl识别/复制流程和精简UI未运行实机验收，也未跑test/vet/race/UI自动化、真实目录导入/迁移/Trash或Java/游戏。需用户使用新体验包复试，不将诊断查询当作新代码验收通过。

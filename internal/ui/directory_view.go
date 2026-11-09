@@ -208,7 +208,7 @@ func (s *Shell) directoryTasksView(c *ui.Context) {
 		}
 		sourceLabel := s.gameDirectoryName(operation.From)
 		if operation.Kind == "import" {
-			sourceLabel = "只读来源"
+			sourceLabel = "原目录"
 		}
 		if operation.Changed {
 			label = "旧副本包含后续变化"

@@ -24,10 +24,17 @@ const directoryBackupOwner = ".mcl-directory-backup.json"
 
 var payloadParts = []string{"game", "removed-assets", "asset-updates"}
 
-type DirectoryTransferStore struct{ root string }
+type DirectoryTransferStore struct {
+	root        string
+	swiftReader discovery.SwiftIndexReader
+}
 
-func NewDirectoryTransferStore(root string) *DirectoryTransferStore {
-	return &DirectoryTransferStore{root}
+func NewDirectoryTransferStore(root string, readers ...discovery.SwiftIndexReader) *DirectoryTransferStore {
+	s := &DirectoryTransferStore{root: root}
+	if len(readers) > 0 {
+		s.swiftReader = readers[0]
+	}
+	return s
 }
 func (s *DirectoryTransferStore) Lock(ctx context.Context, id string) (io.Closer, error) {
 	if err := ctx.Err(); err != nil {
@@ -93,7 +100,7 @@ func (s *DirectoryTransferStore) source(ctx context.Context, sourceID, candidate
 		return candidate, "", nil, err
 	}
 	defer root.Close()
-	report, err := discovery.Scan(ctx, root)
+	report, err := NewExistingGamesStore(s.root, s.swiftReader).scanRoot(ctx, root)
 	if err != nil {
 		return candidate, "", nil, err
 	}

@@ -333,7 +333,7 @@ func (s *Shell) creationImportView(c *ui.Context) {
 			key, label string
 			icon       *ui.SVG
 			action     func()
-		}{{"local", "从本地文件导入", iconFolder, s.pickCreationArchive}, {"download", "下载整合包", iconDownload, func() { s.openCreationPackDownloads(market.Modrinth) }}, {"existing", "发现已有游戏（只读）", iconFolder, s.openExistingGames}} {
+		}{{"local", "从本地文件导入", iconFolder, s.pickCreationArchive}, {"download", "下载整合包", iconDownload, func() { s.openCreationPackDownloads(market.Modrinth) }}, {"existing", "发现已有游戏", iconFolder, s.openExistingGames}} {
 			if index > 0 {
 				gameSettingsDivider(c)
 			}
