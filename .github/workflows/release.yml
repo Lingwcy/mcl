@@ -1,11 +1,13 @@
 name: Desktop release
 
 # Update mygo.json's version, add its section to CHANGELOG.md, commit, then
-# push the matching vX.Y.Z tag. A tag builds, signs, notarizes and uploads
-# every platform to a draft release, verifies it, then publishes it, which
+# push the matching vX.Y.Z tag. A tag builds every platform: a signed and
+# notarized disk image per Mac architecture and a portable executable per
+# Windows architecture, each with its signed update archive and manifest,
+# uploads them to a draft release, verifies it, then publishes it, which
 # makes installed launchers update to it.
 #
-# Manual runs build ad-hoc signed, unnotarized test installers as workflow
+# Manual runs build ad-hoc signed, unnotarized test builds as workflow
 # artifacts and publish nothing.
 on:
   push:
@@ -119,19 +121,34 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS universal
+          - name: macOS Apple silicon
             runner: macos-15
-            platform: darwin/universal
-            directory: darwin-universal
-            installer: mcl-${{ needs.version.outputs.number }}.dmg
-          - name: Windows x64 (Intel and AMD)
+            platform: darwin/arm64
+            directory: darwin-arm64
+            arch: arm64
+            lipo: arm64
+          - name: macOS Intel
+            runner: macos-15
+            platform: darwin/amd64
+            directory: darwin-amd64
+            arch: amd64
+            lipo: x86_64
+          - name: Windows x64
             runner: windows-2025
             platform: windows/amd64
             directory: windows-amd64
-            installer: mcl-setup-${{ needs.version.outputs.number }}-amd64.exe
+            arch: amd64
+          - name: Windows ARM64
+            runner: windows-2025
+            platform: windows/arm64
+            directory: windows-arm64
+            arch: arm64
     env:
       CGO_ENABLED: "0"
       RELEASE: ${{ needs.version.outputs.release }}
+      VERSION: ${{ needs.version.outputs.number }}
+      DIRECTORY: ${{ matrix.directory }}
+      ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -140,12 +157,6 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Cache NSIS
-        if: runner.os == 'Windows'
-        uses: actions/cache@v4
-        with:
-          path: ~\AppData\Local\mygo\nsis-*
-          key: nsis-${{ hashFiles('go.sum') }}
       - name: Import the Developer ID certificate and notary credentials
         if: runner.os == 'macOS' && env.RELEASE == 'true'
         env:
@@ -188,12 +199,14 @@ jobs:
             exit 1
           fi
           echo "MACOS_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
-      - name: Build, sign and upload to the draft release
+      # Without -upload: mygo would also publish install.sh, install.ps1 and
+      # a SHA256SUMS that concurrent jobs race on. The release keeps the
+      # disk images, executables and update files only.
+      - name: Build, sign and notarize
         if: env.RELEASE == 'true'
         shell: bash
         env:
           PLATFORM: ${{ matrix.platform }}
-          GH_TOKEN: ${{ github.token }}
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
         run: |
           if [[ -z "$MYGO_UPDATER_PRIVATE_KEY" ]]; then
@@ -206,33 +219,30 @@ jobs:
             # macos.notarize applies to disk images only.
             signing=(-skip-notarize)
           fi
-          go tool mygo build -platform "$PLATFORM" -o build/release "${signing[@]}" -upload
-      - name: Build test installer
+          go tool mygo build -platform "$PLATFORM" -o build/release "${signing[@]}" -skip-installer
+      - name: Build test package
         if: env.RELEASE != 'true'
         shell: bash
         env:
           PLATFORM: ${{ matrix.platform }}
-        run: go tool mygo build -platform "$PLATFORM" -o build/release -sign - -skip-notarize
-      - name: Verify Windows x64 application and installer payload
+        run: go tool mygo build -platform "$PLATFORM" -o build/release -sign - -skip-notarize -skip-installer
+      - name: Verify Windows executable
         if: runner.os == 'Windows'
         shell: pwsh
-        env:
-          INSTALLER: ${{ matrix.installer }}
-          DIRECTORY: ${{ matrix.directory }}
         run: |
-          ./scripts/verify-windows-x64.ps1 `
-            -Application "build/release/$env:DIRECTORY/mcl.exe" `
-            -Installer "build/release/$env:DIRECTORY/$env:INSTALLER"
+          $out = "build/release/$env:DIRECTORY"
+          $archive = if ($env:RELEASE -eq "true") { "$out/mcl-$env:VERSION-$env:DIRECTORY.tar.gz" } else { "" }
+          ./scripts/verify-windows-exe.ps1 -Application "$out/mcl.exe" -Arch $env:ARCH -Archive $archive
       - name: Verify macOS bundle
         if: runner.os == 'macOS'
         env:
-          INSTALLER: ${{ matrix.installer }}
+          LIPO: ${{ matrix.lipo }}
         run: |
-          bundle="build/release/darwin-universal/mcl.app"
-          dmg="build/release/darwin-universal/$INSTALLER"
+          bundle="build/release/$DIRECTORY/mcl.app"
+          dmg="build/release/$DIRECTORY/mcl-$VERSION-$ARCH.dmg"
           arches=$(lipo -archs "$bundle/Contents/MacOS/mcl")
-          if [[ " $arches " != *" arm64 "* || " $arches " != *" x86_64 "* ]]; then
-            echo "::error::Expected arm64 and x86_64, found $arches."
+          if [[ "$arches" != "$LIPO" ]]; then
+            echo "::error::Expected $LIPO only, found $arches."
             exit 1
           fi
           codesign --verify --deep --strict "$bundle"
@@ -246,24 +256,46 @@ jobs:
             spctl --assess --type execute --verbose=4 "$bundle"
             spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
           fi
-      - name: Verify installer and update files exist
+      - name: Collect release files
         shell: bash
-        env:
-          INSTALLER: ${{ matrix.installer }}
-          DIRECTORY: ${{ matrix.directory }}
-          VERSION: ${{ needs.version.outputs.number }}
         run: |
           out="build/release/$DIRECTORY"
-          test -s "$out/$INSTALLER"
-          if [[ "$RELEASE" == true ]]; then
-            test -s "$out/update-$DIRECTORY.json"
-            test -s "$out/mcl-$VERSION-$DIRECTORY.tar.gz"
-            jq -e --arg v "$VERSION" '.version == $v' "$out/update-$DIRECTORY.json" > /dev/null
+          mkdir -p dist/manifest
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            cp "$out/mcl-$VERSION-$ARCH.dmg" dist/
+          else
+            # A portable executable, named per architecture so both fit in
+            # one release; the launcher keeps whatever name the user gives it.
+            cp "$out/mcl.exe" "dist/mcl-$VERSION-windows-$ARCH.exe"
           fi
+          if [[ "$RELEASE" == true ]]; then
+            manifest="$out/update-$DIRECTORY.json"
+            test -s "$manifest"
+            test -s "$out/mcl-$VERSION-$DIRECTORY.tar.gz"
+            jq -e --arg v "$VERSION" '.version == $v' "$manifest" > /dev/null
+            cp "$out/mcl-$VERSION-$DIRECTORY.tar.gz" dist/
+            find "$out" -maxdepth 1 -name '*.delta' -exec cp {} dist/ \;
+            cp "$manifest" dist/manifest/
+          fi
+          ls -la dist dist/manifest
+      - name: Upload to the draft release
+        if: env.RELEASE == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          files=(dist/*.*)
+          gh release upload "$RELEASE_TAG" --clobber "${files[@]}"
+          # Last, so a manifest never names a file that is not there yet.
+          gh release upload "$RELEASE_TAG" --clobber dist/manifest/*
       - uses: actions/upload-artifact@v7
         with:
           name: mcl-${{ matrix.directory }}
-          path: build/release/${{ matrix.directory }}/${{ matrix.installer }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
           if-no-files-found: error
           overwrite: true
 
@@ -276,7 +308,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Verify assets, rewrite checksums and publish
+      - name: Verify assets, write checksums and publish
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -292,24 +324,26 @@ jobs:
           assets=$(gh release view "$RELEASE_TAG" --json assets \
             --jq '.assets[] | select(.state == "uploaded") | [.name, .digest] | @tsv')
           required=(
-            "mcl-$RELEASE_VERSION.dmg"
-            "mcl-setup-$RELEASE_VERSION-amd64.exe"
-            "mcl-$RELEASE_VERSION-darwin-universal.tar.gz"
-            "mcl-$RELEASE_VERSION-windows-amd64.tar.gz"
-            "update-darwin-universal.json"
-            "update-windows-amd64.json"
-            "install.sh"
-            "install.ps1"
+            "mcl-$RELEASE_VERSION-arm64.dmg"
+            "mcl-$RELEASE_VERSION-amd64.dmg"
+            "mcl-$RELEASE_VERSION-windows-amd64.exe"
+            "mcl-$RELEASE_VERSION-windows-arm64.exe"
           )
+          for target in darwin-arm64 darwin-amd64 windows-amd64 windows-arm64; do
+            required+=("mcl-$RELEASE_VERSION-$target.tar.gz" "update-$target.json")
+          done
           for name in "${required[@]}"; do
             if ! cut -f 1 <<< "$assets" | grep -Fxq "$name"; then
               echo "::error::The release is missing $name."
               exit 1
             fi
           done
-          # Both platform jobs merge SHA256SUMS at the same time, so one may
-          # have dropped the other's lines. Rebuild it from GitHub's digests.
-          awk -F '\t' '$1 != "SHA256SUMS" && $2 ~ /^sha256:/ { sub(/^sha256:/, "", $2); print $2 "  " $1 }' \
+          for name in install.sh install.ps1; do
+            if cut -f 1 <<< "$assets" | grep -Fxq "$name"; then
+              gh release delete-asset "$RELEASE_TAG" "$name" --yes
+            fi
+          done
+          awk -F '\t' '$1 != "SHA256SUMS" && $1 !~ /^install\./ && $2 ~ /^sha256:/ { sub(/^sha256:/, "", $2); print $2 "  " $1 }' \
             <<< "$assets" | sort -k 2 > SHA256SUMS
           cat SHA256SUMS
           gh release upload "$RELEASE_TAG" --clobber SHA256SUMS
