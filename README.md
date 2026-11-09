@@ -2,6 +2,8 @@
 
 English · [简体中文](README.zh-CN.md)
 
+[![Listed on Awesome MyGo](https://awesomemygo.dev/badge.svg)](https://awesomemygo.dev/apps/meow-craft-launcher)
+
 ![Meow Craft Launcher showing the instance library, resource market, instance setup, and launch screen](media/readme-hero-v3.jpg)
 
 **mcl** is a native Minecraft Java Edition launcher built with Go and MyGo. Create isolated instances, browse mods and resource packs, and manage Java runtimes from one app.
