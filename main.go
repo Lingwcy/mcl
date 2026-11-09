@@ -141,8 +141,18 @@ func run() error {
 	accounts := app.NewAccountService(storage.NewAccountStore(paths.Root), platform.NewAccountCredentials(paths.Root), microsoft)
 
 	mygo.App.SetName(branding.Name)
-	mygo.Use(updatePlugin)
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { cancel() })
+	var portable *portableUpdates
+	if usesUpdatePlugin() {
+		mygo.Use(updatePlugin)
+	} else if portable, err = newPortableUpdates(ctx, paths.Root); err != nil {
+		return fmt.Errorf("prepare self-updates: %w", err)
+	}
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		if portable != nil {
+			portable.finish()
+		}
+		cancel()
+	})
 	bindImportIntents := importFileIntents()
 	mygo.App.WhenReady(func() {
 		var window *mygo.Window
@@ -186,7 +196,7 @@ func run() error {
 			StateKey: "main-workspace-v2", Content: ui.View(shell.View),
 		})
 		shell.BindWindow(window)
-		connectUpdates(window, shell)
+		connectUpdates(window, shell, portable)
 		connectJava(ctx, &workers, window, shell, javaService)
 		connectDownloads(ctx, &workers, window, shell, downloadService, downloadCache)
 		connectGameDirectories(ctx, &workers, window, shell, app.NewGameDirectoryService(storage.NewGameDirectoryStore(paths.Root)), assetStore)
