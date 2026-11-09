@@ -7,11 +7,13 @@ import (
 	"sync"
 	"time"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/download"
 	"mcl/internal/core/install"
 	"mcl/internal/core/instance"
 	"mcl/internal/core/java"
 	"mcl/internal/core/launch"
+	"mcl/internal/core/meta"
 )
 
 type RuntimeProbe func(context.Context, string) (java.Runtime, error)
@@ -203,6 +205,14 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	if err := taskBaseIdentity(ctx, value, base); err != nil {
 		return nil, err
 	}
+	facts := diagnostics.Facts{Provider: "mojang", Dialect: "official", Game: value.Version.ID, LauncherArch: meta.CurrentPlatform().Arch, TargetOS: target.OS, TargetArch: target.Arch}
+	if required, ok := value.RequiredLoader(); ok {
+		facts.Loader = required.Type
+		facts.LoaderVersion = required.Version
+	} else {
+		facts.Loader = "vanilla"
+	}
+	diagnostics.SetFacts(ctx, facts)
 	preferred := []string{value.JavaPath, fallback.JavaPath}
 	runtime, err := s.resolveJava(ctx, base.Java.Major, target, preferred, javaProgress)
 	if err != nil {
@@ -252,7 +262,17 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	p := &Prepared{memoryProbe: s.memoryProbe, ctx: ctx, options: options, receipt: receipt, versionSHA1: value.Version.SHA1, start: s.start, release: reserved.Close, lease: reserved.lease, settled: make(chan struct{}), started: s.manage}
+	p := &Prepared{memoryProbe: s.memoryProbe, ctx: ctx, options: options, receipt: receipt, versionSHA1: value.Version.SHA1, start: s.start, release: reserved.Close, lease: reserved.lease, settled: make(chan struct{})}
+	if scope := taskScope(ctx); scope != nil {
+		scope.execution.mu.Lock()
+		facts = facts.Merge(scope.execution.group.Evidence.Facts)
+		scope.execution.mu.Unlock()
+	}
+	facts = facts.Merge(resolved.evidence)
+	facts = facts.Merge(runtime.DiagnosticFacts(false))
+	p.started = func(record launch.Record, game launch.Game, release func(), redact func(string) string) {
+		s.manage(record, game, release, redact, facts)
+	}
 	transferred = true
 	go func() {
 		select {

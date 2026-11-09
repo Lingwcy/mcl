@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mcl/internal/core/diagnostics"
 	"net/http"
 	"os"
 	"strconv"
@@ -12,7 +13,7 @@ import (
 	"time"
 )
 
-func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address string, alternate bool) (bool, time.Duration, error) {
+func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address string, alternate bool, attempt ...int) (bool, time.Duration, error) {
 	p, err := openPartial(ctx, root, f, address, c.Coordination)
 	if err != nil {
 		return false, 0, err
@@ -28,6 +29,13 @@ func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address st
 		}
 		defer release()
 	}
+	number := 1
+	if len(attempt) > 0 {
+		number = attempt[0]
+	}
+	ctx, evidence := diagnostics.Start(ctx, "network", f.Path)
+	defer evidence.End()
+	evidence.Network(diagnostics.Source(address), 0, number)
 	for fallback := 0; fallback < 2; fallback++ {
 		requested := p.offset
 		if p.reset {
@@ -58,9 +66,16 @@ func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address st
 			if ctx.Err() != nil {
 				return false, 0, ctx.Err()
 			}
-			return true, 0, errors.New("下载请求失败，请检查网络及代理")
+			code := diagnostics.Code(err)
+			if code == "unknown" {
+				code = "network"
+			}
+			failure := diagnostics.Wrap(code, errors.New("下载请求失败，请检查网络及代理"))
+			evidence.Fail(failure)
+			return true, 0, failure
 		}
 		status := response.StatusCode
+		evidence.Network(diagnostics.Source(address), status, number)
 		if status == 416 && requested > 0 {
 			response.Body.Close()
 			if response.Header.Get("Content-Range") == fmt.Sprintf("bytes */%d", f.Size) && requested == f.Size {
@@ -94,7 +109,9 @@ func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address st
 			}
 			retry := status == 408 || status == 429 || status >= 500 && status <= 599 || alternate && (status == 403 || status == 404)
 			delay, allowed := retryDelay(response.Header.Get("Retry-After"), time.Now())
-			return retry && allowed, delay, fmt.Errorf("服务器返回 HTTP %d", status)
+			failure := diagnostics.Wrap(diagnostics.HTTPCode(status), fmt.Errorf("服务器返回 HTTP %d", status))
+			evidence.Fail(failure)
+			return retry && allowed, delay, failure
 		}
 		if response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity" || response.ContentLength >= 0 && response.ContentLength != length {
 			response.Body.Close()

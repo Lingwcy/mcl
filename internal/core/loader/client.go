@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/meta"
 )
 
@@ -47,6 +48,8 @@ func (c *Client) base(kind string) (string, error) {
 	}
 }
 func (c *Client) bytes(ctx context.Context, address string, limit int64) ([]byte, error) {
+	ctx, evidence := diagnostics.Start(ctx, "metadata", "loader-response")
+	defer evidence.End()
 	response, err := c.request(ctx, http.MethodGet, address)
 	if err != nil {
 		return nil, err
@@ -62,13 +65,17 @@ func (c *Client) bytes(ctx context.Context, address string, limit int64) ([]byte
 	if int64(len(data)) > limit {
 		return nil, errors.New("加载器响应超过限制")
 	}
+	evidence.Work()
 	return data, ctx.Err()
 }
 
 // Only transient transport/status failures are retried. A long Retry-After is
 // returned to the user instead of sleeping indefinitely or retrying too early.
 func (c *Client) request(ctx context.Context, method, address string) (*http.Response, error) {
+	ctx, evidence := diagnostics.Start(ctx, "network", "loader-metadata")
+	defer evidence.End()
 	for attempt := range 3 {
+		evidence.Network(diagnostics.Source(address), 0, attempt+1)
 		req, err := http.NewRequestWithContext(ctx, method, address, nil)
 		if err != nil {
 			return nil, errors.New("加载器请求地址无效")
@@ -89,13 +96,20 @@ func (c *Client) request(ctx context.Context, method, address string) (*http.Res
 			if response != nil {
 				response.Body.Close()
 			}
-			failure = errors.New("无法连接加载器服务")
+			code := diagnostics.Code(fetchErr)
+			if code == "unknown" {
+				code = "network"
+			}
+			failure = diagnostics.Wrap(code, errors.New("无法连接加载器服务"))
+			evidence.Fail(failure)
 		} else {
 			status := response.StatusCode
+			evidence.Network(diagnostics.Source(address), status, attempt+1)
 			if status != http.StatusTooManyRequests && status != http.StatusRequestTimeout && status < 500 {
 				return response, nil
 			}
-			failure = fmt.Errorf("加载器服务繁忙，HTTP %d", status)
+			failure = diagnostics.Wrap(diagnostics.HTTPCode(status), fmt.Errorf("加载器服务繁忙，HTTP %d", status))
+			evidence.Fail(failure)
 			retry := response.Header.Get("Retry-After")
 			response.Body.Close()
 			if seconds, err := strconv.Atoi(retry); err == nil && seconds > 0 {
@@ -262,6 +276,8 @@ dispatch:
 	return p, nil
 }
 func (c *Client) mavenMetadata(ctx context.Context, address, relative string) (meta.Download, error) {
+	ctx, evidence := diagnostics.Start(ctx, "metadata", relative)
+	defer evidence.End()
 	data, err := c.bytes(ctx, address+".sha1", 1024)
 	if err != nil {
 		return meta.Download{}, err
@@ -286,7 +302,7 @@ func (c *Client) mavenSize(ctx context.Context, address string) (int64, error) {
 	}
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
-		return 0, fmt.Errorf("Maven 文件返回 HTTP %d", response.StatusCode)
+		return 0, diagnostics.Wrap(diagnostics.HTTPCode(response.StatusCode), fmt.Errorf("Maven 文件返回 HTTP %d", response.StatusCode))
 	}
 	size, err := strconv.ParseInt(response.Header.Get("Content-Length"), 10, 64)
 	if err != nil || size <= 0 || size > 512<<20 {

@@ -14,12 +14,13 @@ import (
 	"strings"
 	"time"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/fileio"
 )
 
 const partsDirectory = "download-parts-v1"
 
-var ErrCheckpoint = errors.New("下载检查点未能持久化")
+var ErrCheckpoint = diagnostics.Wrap("checkpoint", errors.New("下载检查点未能持久化"))
 
 type partialState struct {
 	Schema                            int
@@ -254,6 +255,8 @@ func (p *partial) checkpoint(ctx context.Context) error {
 	return checkpointError(savePartial(context.WithoutCancel(ctx), p.root, p.marker, p.state))
 }
 func (p *partial) publish(ctx context.Context, root *os.Root, f File) (bool, time.Duration, error) {
+	ctx, evidence := diagnostics.Start(ctx, "verify", f.Path)
+	defer evidence.End()
 	if err := Observe(ctx, eventFor(f, "verifying", f.Size)); err != nil {
 		return false, 0, err
 	}
@@ -281,6 +284,7 @@ func (p *partial) publish(ctx context.Context, root *os.Root, f File) (bool, tim
 		}
 		return true, 0, errors.New("下载校验未通过，已丢弃无效分片，可重试")
 	}
+	evidence.Work()
 	after, err := p.file.Stat()
 	if err != nil {
 		return false, 0, err
@@ -298,6 +302,9 @@ func (p *partial) publish(ctx context.Context, root *os.Root, f File) (bool, tim
 	if err := p.file.Close(); err != nil {
 		return false, 0, err
 	}
+	evidence.End()
+	ctx, publishing := diagnostics.Start(ctx, "publish", f.Path)
+	defer publishing.End()
 	if err := Observe(ctx, eventFor(f, "publishing", f.Size)); err != nil {
 		return false, 0, err
 	}

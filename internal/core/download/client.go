@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/meta"
 )
 
@@ -214,12 +215,18 @@ dispatch:
 }
 
 func (c *Client) get(ctx context.Context, root *os.Root, f File, cache CacheLease) (bool, error) {
-	unlock, err := c.lock(ctx, strings.ToLower(norm.NFC.String(f.Path)))
+	ctx, activity := diagnostics.Start(ctx, "work", f.Path)
+	defer activity.End()
+	lockCtx, waiting := diagnostics.Start(ctx, "lock", f.Path)
+	unlock, err := c.lock(lockCtx, strings.ToLower(norm.NFC.String(f.Path)))
 	if err != nil {
+		waiting.Fail(err)
+		waiting.End()
 		return false, err
 	}
 	defer unlock()
-	release, err := c.targetLease(ctx, f.Path)
+	release, err := c.targetLease(lockCtx, f.Path)
+	waiting.End()
 	if err != nil {
 		return false, err
 	}
@@ -254,7 +261,7 @@ func (c *Client) get(ctx context.Context, root *os.Root, f File, cache CacheLeas
 	sources := c.Transfers.candidates(f.URL)
 	for attempt := range c.Attempts {
 		address := sources[attempt%len(sources)]
-		retry, delay, err := c.transfer(ctx, root, f, address, len(sources) > 1)
+		retry, delay, err := c.transfer(ctx, root, f, address, len(sources) > 1, attempt+1)
 		if err == nil {
 			c.Transfers.rememberSource(f.URL, address)
 			if cache != nil {
@@ -279,12 +286,15 @@ func (c *Client) get(ctx context.Context, root *os.Root, f File, cache CacheLeas
 		if delay == 0 {
 			delay = (200 * time.Millisecond) << attempt
 		}
+		_, backoff := diagnostics.Start(ctx, "backoff", f.Path)
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+			backoff.End()
 			return false, ctx.Err()
 		case <-timer.C:
+			backoff.End()
 		}
 	}
 	return false, errors.New("download attempts exhausted")
@@ -293,6 +303,8 @@ func (c *Client) get(ctx context.Context, root *os.Root, f File, cache CacheLeas
 // Verify always hashes a regular file; matching size or an old success marker
 // alone is insufficient to reuse it. Root prevents traversal through symlinks.
 func Verify(ctx context.Context, root *os.Root, f File) error {
+	ctx, evidence := diagnostics.Start(ctx, "verify", f.Path)
+	defer evidence.End()
 	if err := f.Validate(); err != nil {
 		return err
 	}
@@ -337,6 +349,7 @@ func Verify(ctx context.Context, root *os.Root, f File) error {
 	if !current.Mode().IsRegular() || !os.SameFile(before, current) || !os.SameFile(before, after) || current.Size() != before.Size() || after.Size() != before.Size() || !before.ModTime().Equal(current.ModTime()) || !before.ModTime().Equal(after.ModTime()) {
 		return errors.New("cached file changed while verifying")
 	}
+	evidence.Work()
 	return ctx.Err()
 }
 

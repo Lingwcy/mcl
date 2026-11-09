@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"mcl/internal/core/diagnostics"
 )
 
 // TransferControl bounds actual network transfers across all task groups and
@@ -73,6 +75,12 @@ func (c *TransferControl) notify() {
 // Acquire is cancellable and returns an idempotent release. Waiters do not
 // consume workers beyond their caller's already bounded file/task group.
 func (c *TransferControl) Acquire(ctx context.Context) (func(), error) {
+	var waiting *diagnostics.Span
+	defer func() {
+		if waiting != nil {
+			waiting.End()
+		}
+	}()
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -93,6 +101,9 @@ func (c *TransferControl) Acquire(ctx context.Context) (func(), error) {
 		}
 		changed := c.changed
 		c.mu.Unlock()
+		if waiting == nil {
+			_, waiting = diagnostics.Start(ctx, "quota", "transfer-budget")
+		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()

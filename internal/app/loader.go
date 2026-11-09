@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/download"
 	"mcl/internal/core/install"
 	"mcl/internal/core/instance"
@@ -32,6 +33,7 @@ func NewLoaderService(catalog LoaderCatalog, store LoaderRepository, forge *load
 }
 
 type resolvedVersion struct {
+	evidence           diagnostics.Facts
 	platform           meta.Platform
 	version            meta.Version
 	profileFingerprint string
@@ -43,6 +45,9 @@ func (s *LoaderService) resolve(ctx context.Context, value instance.Instance, ba
 	if !ok {
 		return resolvedVersion{version: base}, nil
 	}
+	diagnostics.SetFacts(ctx, diagnostics.Facts{Game: value.Version.ID, Loader: required.Type, LoaderVersion: required.Version})
+	ctx, evidence := diagnostics.Start(ctx, "work", required.Type+":"+required.Version)
+	defer evidence.End()
 	request, err := (loader.Request{Type: required.Type, Version: required.Version, GameVersion: value.Version.ID, BaseSHA1: strings.ToLower(value.Version.SHA1)}).WithBase(base)
 	if err != nil {
 		return resolvedVersion{}, err
@@ -84,6 +89,7 @@ func (s *LoaderService) resolve(ctx context.Context, value instance.Instance, ba
 			}
 		}
 	}
+	diagnostics.SetFacts(ctx, diagnostics.Facts{Loader: request.Type, LoaderVersion: request.Version})
 	if cacheErr != nil {
 		if err := ctx.Err(); err != nil {
 			return resolvedVersion{}, err
@@ -136,5 +142,5 @@ func (s *LoaderService) resolve(ctx context.Context, value instance.Instance, ba
 	for _, library := range profile.Libraries {
 		paths["cache/libraries/"+library.Downloads.Artifact.Path] = true
 	}
-	return resolvedVersion{version: effective, profileFingerprint: profile.Fingerprint(), libraryPaths: paths}, nil
+	return resolvedVersion{version: effective, profileFingerprint: profile.Fingerprint(), libraryPaths: paths, evidence: diagnostics.Facts{Loader: request.Type, LoaderVersion: request.Version}}, nil
 }

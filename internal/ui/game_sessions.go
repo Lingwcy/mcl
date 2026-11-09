@@ -50,7 +50,10 @@ func gameStatus(value app.GameSnapshot) string {
 		if value.Window == app.GameWindowPending {
 			return "等待游戏窗口"
 		}
-		return "运行中"
+		if value.Window == app.GameWindowUnavailable {
+			return "进程运行中 · 窗口状态不可用"
+		}
+		return "窗口已出现"
 	}
 	if value.Exit.Stopped {
 		return "已停止"
@@ -161,6 +164,12 @@ func (s *Shell) logView(c *ui.Context) {
 			}
 			ui.Button(c.Key("log-errors"), label).Height(26).OnClick(func() { g.errorsOnly = !g.errorsOnly })
 			ui.Button(c.Key("log-follow"), "回到最新").Height(26).OnClick(func() { g.list.ScrollToEnd() })
+			if current != nil {
+				snapshot := *current
+				ui.Button(c.Key("copy-session-evidence"), "复制诊断").Height(26).OnClick(func() {
+					services.WriteClipboard(fmt.Sprintf("session=%s instance=%s pid=%d status=%s window_checked=%s window_code=%s\n%s", snapshot.ID, snapshot.InstanceID, snapshot.PID, gameStatus(snapshot), snapshot.WindowCheckedAt.UTC().Format("2006-01-02T15:04:05Z07:00"), snapshot.WindowProbeCode, snapshot.Evidence.Text()))
+				})
+			}
 			ui.Button(c.Key("copy-logs"), "复制日志").Height(26).OnClick(func() {
 				var text strings.Builder
 				for _, line := range filtered {

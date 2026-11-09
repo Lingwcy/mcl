@@ -5,6 +5,8 @@ import (
 	"io"
 	"math"
 	"time"
+
+	"mcl/internal/core/diagnostics"
 )
 
 func burst(rate int64) float64 { return float64(max(0, min(rate/4, 64<<10))) }
@@ -20,6 +22,12 @@ func (c *TransferControl) refill(now time.Time) {
 }
 
 func (c *TransferControl) take(ctx context.Context, wanted int) (int, uint64, error) {
+	var waiting *diagnostics.Span
+	defer func() {
+		if waiting != nil {
+			waiting.End()
+		}
+	}()
 	for {
 		if err := ctx.Err(); err != nil {
 			return 0, 0, err
@@ -42,6 +50,9 @@ func (c *TransferControl) take(ctx context.Context, wanted int) (int, uint64, er
 		wait := time.Duration(math.Ceil((float64(quantum) - c.tokens) / float64(c.rate) * float64(time.Second)))
 		changed := c.changed
 		c.mu.Unlock()
+		if waiting == nil {
+			_, waiting = diagnostics.Start(ctx, "rate", "shared-rate-limit")
+		}
 		timer := time.NewTimer(max(wait, time.Microsecond))
 		select {
 		case <-ctx.Done():
@@ -82,6 +93,9 @@ func (r *limitedReader) Read(buffer []byte) (int, error) {
 		return 0, err
 	}
 	n, err := r.reader.Read(buffer[:grant])
+	if n > 0 {
+		diagnostics.Work(r.ctx)
+	}
 	// Small assets and EOF must not consume a full buffer's unused quota.
 	r.control.refund(grant-n, epoch)
 	return n, err

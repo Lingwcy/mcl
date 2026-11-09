@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/launch"
 )
 
@@ -22,6 +23,9 @@ const (
 // GameSnapshot contains only public process state and already-redacted output.
 // Completed snapshots remain bounded; no UI object or credential is retained.
 type GameSnapshot struct {
+	Evidence                  diagnostics.Snapshot
+	WindowCheckedAt           time.Time
+	WindowProbeCode           string
 	Warnings                  []string
 	ID, InstanceID, VersionID string
 	PID                       int
@@ -47,8 +51,11 @@ func (s *LaunchService) notify() {
 	}
 }
 
-func (s *LaunchService) manage(record launch.Record, game launch.Game, release func(), redact func(string) string) {
+func (s *LaunchService) manage(record launch.Record, game launch.Game, release func(), redact func(string) string, facts ...diagnostics.Facts) {
 	snapshot := GameSnapshot{Warnings: launch.StartupWarnings(game), ID: record.ID, InstanceID: record.InstanceID, VersionID: record.VersionID, PID: game.PID(), StartedAt: time.Now().UTC(), Running: true}
+	if len(facts) > 0 && facts[0].Validate() == nil {
+		snapshot.Evidence.Facts = facts[0]
+	}
 	if s.windowVisible != nil {
 		snapshot.Window = GameWindowPending
 	}
@@ -74,6 +81,14 @@ func (s *LaunchService) manage(record launch.Record, game launch.Game, release f
 				ticks, watchDone = nil, nil
 			case <-ticks:
 				visible, err := s.windowVisible(record.Process)
+				s.gamesMu.Lock()
+				first := entry.snapshot.WindowCheckedAt.IsZero()
+				entry.snapshot.WindowCheckedAt = time.Now().UTC()
+				entry.snapshot.WindowProbeCode = diagnostics.Code(err)
+				s.gamesMu.Unlock()
+				if first {
+					s.notify()
+				}
 				if err == nil && !visible {
 					continue
 				}
@@ -119,11 +134,15 @@ func (s *LaunchService) Sessions() []GameSnapshot {
 	result := make([]GameSnapshot, 0, len(s.games))
 	for _, entry := range s.games {
 		value := entry.snapshot
+		value.Evidence = value.Evidence.Clone()
 		value.Warnings = slices.Clone(value.Warnings)
 		if entry.game != nil {
 			value.Output = entry.game.Output()
 		} else {
 			value.Output.Lines = slices.Clone(value.Output.Lines)
+		}
+		if len(value.Output.Lines) > 0 {
+			value.Evidence.LastWorkAt = value.Output.Lines[len(value.Output.Lines)-1].Time
 		}
 		result = append(result, value)
 	}

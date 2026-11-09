@@ -12,6 +12,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/download"
 	"mcl/internal/core/instance"
 )
@@ -32,6 +33,7 @@ type File struct {
 	Received, Verified, Total int64
 }
 type Group struct {
+	Evidence                       diagnostics.Snapshot `json:",omitempty"`
 	Identities                     map[string]string
 	Received, Verified, TotalBytes int64
 	FileCount, DoneFiles           int
@@ -48,7 +50,10 @@ type Group struct {
 }
 
 func (g Group) Validate() error {
-	if g.Schema != 1 || !instance.ValidID(g.ID) || g.CreatedAt.IsZero() || g.UpdatedAt.IsZero() || !utf8.ValidString(g.Intent.Name) || len(g.Intent.Name) > 320 || strings.ContainsFunc(g.Intent.Name, unicode.IsControl) || g.Intent.InstanceID != "" && !instance.ValidID(g.Intent.InstanceID) || len(g.Intent.Payload) > 4<<20 || !json.Valid(g.Intent.Payload) || len(g.Files) > MaxFiles {
+	if err := g.Evidence.Validate(); err != nil {
+		return err
+	}
+	if (g.Schema != 1 && g.Schema != 2) || !instance.ValidID(g.ID) || g.CreatedAt.IsZero() || g.UpdatedAt.IsZero() || !utf8.ValidString(g.Intent.Name) || len(g.Intent.Name) > 320 || strings.ContainsFunc(g.Intent.Name, unicode.IsControl) || g.Intent.InstanceID != "" && !instance.ValidID(g.Intent.InstanceID) || len(g.Intent.Payload) > 4<<20 || !json.Valid(g.Intent.Payload) || len(g.Files) > MaxFiles {
 		return errors.New("下载任务记录身份或边界无效")
 	}
 	switch g.Intent.Kind {
@@ -97,6 +102,7 @@ func (g Group) Terminal() bool {
 }
 
 func (g Group) Summary() Group {
+	g.Evidence = g.Evidence.Clone()
 	g.Received, g.Verified, g.TotalBytes = 0, 0, 0
 	g.FileCount = 0
 	g.DoneFiles = 0

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/download"
 	"mcl/internal/core/java"
 	"mcl/internal/core/meta"
@@ -19,6 +20,8 @@ import (
 type JavaResolver func(context.Context, int, meta.Platform, []string, func(java.Progress)) (java.Runtime, error)
 
 func (s *JavaService) Ensure(ctx context.Context, major int, target meta.Platform, preferred []string, report func(java.Progress)) (java.Runtime, error) {
+	ctx, evidence := diagnostics.Start(ctx, "java", "game-runtime")
+	defer evidence.End()
 	if major < 8 {
 		return java.Runtime{}, errors.New("当前启动管线不支持 Java 8 之前的运行环境")
 	}
@@ -33,6 +36,8 @@ func (s *JavaService) Ensure(ctx context.Context, major int, target meta.Platfor
 		return java.Runtime{}, fmt.Errorf("发现可用 Java: %w", err)
 	}
 	if runtime, ok := matchingJava(inventory.Environments, major, target, preferred); ok {
+		evidence.Work()
+		reportRuntimeFacts(ctx, runtime)
 		return runtime, nil
 	}
 	if err := ctx.Err(); err != nil {
@@ -100,6 +105,8 @@ func (s *JavaService) Ensure(ctx context.Context, major int, target meta.Platfor
 				failures = append(failures, err)
 				continue
 			}
+			evidence.Work()
+			reportRuntimeFacts(ctx, environment.Runtime)
 			return environment.Runtime, nil
 		}
 	}

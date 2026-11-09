@@ -5,6 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/tasks"
 )
 
@@ -107,7 +108,16 @@ func (s *Shell) downloadTaskFiles(c *ui.Context) {
 	if group.ID == "" {
 		return
 	}
-	ui.Text(c, group.Intent.Name).FontSize(12).FillWidth()
+	services := c.Services()
+	ui.Row(c).FillWidth().Gap(8).Children(func() {
+		ui.Text(c, group.Intent.Name).FontSize(12).Grow(1).MinWidth(0)
+		ui.Button(c.Key("copy-task-evidence"), "复制诊断").Height(26).OnClick(func() {
+			services.WriteClipboard(fmt.Sprintf("task=%s attempt=%d state=%s stage=%s\n%s", group.ID, group.Attempt, group.State, group.Stage, group.Evidence.Text()))
+		})
+	})
+	if record, ok := group.Evidence.Current(); ok && group.Owned {
+		ui.Text(c, diagnostics.Label(record.Phase)+" · "+record.Subject).FontSize(11).TextColor(s.theme.TextMuted).FillWidth().MaxLines(2)
+	}
 	if group.Reason != "" {
 		ui.Text(c, group.Reason).FontSize(11).TextColor(s.theme.TextMuted).FillWidth()
 	}

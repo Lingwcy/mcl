@@ -7,6 +7,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/tasks"
 )
 
@@ -44,6 +45,17 @@ func (s *Shell) SetDownloadTasks(groups []tasks.Group) {
 		previous[group.ID] = group.State
 	}
 	d.groups = slices.Clone(groups)
+	for _, group := range groups {
+		if d.selected == group.ID && d.detail.ID == group.ID {
+			d.detail.Evidence = group.Evidence.Clone()
+			d.detail.State = group.State
+			d.detail.Stage = group.Stage
+			d.detail.Reason = group.Reason
+			d.detail.Attempt = group.Attempt
+			d.detail.Owned = group.Owned
+			d.detail.Remote = group.Remote
+		}
+	}
 	refresh, javaChanged, assetsChanged := false, false, false
 	for _, group := range groups {
 		old, found := previous[group.ID]
@@ -184,6 +196,9 @@ func downloadTaskLabel(group tasks.Group) string {
 	}
 	switch group.State {
 	case "running":
+		if record, ok := group.Evidence.Current(); ok && group.Owned {
+			return diagnostics.Label(record.Phase)
+		}
 		return group.Stage
 	case "queued":
 		return "等待中"

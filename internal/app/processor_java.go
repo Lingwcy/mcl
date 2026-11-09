@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/java"
 	"mcl/internal/core/meta"
 )
@@ -15,6 +16,9 @@ import (
 // or global default. A tool needs a compatible stable JVM, not the game major.
 // Missing tools use the same serialized, pinned Temurin installer as game Java.
 func (s *JavaService) EnsureProcessor(ctx context.Context, minimum int, target meta.Platform, preferred []string, report func(java.Progress)) (java.Runtime, error) {
+	ctx = context.WithValue(ctx, runtimePurposeKey{}, true)
+	ctx, evidence := diagnostics.Start(ctx, "java", "processor-runtime")
+	defer evidence.End()
 	if err := ctx.Err(); err != nil {
 		return java.Runtime{}, err
 	}
@@ -30,6 +34,8 @@ func (s *JavaService) EnsureProcessor(ctx context.Context, minimum int, target m
 		return java.Runtime{}, fmt.Errorf("发现安装工具Java: %w", err)
 	}
 	if runtime, ok := matchingProcessorJava(inventory.Environments, minimum, target, preferred); ok {
+		reportRuntimeFacts(ctx, runtime)
+		evidence.Work()
 		return runtime, ctx.Err()
 	}
 	return s.Ensure(ctx, major, target, preferred, func(p java.Progress) {

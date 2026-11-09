@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"mcl/internal/core/archive"
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/download"
 	"mcl/internal/core/instance"
 	"mcl/internal/core/mods"
@@ -90,7 +91,7 @@ func (s *TaskService) Execute(ctx context.Context, intent tasks.Intent, work fun
 		return err
 	}
 	intent.Payload = payload
-	group := tasks.Group{Schema: 1, ID: instance.NewID(), Intent: intent, State: "queued", Stage: "准备", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	group := tasks.Group{Schema: 2, ID: instance.NewID(), Intent: intent, State: "queued", Stage: "准备", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 	lease, err := s.store.Lock(ctx, group.ID)
 	if err != nil {
 		return err
@@ -138,6 +139,9 @@ func (s *TaskService) execute(ctx context.Context, group tasks.Group, work func(
 		execution.group.Stage = "准备"
 		execution.group.Reason = ""
 		execution.group.Attempt++
+		execution.group.Schema = 2
+		execution.group.Evidence = diagnostics.Snapshot{}
+		attemptNumber := execution.group.Attempt
 		execution.group.Owned = true
 		execution.request = ""
 		execution.indices = map[string]int{}
@@ -164,7 +168,18 @@ func (s *TaskService) execute(ctx context.Context, group tasks.Group, work func(
 			return saveErr
 		}
 		attempt = context.WithValue(attempt, taskContextKey{}, &taskContext{s, execution})
-		attempt = download.WithObserver(attempt, func(event download.Event) error { return s.event(execution, event) })
+		attempt = download.WithObserver(attempt, func(event download.Event) error { return s.event(execution, event, attemptNumber) })
+		attempt = diagnostics.WithObserver(attempt, func(update diagnostics.Update) {
+			execution.mu.Lock()
+			defer execution.mu.Unlock()
+			if execution.group.Attempt != attemptNumber || execution.cancel == nil {
+				return
+			}
+			execution.group.Evidence.Apply(update)
+			// Evidence follows existing durable checkpoints. Observing work must not
+			// create an extra disk-failure/cancellation path or change worker admission.
+			s.notify()
+		})
 		if admit, ok := ctx.Value(taskAdmissionKey{}).(func(error)); ok {
 			admit(nil)
 		}
@@ -193,6 +208,7 @@ func (s *TaskService) execute(ctx context.Context, group tasks.Group, work func(
 			execution.group.State = "failed"
 			execution.group.Reason = taskReason(err)
 		}
+		execution.group.Evidence.Finish(diagnostics.Code(err))
 		for index := range execution.group.Files {
 			file := &execution.group.Files[index]
 			if file.State != "done" {
@@ -269,9 +285,12 @@ func (s *TaskService) saveLocked(execution *taskExecution) error {
 	}
 	return err
 }
-func (s *TaskService) event(execution *taskExecution, event download.Event) error {
+func (s *TaskService) event(execution *taskExecution, event download.Event, attempt uint64) error {
 	execution.mu.Lock()
 	defer execution.mu.Unlock()
+	if execution.group.Attempt != attempt || execution.cancel == nil {
+		return context.Canceled
+	}
 	if execution.saveErr != nil {
 		return execution.saveErr
 	}
@@ -310,6 +329,9 @@ func (s *TaskService) event(execution *taskExecution, event download.Event) erro
 	file := &execution.group.Files[index]
 	if event.State == "pending" && file.State == "done" {
 		return nil
+	}
+	if event.Received > file.Received || event.Verified > file.Verified || event.State == "done" && file.State != "done" {
+		execution.group.Evidence.LastWorkAt = time.Now().UTC()
 	}
 	file.State, file.Received, file.Verified = event.State, event.Received, event.Verified
 	if event.State == "downloading" {
@@ -508,6 +530,7 @@ func (s *TaskService) List(ctx context.Context) ([]tasks.Group, error) {
 		if !group.Terminal() && group.State != "paused" {
 			group.State = "interrupted"
 			group.Reason = "上次工作中断，可继续"
+			group.Evidence.Finish("interrupted")
 		}
 	}
 	s.mu.Lock()
@@ -524,6 +547,7 @@ func (s *TaskService) Snapshot() []tasks.Group {
 	}
 	s.mu.Unlock()
 	for index := range groups {
+		groups[index].Evidence = groups[index].Evidence.Clone()
 		if current := live[groups[index].ID]; current != nil {
 
 			current.mu.Lock()
@@ -573,6 +597,7 @@ func (s *TaskService) Remove(ctx context.Context, id string) error {
 	return err
 }
 func cloneTaskGroup(group tasks.Group) tasks.Group {
+	group.Evidence = group.Evidence.Clone()
 	group.Identities = maps.Clone(group.Identities)
 	group.Files = slices.Clone(group.Files)
 	group.Intent.Payload = slices.Clone(group.Intent.Payload)
@@ -610,6 +635,16 @@ func (s *TaskService) Details(ctx context.Context, id string) (tasks.Group, erro
 		return group, nil
 	}
 	group, err := s.store.Get(ctx, id)
+	if err == nil && !group.Terminal() && group.State != "paused" {
+		if lease, lockErr := s.store.Lock(ctx, id); lockErr == nil {
+			lease.Close()
+			group.State = "interrupted"
+			group.Reason = "上次工作中断，可继续"
+			group.Evidence.Finish("interrupted")
+		} else {
+			group.Remote = true
+		}
+	}
 	group.Intent.Payload = nil
 	return group, err
 }
@@ -636,6 +671,24 @@ func taskReason(err error) string {
 	}
 	if errors.Is(err, download.ErrCheckpoint) {
 		return "下载检查点未能保存，请检查磁盘空间后重试；任务尚未安全暂停"
+	}
+	switch diagnostics.Code(err) {
+	case "deadline":
+		return "等待预算已到期，请核对诊断中的当前步骤后重试"
+	case "unauthorized":
+		return "来源授权未通过（HTTP 401），请核对授权后重试"
+	case "forbidden":
+		return "来源拒绝访问（HTTP 403），请核对来源与网络设置"
+	case "not-found":
+		return "固定对象或校验元数据不存在（HTTP 404/410），请核对任务诊断"
+	case "rate-limited":
+		return "来源请求频率受限，请稍后重试"
+	case "integrity":
+		return "文件校验未通过，未发布无效内容"
+	case "disk-full":
+		return "磁盘空间不足，未完成内容已保留供恢复"
+	case "permission":
+		return "访问被拒绝，请核对受管目录权限"
 	}
 	value := err.Error()
 	switch {

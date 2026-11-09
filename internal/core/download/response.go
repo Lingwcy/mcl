@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"io"
+	"mcl/internal/core/diagnostics"
 	"net/http"
 	"net/url"
 	"time"
 )
 
-var ErrTransferStalled = errors.New("下载连接长时间无响应")
+var ErrTransferStalled = diagnostics.Wrap("deadline", errors.New("下载连接长时间无响应"))
 
 // Do preserves redirects/transport but replaces the wall-clock file timeout
 // with bounded header, idle, and cumulative network-read waits. Rate waits sit

@@ -7,12 +7,15 @@ import (
 	"net/http"
 	"strings"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/download"
 	"mcl/internal/core/meta"
 )
 
 // No URL or transport error is retained in the status used for fallback.
 type metadataStatusError struct{ status int }
+
+func (e *metadataStatusError) DiagnosticCode() string { return diagnostics.HTTPCode(e.status) }
 
 func (e *metadataStatusError) Error() string {
 	return fmt.Sprintf("加载器服务返回 HTTP %d", e.status)

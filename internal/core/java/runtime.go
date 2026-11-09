@@ -22,6 +22,7 @@ type Runtime struct {
 	Major         int
 	Arch          string
 	Vendor        string
+	VM            string
 	EarlyAccess   bool
 	HomeDirectory string
 }
@@ -87,7 +88,7 @@ func ParseProperties(output string) (Runtime, error) {
 		return Runtime{}, errors.New("无法从 Java 诊断中识别版本与 CPU 架构")
 	}
 	return Runtime{
-		Version: version, Major: major, Arch: arch, Vendor: properties["java.vendor"],
+		Version: version, Major: major, Arch: arch, Vendor: properties["java.vendor"], VM: runtimeVM(properties["java.vm.name"]),
 		EarlyAccess:   strings.Contains(strings.ToLower(version), "-ea"),
 		HomeDirectory: properties["java.home"],
 	}, nil

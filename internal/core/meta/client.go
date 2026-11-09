@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/fileio"
 )
 
@@ -138,6 +139,9 @@ func (c *Client) versionDocument(ctx context.Context, entry ManifestEntry) (Vers
 }
 
 func (c *Client) fetch(ctx context.Context, address string) ([]byte, error) {
+	ctx, evidence := diagnostics.Start(ctx, "metadata", "minecraft-metadata")
+	defer evidence.End()
+	evidence.Network(diagnostics.Source(address), 0, 1)
 	if err := ValidateURL(address); err != nil {
 		return nil, err
 	}
@@ -152,8 +156,9 @@ func (c *Client) fetch(ctx context.Context, address string) ([]byte, error) {
 		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
 	defer response.Body.Close()
+	evidence.Network(diagnostics.Source(address), response.StatusCode, 1)
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("metadata service returned HTTP %d", response.StatusCode)
+		return nil, diagnostics.Wrap(diagnostics.HTTPCode(response.StatusCode), fmt.Errorf("metadata service returned HTTP %d", response.StatusCode))
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxMetadataSize+1))
 	if err != nil {
@@ -162,5 +167,6 @@ func (c *Client) fetch(ctx context.Context, address string) ([]byte, error) {
 	if len(data) > maxMetadataSize {
 		return nil, errors.New("metadata response exceeds 16 MiB")
 	}
+	evidence.Work()
 	return data, nil
 }

@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"mcl/internal/core/archive"
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/download"
 	"mcl/internal/core/java"
 	"mcl/internal/core/meta"
@@ -312,12 +313,20 @@ func planForgeInputs(z *archive.Zip, libraries map[string]forgeLibrary, processo
 	return inputs, mappings, nil
 }
 
-func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Root, stagePath, executable string, platform meta.Platform, base meta.Version, processors []preparedProcessor, known map[string]meta.Download, report func(download.Progress), javaReport func(java.Progress)) error {
+func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Root, stagePath, executable string, platform meta.Platform, base meta.Version, processors []preparedProcessor, known map[string]meta.Download, report func(download.Progress), javaReport func(java.Progress)) (resultErr error) {
 	classes := 0
 	runtimes := make(map[int]java.Runtime)
 	progress := download.Progress{TotalFiles: len(processors)}
 	report(progress)
 	for index, p := range processors {
+		ctx, step := diagnostics.Start(ctx, "processor", p.jar)
+		step.Step(index+1, len(processors))
+		defer func() {
+			if resultErr != nil {
+				step.Fail(resultErr)
+			}
+			step.End()
+		}()
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -329,6 +338,8 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 			return err
 		}
 		if reused {
+			step.Work()
+			step.End()
 			progress.Files++
 			report(progress)
 			continue
@@ -379,6 +390,7 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 				}
 				runtimes[minimum] = runtime
 			}
+			diagnostics.SetFacts(ctx, runtime.DiagnosticFacts(true))
 			// Java installation may take time; recheck the fixed tools immediately
 			// before handing their paths to the process adapter.
 			for _, relative := range p.classpath {
@@ -410,6 +422,8 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 				return errors.New("处理器输入及生成文件累计超过4GiB")
 			}
 		}
+		step.Work()
+		step.End()
 		progress.Files++
 		report(progress)
 	}

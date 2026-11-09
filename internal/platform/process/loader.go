@@ -83,7 +83,7 @@ func RunLoaderProcessor(ctx context.Context, executable, work string, args []str
 	stdout, stderr := output.Stream("stdout"), output.Stream("stderr")
 	defer stdout.Close()
 	defer stderr.Close()
-	cmd.Stdout, cmd.Stderr = stdout, stderr
+	cmd.Stdout, cmd.Stderr = processorEvidenceWriter{ctx, stdout}, processorEvidenceWriter{ctx, stderr}
 	if err := ctx.Err(); err != nil {
 		return err
 	}

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/meta"
 )
 
@@ -28,7 +29,15 @@ func (c *Client) FetchMetadata(ctx context.Context, address, digest string, limi
 	var last error
 	for attempt := range c.Attempts {
 		candidate := sources[attempt%len(sources)]
-		data, retry, delay, err := c.metadataAttempt(ctx, address, candidate, digest, limit, len(sources) > 1)
+		requestCtx, evidence := diagnostics.Start(ctx, "metadata", digest)
+		evidence.Network(diagnostics.Source(candidate), 0, attempt+1)
+		data, retry, delay, err := c.metadataAttempt(requestCtx, address, candidate, digest, limit, len(sources) > 1)
+		if err != nil {
+			evidence.Fail(err)
+		} else {
+			evidence.Work()
+		}
+		evidence.End()
 		if err == nil {
 			c.Transfers.rememberSource(address, candidate)
 			return data, nil
@@ -70,11 +79,12 @@ func (c *Client) metadataAttempt(ctx context.Context, original, candidate, diges
 		return nil, true, 0, errors.New("无法读取版本元数据，请检查下载代理和网络设置")
 	}
 	defer response.Body.Close()
+	diagnostics.Response(ctx, candidate, response.StatusCode)
 	if response.StatusCode != http.StatusOK {
 		status := response.StatusCode
 		retry := status == 408 || status == 429 || status == 500 || status == 502 || status == 503 || status == 504 || alternate && (status == 403 || status == 404)
 		delay, allowed := retryDelay(response.Header.Get("Retry-After"), time.Now())
-		return nil, retry && allowed, delay, fmt.Errorf("版本元数据返回 HTTP %d", status)
+		return nil, retry && allowed, delay, diagnostics.Wrap(diagnostics.HTTPCode(status), fmt.Errorf("版本元数据返回 HTTP %d", status))
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
@@ -85,7 +95,7 @@ func (c *Client) metadataAttempt(ctx context.Context, original, candidate, diges
 	}
 	sum := sha1.Sum(data)
 	if !strings.EqualFold(hex.EncodeToString(sum[:]), digest) {
-		return nil, true, 0, errors.New("版本元数据 SHA-1 与官方清单不符")
+		return nil, true, 0, diagnostics.Wrap("integrity", errors.New("版本元数据 SHA-1 与官方清单不符"))
 	}
 	return data, false, 0, ctx.Err()
 }

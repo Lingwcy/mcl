@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/download"
 	"mcl/internal/core/install"
 	"mcl/internal/core/instance"
@@ -182,6 +183,7 @@ func (s *InstallationService) run(ctx context.Context, id, fallbackJava string, 
 }
 
 func (s *InstallationService) resolveVersion(ctx context.Context, value instance.Instance, fallbackJava string, report func(install.Progress)) (resolvedVersion, error) {
+	diagnostics.SetFacts(ctx, diagnostics.Facts{Provider: "mojang", Dialect: "official", Game: value.Version.ID, LauncherArch: meta.CurrentPlatform().Arch})
 	if err := TaskStage(ctx, "读取官方元数据"); err != nil {
 		return resolvedVersion{}, err
 	}
@@ -206,7 +208,9 @@ func (s *InstallationService) resolveLoader(ctx context.Context, value instance.
 	if err != nil {
 		return resolvedVersion{}, err
 	}
+	diagnostics.SetFacts(ctx, diagnostics.Facts{TargetOS: target.OS, TargetArch: target.Arch})
 	if _, required := value.RequiredLoader(); !required {
+		diagnostics.SetFacts(ctx, diagnostics.Facts{Loader: "vanilla"})
 		return resolvedVersion{version: version, platform: target}, nil
 	}
 	if s.loaders == nil {
@@ -227,10 +231,13 @@ func (s *InstallationService) execute(ctx context.Context, value instance.Instan
 	if report != nil {
 		report(install.Progress{Stage: "queued"})
 	}
+	_, waiting := diagnostics.Start(ctx, "installation-slot", "installation-budget")
 	select {
 	case s.slot <- struct{}{}:
+		waiting.End()
 		defer func() { <-s.slot }()
 	case <-ctx.Done():
+		waiting.End()
 		return install.Receipt{}, ctx.Err()
 	}
 	previous, err := s.receipts.Load(ctx, id)

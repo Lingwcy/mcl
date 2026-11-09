@@ -9,12 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mcl/internal/core/diagnostics"
 	"strings"
 )
 
 // ErrContentMismatch identifies fully read bytes that do not match the fixed
 // digest/size. It does not represent transport, filesystem or cancellation errors.
-var ErrContentMismatch = errors.New("下载副本摘要或大小不匹配")
+var ErrContentMismatch = diagnostics.Wrap("integrity", errors.New("下载副本摘要或大小不匹配"))
 
 // Object identifies bytes, not a URL, local path or distribution permission.
 type Object struct {
