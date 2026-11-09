@@ -841,3 +841,19 @@ C阶段实现矩阵见第24节，用户1.6.1反馈修复见第25节；D1已开�
 
 
 本修正版构建：gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...通过；Windows amd64主程序交叉编译成功（build/mcl-pack-declarations-fix-windows-amd64.exe，33,935,360字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-pack-declarations-fix-arm64.dmg，10,022,912字节，约9.6MiB，临时签名、未公证）。回归源码已格式整理，未执行/未编译测试目标；未运行公网、用户实例修改、Java/处理器/游戏或原生交互。仍在feature/persistent-download-tasks，未合并main/发版。
+
+
+## 31. T体验：Forge 47工具被误固定为Java8
+
+用户后续截图确认包已导入，但配置Forge47.4.10时提示“准备安装工具Java（至少8）：官方目录暂无osx/arm64的Java8”。此前Fabric/Forge声明拦截已经越过；当前失败发生在后续运行环境安装，不能删实例或重新导入掩盖。
+
+静态定位runProcessors把所有工具初始下限设成8，仅按class版本提高；processorRuntime/EnsureProcessor又为历史兼容把minimum8固定Java8。现代工具的Java8字节码并不等于现代游戏安装必须使用Java8，导致现代Forge错误走历史策略并查询缺失的ARM64 Java8目录。
+
+本次把处理器选择下限设为max(8, 官方游戏Java要求, 全部已固定工具classpath的class最低要求)。现代游戏17/21下的旧字节码工具复用已有兼容稳定游戏Java，或沿原服务安装稳定工具Java；如果工具要求更高，仍提升独立工具下限，不改变游戏major或用户偏好。历史游戏8/工具8仍固定Java8，历史游戏8/工具17仍使用独立工具17；未改游戏exact-major、架构/EA校验、处理器顺序、私有stage、输出摘要和process安全适配。
+
+新增回归源码通过synthetic class header + 假runner串联runProcessors/选择器，覆盖现代17+旧class8（osx/arm64）、现代21+旧class8、工具21+游戏17、历史8+工具8、历史8+工具17，并断言不更改game major、不执行Java。遵循用户现行偏好，源码未执行/未编译测试目标，不做真实网络/安装器/游戏/原生验收。
+
+体验修正版后，在现有页面点击“继续安装运行环境”或原任务重试；使用已导入的同一个实例，不重复创建、不要求手动装Java8。此前成功导入也不等于本次运行环境/真实游戏已经验收。
+
+
+本修正版构建记录：gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...通过。Windows amd64主程序交叉编译成功（build/mcl-forge-tool-java-fix-windows-amd64.exe，33,935,360字节）；MyGo0.7.4 darwin/arm64 -sign - -skip-notarize打包成功（build/darwin-arm64/mcl-0.0.4-forge-tool-java-fix-arm64.dmg，10,022,912字节，约9.6MiB，临时签名、未公证）。回归仅格式整理，未执行/未编译测试目标；未运行Java/真实处理器、用户实例续装、公网下载或游戏。feature/persistent-download-tasks独立修复，不合并main/发版。

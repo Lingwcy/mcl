@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"mcl/internal/core/download"
 	"mcl/internal/core/java"
 	"mcl/internal/core/meta"
 )
@@ -96,5 +97,54 @@ func TestProcessorResolverCannotSupplyEAOrWrongArchitecture(t *testing.T) {
 		if _, err := installer.processorRuntime(t.Context(), 17, meta.Platform{OS: "windows", Arch: "amd64"}, nil, nil); err == nil {
 			t.Fatal("incompatible tool runtime accepted")
 		}
+	}
+}
+
+// These fixtures use class headers and an injected runner only. They exercise
+// the complete selection handoff without spawning Java or using the network.
+func TestProcessorsCombineGameBaselineAndBytecodeFloor(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		game, class, want int
+	}{
+		{"forge47-java8-bytecode-on-arm64", 17, 8, 17},
+		{"modern-game21-with-old-tool", 21, 8, 21},
+		{"tool21-on-game17", 17, 21, 21},
+		{"historical-game8-tool8", 8, 8, 8},
+		{"historical-game8-new-tool", 8, 17, 17},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, fixed := stagedProcessorJar(t, map[string][]byte{"test/Main.class": syntheticClass(uint16(tc.class+44), 0)})
+			stagePath := root.Name()
+			gamePath := stagePath + "/game-java"
+			toolPath := stagePath + "/tool-java"
+			target := meta.Platform{OS: "osx", Arch: "arm64"}
+			resolved, runs := 0, 0
+			resolver := func(ctx context.Context, minimum int, platform meta.Platform, preferred []string, report func(java.Progress)) (java.Runtime, error) {
+				resolved++
+				if minimum != tc.want || platform.OS != target.OS || platform.Arch != target.Arch || len(preferred) != 1 || preferred[0] != gamePath {
+					t.Fatalf("wrong selection request: %d %+v %v", minimum, platform, preferred)
+				}
+				return java.Runtime{Executable: toolPath, Major: tc.want, Version: fmt.Sprintf("%d.0.1", tc.want), Arch: platform.Arch}, nil
+			}
+			runner := func(ctx context.Context, executable, work string, args []string) error {
+				runs++
+				if executable != toolPath {
+					t.Fatal("wrong tool executable", executable)
+				}
+				return ctx.Err()
+			}
+			installer := NewForgeInstallerWithJava(nil, nil, runner, resolver)
+			base := meta.Version{}
+			base.Java.Major = tc.game
+			processor := preparedProcessor{jar: "tool.jar", classpath: []string{"tool.jar"}, inputs: []string{"tool.jar"}}
+			err := installer.runProcessors(t.Context(), root, root, stagePath, gamePath, target, base, []preparedProcessor{processor}, map[string]meta.Download{"tool.jar": fixed}, func(download.Progress) {}, nil)
+			if err != nil || resolved != 1 || runs != 1 {
+				t.Fatal(err, resolved, runs)
+			}
+			if base.Java.Major != tc.game {
+				t.Fatal("processor selection changed game Java")
+			}
+		})
 	}
 }
