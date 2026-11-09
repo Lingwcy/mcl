@@ -140,6 +140,7 @@ func run() error {
 	accounts := app.NewAccountService(storage.NewAccountStore(paths.Root), platform.NewAccountCredentials(paths.Root), microsoft)
 
 	mygo.App.SetName(branding.Name)
+	mygo.Use(updatePlugin)
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { cancel() })
 	bindImportIntents := importFileIntents()
 	mygo.App.WhenReady(func() {
@@ -184,6 +185,7 @@ func run() error {
 			StateKey: "main-workspace-v2", Content: ui.View(shell.View),
 		})
 		shell.BindWindow(window)
+		connectUpdates(window, shell)
 		connectJava(ctx, &workers, window, shell, javaService)
 		connectDownloads(ctx, &workers, window, shell, downloadService, downloadCache)
 		connectGameDirectories(ctx, &workers, window, shell, app.NewGameDirectoryService(storage.NewGameDirectoryStore(paths.Root)), assetStore)
