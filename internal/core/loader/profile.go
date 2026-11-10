@@ -16,6 +16,7 @@ import (
 )
 
 type Request struct {
+	AdapterPolicy                        string `json:",omitempty"`
 	Type, Version, GameVersion, BaseSHA1 string
 	BaseChainSHA256                      string `json:",omitempty"`
 	TargetOS                             string `json:",omitempty"`
@@ -23,7 +24,11 @@ type Request struct {
 }
 
 func (r Request) WithPlatform(target meta.Platform) (Request, error) {
+	if r.AdapterPolicy != "" && r.AdapterPolicy != ForgeAdapterPolicy {
+		return r, errors.New("加载器安装适配策略无效")
+	}
 	if UsesProcessors(r.Type) {
+		r.AdapterPolicy = ForgeAdapterPolicy
 		r.TargetOS = target.OS
 		r.TargetArch = meta.NormalizeArch(target.Arch)
 	}
@@ -53,6 +58,9 @@ func (r Request) ValidateBase(base meta.Version) error {
 }
 
 func (r Request) Validate() error {
+	if r.AdapterPolicy != "" && (r.AdapterPolicy != ForgeAdapterPolicy || !UsesProcessors(r.Type)) {
+		return errors.New("加载器安装适配策略无效")
+	}
 	if !Supported(r.Type) {
 		return fmt.Errorf("%s 加载器安装处理器尚未接入", r.Type)
 	}
@@ -85,16 +93,17 @@ func (r Request) Key() string {
 }
 
 type Profile struct {
-	Request       Request
-	ID, MainClass string
-	JavaMajor     int
-	Libraries     []meta.Library
-	Arguments     meta.Arguments
-	Generation    string          `json:",omitempty"`
-	InstallerSHA1 string          `json:",omitempty"`
-	Legacy        bool            `json:",omitempty"`
-	LegacyGame    bool            `json:",omitempty"`
-	Outputs       []meta.Download `json:",omitempty"`
+	InstallerFormat string `json:",omitempty"`
+	Request         Request
+	ID, MainClass   string
+	JavaMajor       int
+	Libraries       []meta.Library
+	Arguments       meta.Arguments
+	Generation      string          `json:",omitempty"`
+	InstallerSHA1   string          `json:",omitempty"`
+	Legacy          bool            `json:",omitempty"`
+	LegacyGame      bool            `json:",omitempty"`
+	Outputs         []meta.Download `json:",omitempty"`
 }
 
 func (p Profile) LibraryDirectory() string {
@@ -111,6 +120,26 @@ func (p Profile) Validate() error {
 		return err
 	}
 	prepared := UsesProcessors(p.Request.Type)
+	if p.Request.AdapterPolicy == ForgeAdapterPolicy && p.InstallerFormat == "" {
+		return errors.New("安装器格式身份缺失")
+	}
+	switch p.InstallerFormat {
+	case "":
+	case ForgeFormatLegacy:
+		if !p.Legacy {
+			return errors.New("旧安装器格式与运行配置不一致")
+		}
+	case ForgeFormatEmbedded:
+		if p.Legacy || !p.LegacyGame {
+			return errors.New("内嵌安装器格式与运行配置不一致")
+		}
+	case ForgeFormatProcessors:
+		if !prepared || p.Legacy {
+			return errors.New("处理器安装器格式与运行配置不一致")
+		}
+	default:
+		return errors.New("安装器格式身份无效")
+	}
 	limit := 128
 	if prepared {
 		limit = 256
@@ -135,11 +164,7 @@ func (p Profile) Validate() error {
 		}
 	}
 	if prepared {
-		_, _, versionID, err := forgeInstaller(p.Request)
-		if err != nil {
-			return err
-		}
-		validIdentity := p.ID == versionID && forgeMainClass(p.MainClass)
+		validIdentity := forgeProfileID(p.Request, p.ID) && forgeMainClass(p.MainClass)
 		if p.Legacy {
 			validIdentity = legacyForgeID(p.Request, p.ID) && p.MainClass == legacyForgeMain
 		}

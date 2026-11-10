@@ -87,6 +87,9 @@ func validateLegacyForgeArguments(request Request, values []string) error {
 			}
 			continue
 		}
+		if option == "--versionType" && value == "Forge" {
+			continue
+		}
 		key, ok := allowed[option]
 		if option == "--userProperties" && value == "{}" {
 			continue
@@ -195,6 +198,9 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 	if err := json.Unmarshal(data, &spec); err != nil {
 		return spec, true, err
 	}
+	if err := validateInstallerJSONFields(spec.VersionInfo); err != nil {
+		return spec, true, err
+	}
 	version, err := parseLegacyForgeVersion(spec.VersionInfo, base.ID, spec.Install.Minecraft)
 	if err != nil {
 		return spec, true, fmt.Errorf("旧Forge versionInfo无效: %w", err)
@@ -299,7 +305,7 @@ func legacyForgeLibraryRoot(value string) (string, error) {
 }
 
 func (s *ForgeInstaller) prepareLegacyForge(ctx context.Context, z *archive.Zip, request Request, base meta.Version, spec legacyForgeSpec, stage *os.Root, generation, installerSHA1 string, report func(download.Progress)) (Profile, error) {
-	profile := Profile{Request: request, ID: spec.version.ID, MainClass: legacyForgeMain, JavaMajor: 8, Arguments: *spec.version.Arguments, Generation: generation, InstallerSHA1: installerSHA1, Legacy: true}
+	profile := Profile{InstallerFormat: ForgeFormatLegacy, Request: request, ID: spec.version.ID, MainClass: legacyForgeMain, JavaMajor: 8, Arguments: *spec.version.Arguments, Generation: generation, InstallerSHA1: installerSHA1, Legacy: true}
 	cache, err := os.OpenRoot(s.downloads.Root)
 	if err != nil {
 		return Profile{}, err

@@ -1,0 +1,78 @@
+[
+  {
+    "game": "1.7.10",
+    "build": "10.13.4.1614-1.7.10",
+    "coordinate": "net.minecraftforge:forge:1.7.10-10.13.4.1614-1.7.10:installer",
+    "url": "https://maven.minecraftforge.net/net/minecraftforge/forge/1.7.10-10.13.4.1614-1.7.10/forge-1.7.10-10.13.4.1614-1.7.10-installer.jar",
+    "size": 3699647,
+    "sha1": "fccafccf8ad4ce6d9f008e786b48ff53172bf9de",
+    "sha256": "a5d60757d8b305939233a942d5097fa78816d116ef9082c03066fe669e010c7f",
+    "sidecar": {
+      "status": 200,
+      "matches_installer": true,
+      "sha1": "fccafccf8ad4ce6d9f008e786b48ff53172bf9de"
+    },
+    "format": "install-version-info",
+    "profile": "1.7.10-10.13.4.1614-1.7.10-install.json",
+    "version": "1.7.10-10.13.4.1614-1.7.10-version.json",
+    "profile_projection_sha256": "516654d1f26d27470a4a405cb74884890a8c82516da8b9c195e787ca7b20559e",
+    "version_projection_sha256": "e88439691947adb582ca60cf04299ca4b4bad4fec484d108f0de322e044174a5"
+  },
+  {
+    "game": "1.12.2",
+    "build": "14.23.5.2859",
+    "coordinate": "net.minecraftforge:forge:1.12.2-14.23.5.2859:installer",
+    "url": "https://maven.minecraftforge.net/net/minecraftforge/forge/1.12.2-14.23.5.2859/forge-1.12.2-14.23.5.2859-installer.jar",
+    "size": 4681890,
+    "sha1": "6b3d5be8b58d5385fda9c4d285367f4cb6e697b2",
+    "sha256": "dbba1cd1bf34a4b82148bac50a6150f63ffcb2d5dc7d88a0508c27fdcff15b76",
+    "sidecar": {
+      "status": 200,
+      "matches_installer": true,
+      "sha1": "6b3d5be8b58d5385fda9c4d285367f4cb6e697b2"
+    },
+    "format": "embedded-maven-spec0",
+    "profile": "1.12.2-14.23.5.2859-install.json",
+    "version": "1.12.2-14.23.5.2859-version.json",
+    "profile_projection_sha256": "15bc86be40409e0acc51769e06bd422041d94d3203902ce16b36f12cc5c32e1e",
+    "version_projection_sha256": "f3c8fe2b1e3f40fb6fa8c4ddb9768e16914a5676241a1a8340c8aba57a8badcb"
+  },
+  {
+    "game": "1.12.2",
+    "build": "14.23.5.2860",
+    "coordinate": "net.minecraftforge:forge:1.12.2-14.23.5.2860:installer",
+    "url": "https://maven.minecraftforge.net/net/minecraftforge/forge/1.12.2-14.23.5.2860/forge-1.12.2-14.23.5.2860-installer.jar",
+    "size": 4681950,
+    "sha1": "5e8a91f71ef3d1f77de3f8d3261aedcc2f551c9d",
+    "sha256": "ea7c33ba95e3993a98d0e9e38168c0759ec323a18675a71d938e1f3f70e6e8e7",
+    "sidecar": {
+      "status": 200,
+      "matches_installer": true,
+      "sha1": "5e8a91f71ef3d1f77de3f8d3261aedcc2f551c9d"
+    },
+    "format": "embedded-maven-spec0",
+    "profile": "1.12.2-14.23.5.2860-install.json",
+    "version": "1.12.2-14.23.5.2860-version.json",
+    "profile_projection_sha256": "3f3db26fc55d9ae0f5f434fcb63d60100ad3b572b19a9b1c7dd99151b59f0e10",
+    "version_projection_sha256": "be79c606699009c4cb28d4bcc1bad59e8a513a420389cfe1df6676e1cf65b758"
+  },
+  {
+    "game": "1.20.4",
+    "build": "49.0.3",
+    "coordinate": "net.minecraftforge:forge:1.20.4-49.0.3:installer",
+    "url": "https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.4-49.0.3/forge-1.20.4-49.0.3-installer.jar",
+    "size": 5492273,
+    "sha1": "1f001e356cdfc2ed229f1a4496f4441b0158436b",
+    "sha256": "88b990ff65ccc42e7106c1710281e5fb8ae00c318ccff9d407d2b693cd9dd326",
+    "sidecar": {
+      "status": 200,
+      "matches_installer": true,
+      "sha1": "1f001e356cdfc2ed229f1a4496f4441b0158436b"
+    },
+    "format": "client-processors-spec1",
+    "profile": "1.20.4-49.0.3-install.json",
+    "version": "1.20.4-49.0.3-version.json",
+    "profile_projection_sha256": "65b0442b6f11341951a3b40c303d983f0fd8db36232184346549f7b9f79b08ea",
+    "version_projection_sha256": "6b4edd68dd629692c021226a4ea42f744d924b7d15df078e2a5604a3911504e6"
+  }
+]

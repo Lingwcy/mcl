@@ -70,7 +70,7 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err := base.ValidateVanilla(); err != nil {
 		return Profile{}, err
 	}
-	coordinate, origin, versionID, err := forgeInstaller(request)
+	coordinate, origin, _, err := forgeInstaller(request)
 	if err != nil {
 		return Profile{}, err
 	}
@@ -132,6 +132,16 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err != nil {
 		return Profile{}, err
 	}
+	formatData, err := z.Read(ctx, "install_profile.json", 4<<20)
+	if err != nil {
+		return Profile{}, err
+	}
+	format, err := installerFormat(formatData)
+	if err != nil {
+		return Profile{}, err
+	}
+	_, formatEvidence := diagnostics.Start(ctx, "loader-metadata", "installer-format:"+format)
+	formatEvidence.End()
 	legacy, isLegacy, err := readLegacyForgeSpec(ctx, z, request, base)
 	if err != nil {
 		return Profile{}, err
@@ -159,7 +169,7 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 		reportLoaderGeneration(ctx, profile)
 		return profile, nil
 	}
-	spec, version, err := readForgeSpec(ctx, z, request, versionID)
+	spec, version, err := readForgeSpec(ctx, z, request)
 	if err != nil {
 		return Profile{}, err
 	}
@@ -170,7 +180,7 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err := java.GameRequirement(gameMajor, platform).Validate(); err != nil {
 		return Profile{}, err
 	}
-	if _, declared := spec.Data["BINPATCH"]; !declared && z.Has("data/client.lzma") {
+	if _, declared := spec.Data["BINPATCH"]; format == ForgeFormatProcessors && !declared && z.Has("data/client.lzma") {
 		if spec.Data == nil {
 			spec.Data = make(map[string]struct{ Client string })
 		}
@@ -195,6 +205,21 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	libraries, err := forgeLibraries(spec.Libraries, version.Libraries)
 	if err != nil {
 		return Profile{}, err
+	}
+	if format == ForgeFormatEmbedded {
+		used := make(map[string]bool)
+		for _, library := range version.Libraries {
+			coordinate, err := meta.ParseCoordinate(library.Name)
+			if err != nil {
+				return Profile{}, err
+			}
+			used[coordinate.Path()] = true
+		}
+		for key := range libraries {
+			if !used[key] {
+				delete(libraries, key)
+			}
+		}
 	}
 	if err := validateProcessorPaths(libraries, processors); err != nil {
 		return Profile{}, err
@@ -283,7 +308,7 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 			return Profile{}, err
 		}
 	}
-	profile, err := completedForgeProfile(request, version, known, "ready-"+nonce, bundle.SHA1, spec.LegacyGame)
+	profile, err := completedForgeProfile(request, version, known, "ready-"+nonce, bundle.SHA1, spec.LegacyGame, format)
 	if err != nil {
 		return Profile{}, err
 	}
@@ -477,9 +502,10 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 	return nil
 }
 
-func completedForgeProfile(request Request, version meta.Version, known map[string]meta.Download, generation, installerSHA1 string, legacyGame bool) (Profile, error) {
+func completedForgeProfile(request Request, version meta.Version, known map[string]meta.Download, generation, installerSHA1 string, legacyGame bool, format string) (Profile, error) {
 	profile := Profile{Request: request, ID: version.ID, MainClass: version.MainClass, JavaMajor: version.Java.Major,
 		Arguments: *version.Arguments, Generation: generation, InstallerSHA1: installerSHA1, LegacyGame: legacyGame}
+	profile.InstallerFormat = format
 	seen := make(map[string]bool)
 	for _, library := range version.Libraries {
 		coordinate, err := meta.ParseCoordinate(library.Name)

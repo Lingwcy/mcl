@@ -1,0 +1,33 @@
+{
+  "spec": 0,
+  "version": "1.12.2-forge-14.23.5.2859",
+  "path": "net.minecraftforge:forge:1.12.2-14.23.5.2859",
+  "minecraft": "1.12.2",
+  "json": "/version.json",
+  "data": {},
+  "processors": [],
+  "libraries": [
+    {
+      "name": "de.oceanlabs.mcp:mcp_config:1.12.2-20200226.224830@zip",
+      "downloads": {
+        "artifact": {
+          "path": "de/oceanlabs/mcp/mcp_config/1.12.2-20200226.224830/mcp_config-1.12.2-20200226.224830.zip",
+          "url": "https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp_config/1.12.2-20200226.224830/mcp_config-1.12.2-20200226.224830.zip",
+          "sha1": "72e1b936f56e0dd394c64caf9c86af01f64dc979",
+          "size": 421086
+        }
+      }
+    },
+    {
+      "name": "net.minecraftforge:forge:1.12.2-14.23.5.2859",
+      "downloads": {
+        "artifact": {
+          "path": "net/minecraftforge/forge/1.12.2-14.23.5.2859/forge-1.12.2-14.23.5.2859.jar",
+          "url": "",
+          "sha1": "bfc07a510e23e5181b6a32fdcea9c9d9a1445a46",
+          "size": 4466108
+        }
+      }
+    }
+  ]
+}

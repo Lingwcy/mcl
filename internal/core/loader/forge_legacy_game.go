@@ -23,7 +23,7 @@ func processedLegacyCore(request Request, name string) bool {
 }
 func normalizeProcessedLegacyVersion(request Request, version *meta.Version) error {
 	if !legacyForgeID(request, version.ID) || version.MainClass != legacyForgeMain || version.Java.Major != 0 && version.Java.Major != 8 || version.Jar != "" && version.Jar != request.GameVersion || len(version.Patches) != 0 || len(version.Downloads) != 0 || version.AssetIndex.ID != "" {
-		return errors.New("此现代安装器的旧游戏配置不在已支持LaunchWrapper范围")
+		return errors.New("安装器的旧游戏配置不在已支持LaunchWrapper范围")
 	}
 	args, err := legacyForgeArguments(request, version.LegacyArguments)
 	if err != nil {
@@ -36,7 +36,7 @@ func normalizeProcessedLegacyVersion(request Request, version *meta.Version) err
 }
 func validateProcessedLegacyGame(profile Profile) error {
 	if profile.Legacy || !legacyForgeID(profile.Request, profile.ID) || profile.MainClass != legacyForgeMain || profile.JavaMajor != 8 || len(profile.Arguments.JVM) != 0 {
-		return errors.New("处理器旧游戏模板身份不匹配")
+		return errors.New("旧游戏客户端模板身份不匹配")
 	}
 	var values []string
 	for _, argument := range profile.Arguments.Game {
@@ -67,7 +67,7 @@ func validateProcessedLegacyGame(profile Profile) error {
 		}
 	}
 	if core != 1 || wrapper != 1 {
-		return errors.New("现代安装器缺少唯一匹配的Forge核心或LaunchWrapper")
+		return errors.New("安装器缺少唯一匹配的Forge核心或LaunchWrapper")
 	}
 	return nil
 }
@@ -98,7 +98,7 @@ func verifyProcessedLegacyEntrypoints(ctx context.Context, stage *os.Root, profi
 		}
 		content, err := archive.Open(f, identity.Size)
 		if err == nil && !content.Has(entry) {
-			err = errors.New("处理器客户端产物缺少固定的Forge启动入口")
+			err = errors.New("Forge客户端运行库缺少固定启动入口")
 		}
 		f.Close()
 		if err != nil {

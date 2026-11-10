@@ -25,6 +25,7 @@ type forgeSpec struct {
 	Minecraft  string
 	Version    string
 	JSON       string
+	Path       string
 	Libraries  []meta.Library
 	Processors []forgeProcessor
 	Data       map[string]struct{ Client string }
@@ -81,25 +82,48 @@ func modernRuntimeCore(request Request, coordinate meta.Coordinate) bool {
 	return coordinate.Artifact == expected.Artifact && (coordinate.Classifier == "" || coordinate.Classifier == "client" || coordinate.Classifier == "universal") || coordinate.Artifact == "fmlloader" && coordinate.Classifier == ""
 }
 
-func readForgeSpec(ctx context.Context, z *archive.Zip, request Request, versionID string) (forgeSpec, meta.Version, error) {
+func readForgeSpec(ctx context.Context, z *archive.Zip, request Request) (forgeSpec, meta.Version, error) {
 	var spec forgeSpec
 	data, err := z.Read(ctx, "install_profile.json", 4<<20)
 	if err != nil {
 		return spec, meta.Version{}, err
 	}
+	format, err := installerFormat(data)
+	if err != nil {
+		return spec, meta.Version{}, err
+	}
+	if format != ForgeFormatEmbedded && format != ForgeFormatProcessors {
+		return spec, meta.Version{}, identityError("安装器格式与版本JSON分支不匹配")
+	}
 	if err := json.Unmarshal(data, &spec); err != nil {
 		return spec, meta.Version{}, fmt.Errorf("读取安装配置: %w", err)
 	}
-	validID := spec.Version == versionID || legacyForgeID(request, spec.Version)
-	if spec.Spec != 1 || spec.Minecraft != request.GameVersion || !validID ||
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return spec, meta.Version{}, err
+	}
+	for _, key := range []string{"json", "processors", "data", "libraries", "path"} {
+		if raw, ok := fields[key]; ok && strings.TrimSpace(string(raw)) == "null" {
+			return spec, meta.Version{}, identityError("安装配置显式字段不能为null")
+		}
+	}
+	validID := forgeProfileID(request, spec.Version)
+	if (spec.Spec != 0 && spec.Spec != 1) || spec.Minecraft != request.GameVersion || !validID ||
 		len(spec.Libraries) > 256 || len(spec.Data) > 128 || len(spec.Processors) > 64 {
 		return spec, meta.Version{}, errors.New("安装配置的版本、格式或数量不受支持")
 	}
-	if spec.JSON == "" {
+	if _, present := fields["json"]; !present {
 		spec.JSON = "/version.json"
 	}
-	data, err = z.Read(ctx, strings.TrimPrefix(spec.JSON, "/"), 4<<20)
+	jsonPath := strings.TrimPrefix(spec.JSON, "/")
+	if spec.JSON == "" || !archive.SafePath(jsonPath) {
+		return spec, meta.Version{}, identityError("安装器版本JSON路径无效")
+	}
+	data, err = z.Read(ctx, jsonPath, 4<<20)
 	if err != nil {
+		return spec, meta.Version{}, err
+	}
+	if err := validateInstallerJSONFields(data); err != nil {
 		return spec, meta.Version{}, err
 	}
 	version, err := meta.ParseVersion(data)
@@ -116,6 +140,11 @@ func readForgeSpec(ctx context.Context, z *archive.Zip, request Request, version
 		spec.LegacyGame = true
 	} else if version.Arguments == nil || version.LegacyArguments != "" || !forgeMainClass(version.MainClass) {
 		return spec, version, errors.New("启动配置与所选加载器或 Minecraft 版本不匹配")
+	}
+	if format == ForgeFormatEmbedded {
+		if err := validateEmbeddedForgeSpec(spec, version, z.Has, request); err != nil {
+			return spec, version, err
+		}
 	}
 	for _, processor := range spec.Processors {
 		if len(processor.Sides) > 2 {
