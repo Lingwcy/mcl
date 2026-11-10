@@ -193,29 +193,14 @@ func (s *JavaService) Install(ctx context.Context, p java.Package, progress func
 }
 
 func (s *JavaService) environment(runtime java.Runtime) JavaEnvironment {
-	// OpenJDK 8 reports a nested jre home even when launched from the JDK.
-	home := filepath.Dir(filepath.Dir(runtime.Executable))
-	reportedHome := runtime.Home()
-	if reportedHome != home && reportedHome != filepath.Join(home, "jre") {
-		for _, binary := range []string{"java", "java.exe"} {
-			executable, err := filepath.EvalSymlinks(filepath.Join(reportedHome, "bin", binary))
-			if err != nil {
-				continue
-			}
-			if info, err := os.Stat(executable); err == nil && info.Mode().IsRegular() {
-				runtime.Executable = executable
-				home = filepath.Dir(filepath.Dir(executable))
-				break
-			}
-		}
-	}
-	kind := "JRE"
-	for _, name := range []string{"javac", "javac.exe"} {
-		if info, err := os.Stat(filepath.Join(home, "bin", name)); err == nil && info.Mode().IsRegular() {
-			kind = "JDK"
-			runtime.HomeDirectory = home
-			break
-		}
+	// Keep the exact executable that produced the Probe evidence. A reported
+	// java.home must never silently redirect a previously verified selection.
+	kind := "Java"
+	switch runtime.Compiler {
+	case "present":
+		kind = "JDK"
+	case "absent":
+		kind = "JRE"
 	}
 	relative, err := filepath.Rel(s.installer.Directory, runtime.Executable)
 	managed := err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)

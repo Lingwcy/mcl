@@ -28,6 +28,14 @@ func RunLoaderProcessor(ctx context.Context, executable, work string, args []str
 	if err != nil {
 		return err
 	}
+	if requirement, ok := java.RequirementFromContext(ctx); ok {
+		if requirement.Purpose != "processor" {
+			return errors.New("安装工具收到非工具用途的Java需求")
+		}
+		if err := requirement.CheckRuntime(runtime); err != nil {
+			return err
+		}
+	}
 	diagnostics.SetFacts(ctx, runtime.DiagnosticFacts(true))
 	if runtime.Major > 25 {
 		return errors.New("安装工具Java超过已支持范围")

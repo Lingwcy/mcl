@@ -116,7 +116,7 @@ func run() error {
 	javaCatalog.HTTP.Transport = network
 	javaService := app.NewJavaService(storage.NewJavaStore(paths.Root), platform.JavaCandidates,
 		&java.Installer{Downloads: sharedDownloads, Directory: filepath.Join(paths.Root, "java"), Transfers: transfers, Transport: network, Cache: downloadCache}, javaCatalog)
-	forgeInstaller := loader.NewForgeInstallerWithJava(loaderCatalog, sharedDownloads, process.RunLoaderProcessor, javaService.EnsureProcessor)
+	forgeInstaller := loader.NewForgeInstallerWithRequirements(loaderCatalog, sharedDownloads, process.RunLoaderProcessor, javaService.EnsureRequirement)
 	loaders := app.NewLoaderService(loaderCatalog, storage.NewLoaderStore(paths.Root), forgeInstaller)
 	installations := app.NewInstallationServiceWithGameDirectory(catalog, instances, storage.NewInstallationStore(paths.Root), sharedDownloads, host, sessions, loaders, assetStore.Directory, assetStore.OpenGame)
 	installations.CheckExecutionPlatform = platform.CheckExecutionPlatform

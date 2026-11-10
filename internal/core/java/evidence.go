@@ -31,7 +31,7 @@ func (r Runtime) DiagnosticFacts(tool bool) diagnostics.Facts {
 		vm = "unknown"
 	}
 	if tool {
-		return diagnostics.Facts{ToolJavaVersion: version, ToolJavaArch: r.Arch, ToolJavaVM: vm}
+		return diagnostics.Facts{ToolJavaVersion: version, ToolJavaArch: r.Arch, ToolJavaVM: vm, ToolCompiler: r.Compiler}
 	}
-	return diagnostics.Facts{JavaVersion: version, JavaArch: r.Arch, JavaVM: vm}
+	return diagnostics.Facts{JavaVersion: version, JavaArch: r.Arch, JavaVM: vm, Compiler: r.Compiler}
 }

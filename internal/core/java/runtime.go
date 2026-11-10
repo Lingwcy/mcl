@@ -19,6 +19,7 @@ type Runtime struct {
 	Executable     string
 	Version        string
 	RuntimeVersion string
+	Compiler       string
 	Major          int
 	Arch           string
 	Vendor         string
@@ -62,7 +63,12 @@ func Probe(ctx context.Context, executable string) (Runtime, error) {
 	if err != nil {
 		return Runtime{}, err
 	}
+	after, err := os.Stat(resolved)
+	if err != nil || !os.SameFile(stat, after) || stat.Size() != after.Size() || !stat.ModTime().Equal(after.ModTime()) {
+		return Runtime{}, errors.New("Java可执行文件在检查期间发生变化")
+	}
 	runtime.Executable = resolved
+	runtime.Compiler = inspectCompiler(runtime)
 	return runtime, nil
 }
 

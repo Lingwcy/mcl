@@ -149,14 +149,36 @@ func processorJarMinimum(ctx context.Context, root *os.Root, name string, fixed 
 	return minimum, ctx.Err()
 }
 
+func processorRequirement(ctx context.Context, minimum int, target meta.Platform) (java.Requirement, error) {
+	requirement := java.ProcessorRequirement(minimum, target)
+	if fixed, ok := java.RequirementFromContext(ctx); ok && fixed.Purpose == "processor" {
+		return requirement.Intersect(fixed)
+	}
+	return requirement, requirement.Validate()
+}
 func (s *ForgeInstaller) processorRuntime(ctx context.Context, minimum int, target meta.Platform, preferred []string, report func(java.Progress)) (java.Runtime, error) {
-	if minimum < 8 || minimum > 25 {
-		return java.Runtime{}, errors.New("安装工具Java要求超出当前8–25范围")
+	requirement, err := processorRequirement(ctx, minimum, target)
+	if err != nil {
+		return java.Runtime{}, err
+	}
+	return s.resolveProcessorRequirement(ctx, requirement, preferred, report)
+}
+func (s *ForgeInstaller) resolveProcessorRequirement(ctx context.Context, requirement java.Requirement, preferred []string, report func(java.Progress)) (java.Runtime, error) {
+	ctx, err := java.WithRequirement(ctx, requirement)
+	if err != nil {
+		return java.Runtime{}, err
 	}
 	var runtime java.Runtime
-	var err error
-	if s.resolveJava != nil {
-		runtime, err = s.resolveJava(ctx, minimum, target, preferred, report)
+	minimum := 8
+	for _, c := range requirement.Constraints {
+		if c.Minimum != nil {
+			minimum = max(minimum, c.Minimum.Version.Major())
+		}
+	}
+	if s.resolveRequirement != nil {
+		runtime, err = s.resolveRequirement(ctx, requirement.Clone(), preferred, report)
+	} else if s.resolveJava != nil {
+		runtime, err = s.resolveJava(ctx, minimum, requirement.Target, preferred, report)
 	} else {
 		if len(preferred) == 0 || preferred[0] == "" {
 			return java.Runtime{}, errors.New("独立安装工具Java未配置")
@@ -164,12 +186,9 @@ func (s *ForgeInstaller) processorRuntime(ctx context.Context, minimum int, targ
 		runtime, err = java.Probe(ctx, preferred[0])
 	}
 	if err != nil {
-		return java.Runtime{}, fmt.Errorf("准备安装工具Java（至少%d）: %w", minimum, err)
+		return java.Runtime{}, fmt.Errorf("准备安装工具Java: %w", err)
 	}
-	if runtime.Major < 8 || runtime.Major > 25 || minimum == 8 && runtime.Major != 8 {
-		return java.Runtime{}, errors.New("安装工具Java超出兼容范围；旧class工具固定Java8，不能用高版本替代")
-	}
-	if err := runtime.Check(minimum, target); err != nil {
+	if err := requirement.CheckRuntime(runtime); err != nil {
 		return java.Runtime{}, err
 	}
 	return runtime, ctx.Err()

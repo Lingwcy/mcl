@@ -364,26 +364,19 @@ func (s *InstallationService) RunAutomatic(ctx context.Context, id string, resol
 			report(install.Progress{Stage: p.Stage, Progress: download.Progress{Bytes: p.Bytes, TotalBytes: p.Total}})
 		}
 	}
-	runtime, err := resolveJava(ctx, base.Java.Major, target, preferred, javaProgress)
+	resolved, err := s.resolveLoader(ctx, value, base, "", report)
 	if err != nil {
 		return install.Receipt{}, err
 	}
-	if err := runtime.Check(base.Java.Major, target); err != nil {
-		return install.Receipt{}, err
-	}
-	loaderInstance := value
-	loaderInstance.JavaPath = runtime.Executable
-	resolved, err := s.resolveLoader(ctx, loaderInstance, base, runtime.Executable, report)
+	requirement, err := fixedGameRequirement(ctx, resolved.version.Java.Major, target)
 	if err != nil {
 		return install.Receipt{}, err
 	}
-	if resolved.version.Java.Major > runtime.Major {
-		runtime, err = resolveJava(ctx, resolved.version.Java.Major, target, preferred, javaProgress)
-		if err != nil {
-			return install.Receipt{}, err
-		}
+	runtime, err := resolveRequiredGameJava(ctx, resolveJava, resolved.version.Java.Major, requirement, preferred, javaProgress)
+	if err != nil {
+		return install.Receipt{}, err
 	}
-	if err := runtime.Check(resolved.version.Java.Major, target); err != nil {
+	if err := requirement.CheckRuntime(runtime); err != nil {
 		return install.Receipt{}, err
 	}
 	return s.execute(ctx, value, resolved, report)

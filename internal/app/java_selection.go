@@ -13,51 +13,84 @@ import (
 	"mcl/internal/core/meta"
 )
 
-// JavaResolver runs entirely in the preparation worker. Preferred paths are
-// hints, never a reason to launch with the wrong major, architecture or an EA.
 type JavaResolver func(context.Context, int, meta.Platform, []string, func(java.Progress)) (java.Runtime, error)
 
 func (s *JavaService) Ensure(ctx context.Context, major int, target meta.Platform, preferred []string, report func(java.Progress)) (java.Runtime, error) {
-	ctx, evidence := diagnostics.Start(ctx, "java", "game-runtime")
-	defer evidence.End()
-	if major < 8 {
-		return java.Runtime{}, errors.New("当前启动管线不支持 Java 8 之前的运行环境")
-	}
-	emit := func(stage string) {
-		if report != nil {
-			report(java.Progress{Stage: stage})
+	requirement := java.GameRequirement(major, target)
+	if fixed, ok := java.RequirementFromContext(ctx); ok {
+		var err error
+		requirement, err = requirement.Intersect(fixed)
+		if err != nil {
+			return java.Runtime{}, err
 		}
 	}
-	emit("java-discovery")
-	inventory, err := s.inventory(ctx, preferred)
-	if err != nil {
-		return java.Runtime{}, fmt.Errorf("发现可用 Java: %w", err)
-	}
-	if runtime, ok := matchingJava(inventory.Environments, major, target, preferred); ok {
-		evidence.Work()
-		reportRuntimeFacts(ctx, runtime)
-		return runtime, nil
+	return s.EnsureRequirement(ctx, requirement, preferred, report)
+}
+
+// EnsureRequirement applies the SAME established requirement to explicit
+// preferences, discovered environments, catalog candidates and the final Probe.
+func (s *JavaService) EnsureRequirement(ctx context.Context, requirement java.Requirement, preferred []string, report func(java.Progress)) (java.Runtime, error) {
+	requirement = requirement.Clone()
+	if err := requirement.Validate(); err != nil {
+		return java.Runtime{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return java.Runtime{}, err
 	}
-
+	ctx = context.WithValue(ctx, runtimePurposeKey{}, requirement.Purpose == "processor")
+	ctx, evidence := diagnostics.Start(ctx, "java", requirement.Summary())
+	defer evidence.End()
+	deliver := func(p java.Progress) {
+		if requirement.Purpose == "processor" {
+			p.Stage = "processor-" + p.Stage
+		}
+		if report != nil {
+			report(p)
+		}
+	}
+	emit := func(stage string) { deliver(java.Progress{Stage: stage}) }
+	emit("java-discovery")
+	inventory, err := s.inventory(ctx, preferred)
+	if err != nil {
+		return java.Runtime{}, fmt.Errorf("发现可用Java: %w", err)
+	}
+	if runtime, ok := matchingRequirement(inventory.Environments, requirement, preferred); ok {
+		if err := ctx.Err(); err != nil {
+			return java.Runtime{}, err
+		}
+		evidence.Work()
+		reportRuntimeFacts(ctx, runtime)
+		return runtime, nil
+	}
+	majors, err := requirement.DownloadMajors()
+	if err != nil {
+		return java.Runtime{}, err
+	}
+	if len(majors) == 0 {
+		return java.Runtime{}, errors.New("固定Java需求没有受支持的稳定下载主版本")
+	}
 	var failures []error
-	for _, provider := range java.Providers() {
-		emit("java-catalog")
-		catalog, err := s.catalog.CatalogFor(ctx, provider, major, target)
-		if ctx.Err() != nil {
-			return java.Runtime{}, ctx.Err()
-		}
-		if err != nil {
-			failures = append(failures, fmt.Errorf("%s 目录: %w", provider, err))
-			if len(catalog.Packages) == 0 {
-				continue
+	for _, major := range majors {
+		for _, provider := range java.Providers() {
+			emit("java-catalog")
+			catalog, err := s.catalog.CatalogFor(ctx, provider, major, requirement.Target)
+			if ctx.Err() != nil {
+				return java.Runtime{}, ctx.Err()
 			}
-		}
-		packages := slices.Clone(catalog.Packages)
-		slices.SortStableFunc(packages, func(a, b java.Package) int {
-			if a.Kind == b.Kind {
+			if err != nil {
+				failures = append(failures, fmt.Errorf("%s目录: %w", provider, err))
+				if len(catalog.Packages) == 0 {
+					continue
+				}
+			}
+			packages := slices.Clone(catalog.Packages)
+			slices.SortStableFunc(packages, func(a, b java.Package) int {
+				if a.Kind != b.Kind {
+					if a.Kind == "jre" {
+						return -1
+					}
+					return 1
+				}
 				av, ae := a.ReleaseVersion()
 				bv, be := b.ReleaseVersion()
 				if ae == nil && be == nil {
@@ -70,82 +103,83 @@ func (s *JavaService) Ensure(ctx context.Context, major int, target meta.Platfor
 					return 1
 				}
 				return 0
-			}
-			if a.Kind == "jre" {
-				return -1
-			}
-			return 1
-		})
-		for _, p := range packages {
-			if p.Major != major || p.OS != target.OS || p.Arch != meta.NormalizeArch(target.Arch) {
-				continue
-			}
-			if err := p.Validate(); err != nil {
-				failures = append(failures, err)
-				continue
-			}
-			emit("java-download")
-			environment, err := s.Install(ctx, p, func(p java.Progress) {
-				if report == nil {
-					return
-				}
-				stage := "java-download"
-				if p.Stage == "解压并检查 Java" {
-					stage = "java-extract"
-					p.Bytes, p.Total = 0, 0
-				}
-				report(java.Progress{Stage: stage, Bytes: p.Bytes, Total: p.Total})
 			})
-			if ctx.Err() != nil {
-				return java.Runtime{}, ctx.Err()
-			}
-			if err != nil {
-				file := p.DownloadFile()
-				if observeErr := download.Observe(ctx, download.Event{Key: download.FileKey(file), Path: file.Path, State: "skipped", Total: p.Size}); observeErr != nil {
-					return java.Runtime{}, observeErr
+			for _, p := range packages {
+				if p.Major != major {
+					continue
 				}
-				failures = append(failures, fmt.Errorf("%s 安装: %w", provider, err))
-				continue
+				if err := requirement.CheckPackage(p); err != nil {
+					failures = append(failures, err)
+					continue
+				}
+				emit("java-download")
+				environment, err := s.Install(ctx, p, func(p java.Progress) {
+					if report == nil {
+						return
+					}
+					stage := "java-download"
+					if p.Stage == "解压并检查 Java" {
+						stage = "java-extract"
+						p.Bytes, p.Total = 0, 0
+					}
+					deliver(java.Progress{Stage: stage, Bytes: p.Bytes, Total: p.Total})
+				})
+				if ctx.Err() != nil {
+					return java.Runtime{}, ctx.Err()
+				}
+				if err != nil {
+					file := p.DownloadFile()
+					if observeErr := download.Observe(ctx, download.Event{Key: download.FileKey(file), Path: file.Path, State: "skipped", Total: p.Size}); observeErr != nil {
+						return java.Runtime{}, observeErr
+					}
+					failures = append(failures, fmt.Errorf("%s安装: %w", provider, err))
+					continue
+				}
+				if err := requirement.CheckRuntime(environment.Runtime); err != nil {
+					failures = append(failures, err)
+					continue
+				}
+				evidence.Work()
+				reportRuntimeFacts(ctx, environment.Runtime)
+				return environment.Runtime, nil
 			}
-			if environment.Runtime.Major != major {
-				return java.Runtime{}, errors.New("Java 安装结果主版本与请求不符")
-			}
-			if err := environment.Runtime.Check(major, target); err != nil {
-				failures = append(failures, err)
-				continue
-			}
-			evidence.Work()
-			reportRuntimeFacts(ctx, environment.Runtime)
-			return environment.Runtime, nil
 		}
 	}
 	if len(failures) > 0 {
-		return java.Runtime{}, fmt.Errorf("自动准备 Java %d（%s/%s）各来源均未完成: %w", major, target.OS, target.Arch, errors.Join(failures...))
+		return java.Runtime{}, fmt.Errorf("各官方来源未能满足固定Java需求: %w", errors.Join(failures...))
 	}
-	return java.Runtime{}, fmt.Errorf("各官方发行商暂无 %s/%s 的稳定 Java %d", target.OS, target.Arch, major)
+	return java.Runtime{}, errors.New("官方目录暂无满足固定需求的稳定Java")
 }
 
 func matchingJava(environments []JavaEnvironment, major int, target meta.Platform, preferred []string) (java.Runtime, bool) {
+	return matchingRequirement(environments, java.GameRequirement(major, target), preferred)
+}
+func matchingRequirement(environments []JavaEnvironment, requirement java.Requirement, preferred []string) (java.Runtime, bool) {
+	if requirement.Validate() != nil {
+		return java.Runtime{}, false
+	}
 	var candidates []java.Runtime
 	for _, environment := range environments {
-		runtime := environment.Runtime
-		if runtime.Major == major && runtime.Check(major, target) == nil {
-			candidates = append(candidates, runtime)
+		if requirement.CheckRuntime(environment.Runtime) == nil {
+			candidates = append(candidates, environment.Runtime)
 		}
 	}
-	// Honor compatible explicit instance/global choices, otherwise choose the
-	// newest installed patch of the metadata's exact recommended major.
 	for _, path := range preferred {
-		if path == "" {
-			continue
-		}
-		for _, candidate := range candidates {
-			if candidate.Executable == path {
-				return candidate, true
+		if path != "" {
+			for _, candidate := range candidates {
+				if candidate.Executable == path {
+					return candidate, true
+				}
 			}
 		}
 	}
 	slices.SortFunc(candidates, func(a, b java.Runtime) int {
+		if requirement.Purpose == "processor" && a.Major != b.Major {
+			if a.Major < b.Major {
+				return -1
+			}
+			return 1
+		}
 		if comparison := java.CompareRuntimeVersions(b, a); comparison != 0 {
 			return comparison
 		}

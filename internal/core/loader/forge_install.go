@@ -30,10 +30,11 @@ type ProcessorRunner func(context.Context, string, string, []string) error
 type ProcessorJavaResolver func(context.Context, int, meta.Platform, []string, func(java.Progress)) (java.Runtime, error)
 
 type ForgeInstaller struct {
-	catalog     *Client
-	downloads   *download.Client
-	run         ProcessorRunner
-	resolveJava ProcessorJavaResolver
+	catalog            *Client
+	downloads          *download.Client
+	run                ProcessorRunner
+	resolveJava        ProcessorJavaResolver
+	resolveRequirement func(context.Context, java.Requirement, []string, func(java.Progress)) (java.Runtime, error)
 }
 
 func NewForgeInstaller(catalog *Client, downloads *download.Client, run ProcessorRunner) *ForgeInstaller {
@@ -43,6 +44,12 @@ func NewForgeInstaller(catalog *Client, downloads *download.Client, run Processo
 func NewForgeInstallerWithJava(catalog *Client, downloads *download.Client, run ProcessorRunner, resolve ProcessorJavaResolver) *ForgeInstaller {
 	s := NewForgeInstaller(catalog, downloads, run)
 	s.resolveJava = resolve
+	return s
+}
+
+func NewForgeInstallerWithRequirements(catalog *Client, downloads *download.Client, run ProcessorRunner, resolve func(context.Context, java.Requirement, []string, func(java.Progress)) (java.Runtime, error)) *ForgeInstaller {
+	s := NewForgeInstaller(catalog, downloads, run)
+	s.resolveRequirement = resolve
 	return s
 }
 
@@ -152,6 +159,13 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err != nil {
 		return Profile{}, err
 	}
+	if version.Java.Major < 0 || version.Java.Major > 100 {
+		return Profile{}, errors.New("加载器声明的Java主版本无效")
+	}
+	gameMajor := max(base.Java.Major, version.Java.Major)
+	if err := java.GameRequirement(gameMajor, platform).Validate(); err != nil {
+		return Profile{}, err
+	}
 	if _, declared := spec.Data["BINPATCH"]; !declared && z.Has("data/client.lzma") {
 		if spec.Data == nil {
 			spec.Data = make(map[string]struct{ Client string })
@@ -234,7 +248,7 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 		if report != nil {
 			report(p.Stage, download.Progress{Bytes: p.Bytes, TotalBytes: p.Total})
 		}
-	}); err != nil {
+	}, gameMajor); err != nil {
 		return Profile{}, err
 	}
 	if patched, ok := values["PATCHED"]; ok {
@@ -313,7 +327,7 @@ func planForgeInputs(z *archive.Zip, libraries map[string]forgeLibrary, processo
 	return inputs, mappings, nil
 }
 
-func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Root, stagePath, executable string, platform meta.Platform, base meta.Version, processors []preparedProcessor, known map[string]meta.Download, report func(download.Progress), javaReport func(java.Progress)) (resultErr error) {
+func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Root, stagePath, executable string, platform meta.Platform, base meta.Version, processors []preparedProcessor, known map[string]meta.Download, report func(download.Progress), javaReport func(java.Progress), gameBaseline ...int) (resultErr error) {
 	classes := 0
 	runtimes := make(map[int]java.Runtime)
 	progress := download.Progress{TotalFiles: len(processors)}
@@ -365,6 +379,9 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 			// require a Java 8 process for a Java 17/21 game installation. Keep
 			// the existing exact-8 policy for historical game/tool combinations.
 			minimum := max(8, base.Java.Major)
+			if len(gameBaseline) > 0 {
+				minimum = max(minimum, gameBaseline[0])
+			}
 			var classpath []string
 			for _, relative := range p.classpath {
 				file, ok := known[relative]
@@ -382,9 +399,13 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 				minimum = max(minimum, required)
 				classpath = append(classpath, filepath.Join(stagePath, filepath.FromSlash(relative)))
 			}
+			requirement, err := processorRequirement(ctx, minimum, platform)
+			if err != nil {
+				return err
+			}
 			runtime, found := runtimes[minimum]
-			if !found {
-				runtime, err = s.processorRuntime(ctx, minimum, platform, []string{executable}, javaReport)
+			if !found || requirement.CheckRuntime(runtime) != nil {
+				runtime, err = s.resolveProcessorRequirement(ctx, requirement, []string{executable}, javaReport)
 				if err != nil {
 					return err
 				}
@@ -404,7 +425,11 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 			}
 			args := append([]string{"-Xmx1024m", "-Dfile.encoding=UTF-8", "-Djava.net.preferIPv4Stack=true", "-cp",
 				strings.Join(classpath, string(os.PathListSeparator)), main}, p.args...)
-			if err := s.run(ctx, runtime.Executable, filepath.Join(stagePath, "work"), args); err != nil {
+			runctx, err := java.WithRequirement(ctx, requirement)
+			if err != nil {
+				return err
+			}
+			if err := s.run(runctx, runtime.Executable, filepath.Join(stagePath, "work"), args); err != nil {
 				return fmt.Errorf("安装处理器 %d (%s): %w", index+1, path.Base(p.jar), err)
 			}
 		}

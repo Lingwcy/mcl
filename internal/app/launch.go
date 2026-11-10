@@ -214,28 +214,22 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	}
 	diagnostics.SetFacts(ctx, facts)
 	preferred := []string{value.JavaPath, fallback.JavaPath}
-	runtime, err := s.resolveJava(ctx, base.Java.Major, target, preferred, javaProgress)
+	// Read the fixed loader profile and resolve its independent tools first.
+	// Preferences are only hints; no game Java is installed before the merged
+	// profile has established the actual game requirement.
+	resolved, err := s.installations.resolveLoader(ctx, value, base, fallback.JavaPath, report)
 	if err != nil {
 		return nil, err
 	}
-	if err := runtime.Check(base.Java.Major, target); err != nil {
-		return nil, err
-	}
-	// Pass the verified game executable only as a hint. The loader resolves its
-	// independent tool Java and must never raise the game major to run a tool.
-	loaderInstance := value
-	loaderInstance.JavaPath = runtime.Executable
-	resolved, err := s.installations.resolveLoader(ctx, loaderInstance, base, runtime.Executable, report)
+	requirement, err := fixedGameRequirement(ctx, resolved.version.Java.Major, target)
 	if err != nil {
 		return nil, err
 	}
-	if resolved.version.Java.Major > runtime.Major {
-		runtime, err = s.resolveJava(ctx, resolved.version.Java.Major, target, preferred, javaProgress)
-		if err != nil {
-			return nil, err
-		}
+	runtime, err := resolveRequiredGameJava(ctx, s.resolveJava, resolved.version.Java.Major, requirement, preferred, javaProgress)
+	if err != nil {
+		return nil, err
 	}
-	if err := runtime.Check(resolved.version.Java.Major, target); err != nil {
+	if err := requirement.CheckRuntime(runtime); err != nil {
 		return nil, err
 	}
 	receipt, err := s.installations.execute(ctx, value, resolved, report)
@@ -252,7 +246,7 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	}
 	options := launch.Options{
 		Root: s.installations.client.Root, InstanceID: id, Version: resolved.version, GameDirectory: gameDirectory,
-		Platform: target, Java: runtime, NativeDirectory: receipt.NativeDirectory, LegacyAssetsDirectory: receipt.LegacyAssetsDirectory,
+		Platform: target, Java: runtime, JavaRequirement: requirement.Clone(), NativeDirectory: receipt.NativeDirectory, LegacyAssetsDirectory: receipt.LegacyAssetsDirectory,
 		MaxMemoryMiB: memoryMiB,
 		GCMode:       fallback.GCMode, JVMArguments: jvmArguments, Game: fallback.Game,
 	}

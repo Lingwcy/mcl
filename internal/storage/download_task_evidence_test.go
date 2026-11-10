@@ -44,4 +44,16 @@ func TestTaskStoreReadsLegacyAndRoundTripsBoundedEvidence(t *testing.T) {
 	if got.Schema != 3 || got.Evidence.Facts.HostArch != "arm64" || got.Evidence.Facts.LauncherArch != "amd64" || len(got.Evidence.Artifacts) != 1 {
 		t.Fatal(got)
 	}
+	group.Schema = 4
+	diagnostics.SetFacts(ctx, diagnostics.Facts{Compiler: "absent", ToolCompiler: "present"})
+	if err := store.Save(t.Context(), group); err != nil {
+		t.Fatal(err)
+	}
+	got, err = store.Get(t.Context(), group.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Schema != 4 || got.Evidence.Facts.Compiler != "absent" || got.Evidence.Facts.ToolCompiler != "present" {
+		t.Fatal(got)
+	}
 }

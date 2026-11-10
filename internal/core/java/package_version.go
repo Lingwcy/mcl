@@ -23,6 +23,12 @@ func (p Package) ReleaseVersion() (Version, error) {
 	return ParseVersion(text)
 }
 func (p Package) CheckRuntime(r Runtime) error {
+	if p.Kind == "jdk" && r.Compiler != "present" {
+		return requirementError("package-identity", "固定JDK包未提供同目录编译器文件证据")
+	}
+	if p.VM != "" && r.VM != p.VM {
+		return requirementError("package-identity", "安装的Java VM与固定官方包不一致")
+	}
 	requested, err := p.ReleaseVersion()
 	if err != nil {
 		return err

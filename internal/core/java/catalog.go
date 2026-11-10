@@ -22,6 +22,7 @@ import (
 type Package struct {
 	Name, Version, Kind, OS, Arch string
 	Provider                      string
+	VM                            string `json:",omitempty"`
 	URL, SHA256                   string
 	Size                          int64
 	Major                         int
@@ -79,6 +80,7 @@ func (c *CatalogClient) temurinCatalog(ctx context.Context, major int, platform 
 		var assets []struct {
 			Binary struct {
 				Architecture string `json:"architecture"`
+				JVM          string `json:"jvm_impl"`
 				OS           string `json:"os"`
 				ImageType    string `json:"image_type"`
 				Package      struct {
@@ -101,12 +103,12 @@ func (c *CatalogClient) temurinCatalog(ctx context.Context, major int, platform 
 		}
 		for _, asset := range assets {
 			binary := asset.Binary
-			if binary.OS != osName || binary.Architecture != arch || binary.ImageType != kind {
+			if binary.OS != osName || binary.Architecture != arch || binary.ImageType != kind || binary.JVM != "" && binary.JVM != "hotspot" {
 				continue
 			}
 			p := Package{
 				Provider: "temurin", Name: "Eclipse Temurin", Version: asset.Version.Semver, Major: major,
-				Kind: kind, OS: platform.OS, Arch: meta.NormalizeArch(platform.Arch),
+				Kind: kind, OS: platform.OS, Arch: meta.NormalizeArch(platform.Arch), VM: binary.JVM,
 				URL: binary.Package.Link, SHA256: binary.Package.Checksum, Size: binary.Package.Size,
 			}
 			if err := p.Validate(); err != nil {
@@ -122,6 +124,9 @@ func (c *CatalogClient) temurinCatalog(ctx context.Context, major int, platform 
 var errNoJavaPackage = errors.New("该平台暂无对应 Java 包")
 
 func (p Package) Validate() error {
+	if p.VM != "" && p.VM != "hotspot" && p.VM != "openj9" {
+		return errors.New("Java包VM类型无效")
+	}
 	release, versionErr := p.ReleaseVersion()
 	if versionErr != nil || release.Major() != p.Major || !release.Stable() {
 		return errors.New("Java下载包版本无法识别、主版本不符或不是稳定版")

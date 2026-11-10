@@ -80,6 +80,7 @@ type Options struct {
 	Version               meta.Version
 	Platform              meta.Platform
 	Java                  java.Runtime
+	JavaRequirement       java.Requirement
 	LegacyAssetsDirectory string
 	NativeDirectory       string
 	MaxMemoryMiB          int
@@ -206,7 +207,15 @@ func build(o Options, s *Session) (Preview, error) {
 	if err := ValidateJVMArguments(o.GCMode, o.JVMArguments); err != nil {
 		return Preview{}, err
 	}
-	if err := o.Java.Check(o.Version.Java.Major, o.Platform); err != nil {
+	requirement := java.GameRequirement(o.Version.Java.Major, o.Platform)
+	if len(o.JavaRequirement.Constraints) > 0 {
+		var err error
+		requirement, err = requirement.Intersect(o.JavaRequirement)
+		if err != nil {
+			return Preview{}, err
+		}
+	}
+	if err := requirement.CheckRuntime(o.Java); err != nil {
 		return Preview{}, err
 	}
 	if o.Java.Major < 8 {

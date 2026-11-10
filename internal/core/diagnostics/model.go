@@ -27,12 +27,13 @@ type Facts struct {
 	JavaVersion, JavaArch, JavaVM                           string
 	ToolJavaVersion, ToolJavaArch, ToolJavaVM               string
 	HostArchSource, Desktop, WindowObserver                 string `json:",omitempty"`
+	Compiler, ToolCompiler                                  string `json:",omitempty"`
 }
 
 // Empty fields mean unobserved, not a guessed host/native ABI. No executable,
 // game path, raw URL, account, argument text or arbitrary error is accepted.
 func (f Facts) Validate() error {
-	for _, v := range []string{f.Provider, f.Dialect, f.Game, f.Loader, f.LoaderVersion, f.LauncherArch, f.HostArch, f.TargetOS, f.TargetArch, f.NativeABI, f.JavaVersion, f.JavaArch, f.JavaVM, f.ToolJavaVersion, f.ToolJavaArch, f.ToolJavaVM, f.HostArchSource, f.Desktop, f.WindowObserver} {
+	for _, v := range []string{f.Provider, f.Dialect, f.Game, f.Loader, f.LoaderVersion, f.LauncherArch, f.HostArch, f.TargetOS, f.TargetArch, f.NativeABI, f.JavaVersion, f.JavaArch, f.JavaVM, f.ToolJavaVersion, f.ToolJavaArch, f.ToolJavaVM, f.HostArchSource, f.Desktop, f.WindowObserver, f.Compiler, f.ToolCompiler} {
 		if len(v) > 128 || !utf8.ValidString(v) || strings.ContainsFunc(v, func(r rune) bool {
 			return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("._+-", r)
 		}) {
@@ -42,8 +43,8 @@ func (f Facts) Validate() error {
 	return nil
 }
 func (f Facts) Merge(next Facts) Facts {
-	old := []*string{&f.Provider, &f.Dialect, &f.Game, &f.Loader, &f.LoaderVersion, &f.LauncherArch, &f.HostArch, &f.TargetOS, &f.TargetArch, &f.NativeABI, &f.JavaVersion, &f.JavaArch, &f.JavaVM, &f.ToolJavaVersion, &f.ToolJavaArch, &f.ToolJavaVM, &f.HostArchSource, &f.Desktop, &f.WindowObserver}
-	values := []string{next.Provider, next.Dialect, next.Game, next.Loader, next.LoaderVersion, next.LauncherArch, next.HostArch, next.TargetOS, next.TargetArch, next.NativeABI, next.JavaVersion, next.JavaArch, next.JavaVM, next.ToolJavaVersion, next.ToolJavaArch, next.ToolJavaVM, next.HostArchSource, next.Desktop, next.WindowObserver}
+	old := []*string{&f.Provider, &f.Dialect, &f.Game, &f.Loader, &f.LoaderVersion, &f.LauncherArch, &f.HostArch, &f.TargetOS, &f.TargetArch, &f.NativeABI, &f.JavaVersion, &f.JavaArch, &f.JavaVM, &f.ToolJavaVersion, &f.ToolJavaArch, &f.ToolJavaVM, &f.HostArchSource, &f.Desktop, &f.WindowObserver, &f.Compiler, &f.ToolCompiler}
+	values := []string{next.Provider, next.Dialect, next.Game, next.Loader, next.LoaderVersion, next.LauncherArch, next.HostArch, next.TargetOS, next.TargetArch, next.NativeABI, next.JavaVersion, next.JavaArch, next.JavaVM, next.ToolJavaVersion, next.ToolJavaArch, next.ToolJavaVM, next.HostArchSource, next.Desktop, next.WindowObserver, next.Compiler, next.ToolCompiler}
 	if next.Validate() != nil {
 		return f
 	}
@@ -83,7 +84,7 @@ func SafeSubject(s string) bool {
 }
 func ValidCode(s string) bool {
 	switch s {
-	case "", "unknown", "canceled", "deadline", "network", "unauthorized", "forbidden", "not-found", "rate-limited", "server", "integrity", "disk-full", "permission", "filesystem", "checkpoint", "interrupted":
+	case "", "unknown", "canceled", "deadline", "network", "unauthorized", "forbidden", "not-found", "rate-limited", "server", "integrity", "disk-full", "permission", "filesystem", "checkpoint", "interrupted", "java-requirement":
 		return true
 	}
 	return false
@@ -458,6 +459,7 @@ func (s Snapshot) Text() string {
 	fmt.Fprintln(&b, fmt.Sprintf("launcher_arch=%s host_arch=%s target=%s/%s native_abi=%s", unknown(f.LauncherArch), unknown(f.HostArch), unknown(f.TargetOS), unknown(f.TargetArch), unknown(s.nativeHeaderSummary())))
 	fmt.Fprintf(&b, "host_source=%s desktop=%s window_observer=%s\n", unknown(f.HostArchSource), unknown(f.Desktop), unknown(f.WindowObserver))
 	fmt.Fprintln(&b, fmt.Sprintf("java=%s/%s/%s tool_java=%s/%s/%s", unknown(f.JavaVersion), unknown(f.JavaArch), unknown(f.JavaVM), unknown(f.ToolJavaVersion), unknown(f.ToolJavaArch), unknown(f.ToolJavaVM)))
+	fmt.Fprintf(&b, "compiler_file=%s tool_compiler_file=%s\n", unknown(f.Compiler), unknown(f.ToolCompiler))
 	fmt.Fprintln(&b, fmt.Sprintf("code=%s last_work=%s dropped=%d", unknown(s.Code), stamp(s.LastWorkAt), s.Dropped))
 	for _, r := range s.Records {
 		end := "active"
