@@ -55,6 +55,9 @@ func (i *Installer) Install(ctx context.Context, p Package, report func(Progress
 		if err != nil {
 			return Runtime{}, err
 		}
+		if err := p.CheckRuntime(r); err != nil {
+			return Runtime{}, err
+		}
 		if r.Major != p.Major || r.Arch != p.Arch || r.EarlyAccess {
 			return Runtime{}, errors.New("下载的 Java 与所选版本或架构不一致")
 		}

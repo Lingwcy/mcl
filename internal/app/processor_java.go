@@ -84,7 +84,7 @@ func matchingProcessorJava(environments []JavaEnvironment, minimum int, target m
 		if a.Major != b.Major {
 			return a.Major - b.Major
 		}
-		if comparison := slices.Compare(javaVersionNumbers(b.Version), javaVersionNumbers(a.Version)); comparison != 0 {
+		if comparison := java.CompareRuntimeVersions(b, a); comparison != 0 {
 			return comparison
 		}
 		return strings.Compare(a.Executable, b.Executable)

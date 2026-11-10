@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
-	"unicode"
 
 	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/download"
@@ -60,6 +58,17 @@ func (s *JavaService) Ensure(ctx context.Context, major int, target meta.Platfor
 		packages := slices.Clone(catalog.Packages)
 		slices.SortStableFunc(packages, func(a, b java.Package) int {
 			if a.Kind == b.Kind {
+				av, ae := a.ReleaseVersion()
+				bv, be := b.ReleaseVersion()
+				if ae == nil && be == nil {
+					return bv.Compare(av)
+				}
+				if ae == nil {
+					return -1
+				}
+				if be == nil {
+					return 1
+				}
 				return 0
 			}
 			if a.Kind == "jre" {
@@ -137,7 +146,7 @@ func matchingJava(environments []JavaEnvironment, major int, target meta.Platfor
 		}
 	}
 	slices.SortFunc(candidates, func(a, b java.Runtime) int {
-		if comparison := slices.Compare(javaVersionNumbers(b.Version), javaVersionNumbers(a.Version)); comparison != 0 {
+		if comparison := java.CompareRuntimeVersions(b, a); comparison != 0 {
 			return comparison
 		}
 		return strings.Compare(a.Executable, b.Executable)
@@ -146,13 +155,4 @@ func matchingJava(environments []JavaEnvironment, major int, target meta.Platfor
 		return java.Runtime{}, false
 	}
 	return candidates[0], true
-}
-
-func javaVersionNumbers(version string) []uint64 {
-	var numbers []uint64
-	for _, part := range strings.FieldsFunc(version, func(r rune) bool { return !unicode.IsDigit(r) }) {
-		value, _ := strconv.ParseUint(part, 10, 64)
-		numbers = append(numbers, value)
-	}
-	return numbers
 }

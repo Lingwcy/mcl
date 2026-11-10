@@ -1,8 +1,9 @@
 package java
 
 import (
-	"mcl/internal/core/diagnostics"
 	"strings"
+
+	"mcl/internal/core/diagnostics"
 )
 
 func runtimeVM(name string) string {
@@ -17,6 +18,11 @@ func runtimeVM(name string) string {
 }
 func (r Runtime) DiagnosticFacts(tool bool) diagnostics.Facts {
 	version := r.Version
+	if r.RuntimeVersion != "" {
+		if _, err := r.NormalizedVersion(); err == nil {
+			version = r.RuntimeVersion
+		}
+	}
 	if (diagnostics.Facts{JavaVersion: version}).Validate() != nil {
 		version = "unknown"
 	}

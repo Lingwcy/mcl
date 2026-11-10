@@ -122,6 +122,10 @@ func (c *CatalogClient) temurinCatalog(ctx context.Context, major int, platform 
 var errNoJavaPackage = errors.New("该平台暂无对应 Java 包")
 
 func (p Package) Validate() error {
+	release, versionErr := p.ReleaseVersion()
+	if versionErr != nil || release.Major() != p.Major || !release.Stable() {
+		return errors.New("Java下载包版本无法识别、主版本不符或不是稳定版")
+	}
 	if p.Major < 8 || p.Major > 100 || p.Version == "" ||
 		(p.OS != "osx" && p.OS != "linux" && p.OS != "windows") ||
 		(p.Arch != "amd64" && p.Arch != "arm64" && p.Arch != "386") {
