@@ -26,12 +26,13 @@ type Facts struct {
 	LauncherArch, HostArch, TargetOS, TargetArch, NativeABI string
 	JavaVersion, JavaArch, JavaVM                           string
 	ToolJavaVersion, ToolJavaArch, ToolJavaVM               string
+	HostArchSource, Desktop, WindowObserver                 string `json:",omitempty"`
 }
 
 // Empty fields mean unobserved, not a guessed host/native ABI. No executable,
 // game path, raw URL, account, argument text or arbitrary error is accepted.
 func (f Facts) Validate() error {
-	for _, v := range []string{f.Provider, f.Dialect, f.Game, f.Loader, f.LoaderVersion, f.LauncherArch, f.HostArch, f.TargetOS, f.TargetArch, f.NativeABI, f.JavaVersion, f.JavaArch, f.JavaVM, f.ToolJavaVersion, f.ToolJavaArch, f.ToolJavaVM} {
+	for _, v := range []string{f.Provider, f.Dialect, f.Game, f.Loader, f.LoaderVersion, f.LauncherArch, f.HostArch, f.TargetOS, f.TargetArch, f.NativeABI, f.JavaVersion, f.JavaArch, f.JavaVM, f.ToolJavaVersion, f.ToolJavaArch, f.ToolJavaVM, f.HostArchSource, f.Desktop, f.WindowObserver} {
 		if len(v) > 128 || !utf8.ValidString(v) || strings.ContainsFunc(v, func(r rune) bool {
 			return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("._+-", r)
 		}) {
@@ -41,8 +42,8 @@ func (f Facts) Validate() error {
 	return nil
 }
 func (f Facts) Merge(next Facts) Facts {
-	old := []*string{&f.Provider, &f.Dialect, &f.Game, &f.Loader, &f.LoaderVersion, &f.LauncherArch, &f.HostArch, &f.TargetOS, &f.TargetArch, &f.NativeABI, &f.JavaVersion, &f.JavaArch, &f.JavaVM, &f.ToolJavaVersion, &f.ToolJavaArch, &f.ToolJavaVM}
-	values := []string{next.Provider, next.Dialect, next.Game, next.Loader, next.LoaderVersion, next.LauncherArch, next.HostArch, next.TargetOS, next.TargetArch, next.NativeABI, next.JavaVersion, next.JavaArch, next.JavaVM, next.ToolJavaVersion, next.ToolJavaArch, next.ToolJavaVM}
+	old := []*string{&f.Provider, &f.Dialect, &f.Game, &f.Loader, &f.LoaderVersion, &f.LauncherArch, &f.HostArch, &f.TargetOS, &f.TargetArch, &f.NativeABI, &f.JavaVersion, &f.JavaArch, &f.JavaVM, &f.ToolJavaVersion, &f.ToolJavaArch, &f.ToolJavaVM, &f.HostArchSource, &f.Desktop, &f.WindowObserver}
+	values := []string{next.Provider, next.Dialect, next.Game, next.Loader, next.LoaderVersion, next.LauncherArch, next.HostArch, next.TargetOS, next.TargetArch, next.NativeABI, next.JavaVersion, next.JavaArch, next.JavaVM, next.ToolJavaVersion, next.ToolJavaArch, next.ToolJavaVM, next.HostArchSource, next.Desktop, next.WindowObserver}
 	if next.Validate() != nil {
 		return f
 	}
@@ -89,20 +90,36 @@ func ValidCode(s string) bool {
 }
 
 type Snapshot struct {
-	Facts      Facts
-	Records    []Record
-	LastWorkAt time.Time
-	Code       string
-	Dropped    uint64
+	Artifacts        []Artifact `json:",omitempty"`
+	ArtifactsDropped uint64     `json:",omitempty"`
+	Facts            Facts
+	Records          []Record
+	LastWorkAt       time.Time
+	Code             string
+	Dropped          uint64
 }
 
-func (s Snapshot) Clone() Snapshot { s.Records = slices.Clone(s.Records); return s }
+func (s Snapshot) Clone() Snapshot {
+	s.Records = slices.Clone(s.Records)
+	s.Artifacts = slices.Clone(s.Artifacts)
+	return s
+}
 func (s Snapshot) Validate() error {
 	if err := s.Facts.Validate(); err != nil {
 		return err
 	}
-	if len(s.Records) > MaxRecords || !ValidCode(s.Code) {
+	if len(s.Records) > MaxRecords || len(s.Artifacts) > MaxArtifacts || !ValidCode(s.Code) {
 		return errors.New("诊断快照越界")
+	}
+	artifacts := map[artifactKey]bool{}
+	for _, a := range s.Artifacts {
+		if err := a.Validate(); err != nil {
+			return err
+		}
+		if artifacts[a.key()] {
+			return errors.New("诊断制品重复")
+		}
+		artifacts[a.key()] = true
 	}
 	seen := map[uint64]bool{}
 	for _, r := range s.Records {
@@ -117,6 +134,16 @@ func (s Snapshot) Validate() error {
 	return nil
 }
 func (s *Snapshot) Apply(u Update) {
+	if u.PublishedDirectory != "" && SafeSubject(u.PublishedDirectory) {
+		for i, a := range s.Artifacts {
+			if strings.HasPrefix(a.Destination, u.PublishedDirectory+"/") {
+				s.Artifacts[i].Published = true
+			}
+		}
+	}
+	if u.Artifact != nil {
+		s.applyArtifact(*u.Artifact)
+	}
 	if u.Facts != nil {
 		s.Facts = s.Facts.Merge(*u.Facts)
 	}
@@ -262,8 +289,10 @@ func Source(address string) string {
 }
 
 type Update struct {
-	Record *Record
-	Facts  *Facts
+	PublishedDirectory string
+	Artifact           *Artifact
+	Record             *Record
+	Facts              *Facts
 }
 type observer struct {
 	next atomic.Uint64
@@ -278,6 +307,11 @@ func WithObserver(ctx context.Context, send func(Update)) context.Context {
 	}
 	return context.WithValue(ctx, observerKey{}, &observer{send: send})
 }
+func Observed(ctx context.Context) bool {
+	o, _ := ctx.Value(observerKey{}).(*observer)
+	return o != nil
+}
+
 func SetFacts(ctx context.Context, f Facts) {
 	if o, _ := ctx.Value(observerKey{}).(*observer); o != nil && f.Validate() == nil {
 		o.send(Update{Facts: &f})
@@ -421,7 +455,8 @@ func (s Snapshot) Text() string {
 	var b strings.Builder
 	f := s.Facts
 	fmt.Fprintln(&b, fmt.Sprintf("provider=%s dialect=%s minecraft=%s loader=%s/%s", unknown(f.Provider), unknown(f.Dialect), unknown(f.Game), unknown(f.Loader), unknown(f.LoaderVersion)))
-	fmt.Fprintln(&b, fmt.Sprintf("launcher_arch=%s host_arch=%s target=%s/%s native_abi=%s", unknown(f.LauncherArch), unknown(f.HostArch), unknown(f.TargetOS), unknown(f.TargetArch), unknown(f.NativeABI)))
+	fmt.Fprintln(&b, fmt.Sprintf("launcher_arch=%s host_arch=%s target=%s/%s native_abi=%s", unknown(f.LauncherArch), unknown(f.HostArch), unknown(f.TargetOS), unknown(f.TargetArch), unknown(s.nativeHeaderSummary())))
+	fmt.Fprintf(&b, "host_source=%s desktop=%s window_observer=%s\n", unknown(f.HostArchSource), unknown(f.Desktop), unknown(f.WindowObserver))
 	fmt.Fprintln(&b, fmt.Sprintf("java=%s/%s/%s tool_java=%s/%s/%s", unknown(f.JavaVersion), unknown(f.JavaArch), unknown(f.JavaVM), unknown(f.ToolJavaVersion), unknown(f.ToolJavaArch), unknown(f.ToolJavaVM)))
 	fmt.Fprintln(&b, fmt.Sprintf("code=%s last_work=%s dropped=%d", unknown(s.Code), stamp(s.LastWorkAt), s.Dropped))
 	for _, r := range s.Records {
@@ -431,6 +466,7 @@ func (s Snapshot) Text() string {
 		}
 		fmt.Fprintln(&b, fmt.Sprintf("%d parent=%d %s %s source=%s http=%d attempt=%d step=%d/%d start=%s end=%s work=%s code=%s", r.ID, r.Parent, r.Phase, r.Subject, unknown(r.Source), r.HTTPStatus, r.Attempt, r.Step, r.Steps, stamp(r.StartedAt), end, stamp(r.LastWorkAt), unknown(r.Code)))
 	}
+	b.WriteString(s.artifactText())
 	return b.String()
 }
 func stamp(t time.Time) string {

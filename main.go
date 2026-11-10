@@ -120,6 +120,7 @@ func run() error {
 	loaders := app.NewLoaderService(loaderCatalog, storage.NewLoaderStore(paths.Root), forgeInstaller)
 	installations := app.NewInstallationServiceWithGameDirectory(catalog, instances, storage.NewInstallationStore(paths.Root), sharedDownloads, host, sessions, loaders, assetStore.Directory, assetStore.OpenGame)
 	installations.CheckExecutionPlatform = platform.CheckExecutionPlatform
+	installations.RuntimeEvidence = platform.RuntimeEvidence()
 	instanceSettings := app.NewInstanceSettingsService(instances, sessions)
 	instanceDeletion := app.NewInstanceDeletionService(storage.NewInstanceDeletionStore(paths.Root), sessions, mygo.Shell.TrashItem)
 	directoryService := app.NewDirectoryService(storage.NewDirectoryTransferStore(paths.Root, platform.ReadSwiftProfiles), sessions, catalog, loaderCatalog, mygo.Shell.TrashItem)

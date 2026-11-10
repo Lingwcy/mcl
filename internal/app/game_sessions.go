@@ -51,10 +51,10 @@ func (s *LaunchService) notify() {
 	}
 }
 
-func (s *LaunchService) manage(record launch.Record, game launch.Game, release func(), redact func(string) string, facts ...diagnostics.Facts) {
+func (s *LaunchService) manage(record launch.Record, game launch.Game, release func(), redact func(string) string, evidence ...diagnostics.Snapshot) {
 	snapshot := GameSnapshot{Warnings: launch.StartupWarnings(game), ID: record.ID, InstanceID: record.InstanceID, VersionID: record.VersionID, PID: game.PID(), StartedAt: time.Now().UTC(), Running: true}
-	if len(facts) > 0 && facts[0].Validate() == nil {
-		snapshot.Evidence.Facts = facts[0]
+	if len(evidence) > 0 && evidence[0].Validate() == nil {
+		snapshot.Evidence = evidence[0].Clone()
 	}
 	if s.windowVisible != nil {
 		snapshot.Window = GameWindowPending
@@ -142,7 +142,9 @@ func (s *LaunchService) Sessions() []GameSnapshot {
 			value.Output.Lines = slices.Clone(value.Output.Lines)
 		}
 		if len(value.Output.Lines) > 0 {
-			value.Evidence.LastWorkAt = value.Output.Lines[len(value.Output.Lines)-1].Time
+			if at := value.Output.Lines[len(value.Output.Lines)-1].Time; at.After(value.Evidence.LastWorkAt) {
+				value.Evidence.LastWorkAt = at
+			}
 		}
 		result = append(result, value)
 	}

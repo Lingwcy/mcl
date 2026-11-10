@@ -205,7 +205,7 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	if err := taskBaseIdentity(ctx, value, base); err != nil {
 		return nil, err
 	}
-	facts := diagnostics.Facts{Provider: "mojang", Dialect: "official", Game: value.Version.ID, LauncherArch: meta.CurrentPlatform().Arch, TargetOS: target.OS, TargetArch: target.Arch}
+	facts := s.installations.RuntimeEvidence.Merge(diagnostics.Facts{Provider: "mojang", Dialect: "official", Game: value.Version.ID, LauncherArch: meta.CurrentPlatform().Arch, TargetOS: target.OS, TargetArch: target.Arch})
 	if required, ok := value.RequiredLoader(); ok {
 		facts.Loader = required.Type
 		facts.LoaderVersion = required.Version
@@ -263,15 +263,19 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 		return nil, err
 	}
 	p := &Prepared{memoryProbe: s.memoryProbe, ctx: ctx, options: options, receipt: receipt, versionSHA1: value.Version.SHA1, start: s.start, release: reserved.Close, lease: reserved.lease, settled: make(chan struct{})}
+	evidence := diagnostics.Snapshot{}
 	if scope := taskScope(ctx); scope != nil {
 		scope.execution.mu.Lock()
-		facts = facts.Merge(scope.execution.group.Evidence.Facts)
+		evidence = scope.execution.group.Evidence.Clone()
+		facts = facts.Merge(evidence.Facts)
 		scope.execution.mu.Unlock()
 	}
 	facts = facts.Merge(resolved.evidence)
 	facts = facts.Merge(runtime.DiagnosticFacts(false))
+	evidence.Facts = facts
+	evidence.Finish("")
 	p.started = func(record launch.Record, game launch.Game, release func(), redact func(string) string) {
-		s.manage(record, game, release, redact, facts)
+		s.manage(record, game, release, redact, evidence)
 	}
 	transferred = true
 	go func() {

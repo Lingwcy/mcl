@@ -30,6 +30,8 @@ type Plan struct {
 	Classpath                               []string
 	ClientPath, AssetIndexPath, LoggingPath string
 	Natives                                 []NativeArchive
+	NativeJARs                              []download.File
+	LocalLibraries                          []download.File
 	NeedsGameAssets                         bool
 }
 
@@ -113,6 +115,10 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 				local := path.Join(lib.LocalRoot, relative)
 				if !slices.Contains(p.Classpath, local) {
 					p.Classpath = append(p.Classpath, local)
+					p.LocalLibraries = append(p.LocalLibraries, download.File{Path: local, Download: data})
+					if strings.HasPrefix(coordinate.Classifier, "natives-") {
+						p.NativeJARs = append(p.NativeJARs, download.File{Path: local, Download: data})
+					}
 				}
 				continue
 			}
@@ -122,6 +128,9 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 			}
 			if !slices.Contains(p.Classpath, file.Path) {
 				p.Classpath = append(p.Classpath, file.Path)
+				if strings.HasPrefix(coordinate.Classifier, "natives-") {
+					p.NativeJARs = append(p.NativeJARs, file)
+				}
 			}
 		} else if len(lib.Natives) == 0 {
 			return Plan{}, fmt.Errorf("library %s has no verified artifact", lib.Name)

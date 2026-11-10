@@ -91,7 +91,7 @@ func (s *TaskService) Execute(ctx context.Context, intent tasks.Intent, work fun
 		return err
 	}
 	intent.Payload = payload
-	group := tasks.Group{Schema: 2, ID: instance.NewID(), Intent: intent, State: "queued", Stage: "准备", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	group := tasks.Group{Schema: 3, ID: instance.NewID(), Intent: intent, State: "queued", Stage: "准备", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 	lease, err := s.store.Lock(ctx, group.ID)
 	if err != nil {
 		return err
@@ -139,7 +139,7 @@ func (s *TaskService) execute(ctx context.Context, group tasks.Group, work func(
 		execution.group.Stage = "准备"
 		execution.group.Reason = ""
 		execution.group.Attempt++
-		execution.group.Schema = 2
+		execution.group.Schema = 3
 		execution.group.Evidence = diagnostics.Snapshot{}
 		attemptNumber := execution.group.Attempt
 		execution.group.Owned = true

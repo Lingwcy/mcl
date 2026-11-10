@@ -10,6 +10,7 @@ import (
 	"path"
 	"strings"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/meta"
 )
 
@@ -126,7 +127,7 @@ func streamAsset(ctx context.Context, f *os.File, dest io.Writer, size int64, di
 		return err
 	}
 	if n != size || !strings.EqualFold(fmt.Sprintf("%x", hash.Sum(nil)), digest) {
-		return errors.New("asset size or SHA-1 mismatch")
+		return diagnostics.Wrap("integrity", errors.New("asset size or SHA-1 mismatch"))
 	}
 	return ctx.Err()
 }

@@ -33,6 +33,7 @@ type InstanceReader interface {
 // reservation to a live game. The registry combines an OS lock with persisted
 // kernel process identity to protect sessions left by a previous launcher.
 type InstallationService struct {
+	RuntimeEvidence        diagnostics.Facts
 	Tasks                  *TaskService
 	CheckExecutionPlatform func(context.Context, meta.Platform, meta.Platform) error
 	openGameDirectory      func(context.Context, string) (*os.Root, error)
@@ -133,6 +134,7 @@ func (s *InstallationService) RunWithJava(ctx context.Context, id, fallbackJava 
 // transfer the release to a live session, which prevents repair/native cleanup
 // while that instance's process is running.
 func (s *InstallationService) reserve(ctx context.Context, id string) (*reservation, error) {
+	diagnostics.SetFacts(ctx, s.RuntimeEvidence)
 	if !instance.ValidID(id) {
 		return nil, errors.New("invalid instance ID")
 	}

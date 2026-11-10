@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	assetarchive "mcl/internal/core/archive"
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/meta"
 	"mcl/internal/fileio"
 )
@@ -22,6 +23,9 @@ import (
 // have passed hash, path, type, CRC and expansion checks. Modern natives remain
 // in their JARs on the classpath and are loaded by LWJGL itself.
 func PrepareNatives(ctx context.Context, root *os.Root, parent string, archives []NativeArchive) (directory string, err error) {
+	ctx = withNativeEvidenceBudget(ctx)
+	ctx, preparation := diagnostics.Start(ctx, "work", "native-extraction")
+	defer preparation.End()
 	if !meta.ValidPath(parent) {
 		return "", errors.New("unsafe native parent directory")
 	}
@@ -67,16 +71,28 @@ func PrepareNatives(ctx context.Context, root *os.Root, parent string, archives 
 			return "", errors.New("native archive exceeds 128 MiB")
 		}
 		if err := extractArchive(ctx, root, stage, archive, claimed, &expanded, &entries); err != nil {
+			preparation.Fail(err)
 			return "", err
 		}
+		preparation.Work()
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	for _, archive := range archives {
+		observeNativeArchive(ctx, root, archive.File, archive.Exclude, final)
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 	stage.Close()
+	_, publication := diagnostics.Start(ctx, "publish", final)
+	defer publication.End()
 	if err := fileio.PublishDirectory(parentRoot, path.Base(temporary), path.Base(final)); err != nil {
 		return "", err
 	}
+	publication.Work()
+	diagnostics.PublishedNatives(ctx, final)
 	return final, nil
 }
 

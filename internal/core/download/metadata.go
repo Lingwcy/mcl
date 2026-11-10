@@ -52,12 +52,15 @@ func (c *Client) FetchMetadata(ctx context.Context, address, digest string, limi
 		if delay == 0 {
 			delay = 200 * time.Millisecond << attempt
 		}
+		_, waiting := diagnostics.Start(ctx, "backoff", digest)
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+			waiting.End()
 			return nil, ctx.Err()
 		case <-timer.C:
+			waiting.End()
 		}
 	}
 	return nil, last
@@ -76,7 +79,11 @@ func (c *Client) metadataAttempt(ctx context.Context, original, candidate, diges
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, true, 0, errors.New("无法读取版本元数据，请检查下载代理和网络设置")
+		code := diagnostics.Code(err)
+		if code == "unknown" {
+			code = "network"
+		}
+		return nil, true, 0, diagnostics.Wrap(code, errors.New("无法读取版本元数据，请检查下载代理和网络设置"))
 	}
 	defer response.Body.Close()
 	diagnostics.Response(ctx, candidate, response.StatusCode)
@@ -88,7 +95,11 @@ func (c *Client) metadataAttempt(ctx context.Context, original, candidate, diges
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
-		return nil, true, 0, errors.New("读取版本元数据失败")
+		code := diagnostics.Code(err)
+		if code == "unknown" {
+			code = "network"
+		}
+		return nil, true, 0, diagnostics.Wrap(code, errors.New("读取版本元数据失败"))
 	}
 	if int64(len(data)) > limit {
 		return nil, true, 0, errors.New("版本元数据超过大小限制")

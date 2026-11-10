@@ -1,8 +1,9 @@
 package storage
 
 import (
-	"mcl/internal/core/diagnostics"
 	"testing"
+
+	"mcl/internal/core/diagnostics"
 )
 
 func TestTaskStoreReadsLegacyAndRoundTripsBoundedEvidence(t *testing.T) {
@@ -28,6 +29,19 @@ func TestTaskStoreReadsLegacyAndRoundTripsBoundedEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.Schema != 2 || len(got.Evidence.Records) != 1 || got.Evidence.Records[0].Code != "forbidden" {
+		t.Fatal(got)
+	}
+	group.Schema = 3
+	diagnostics.SetFacts(ctx, diagnostics.Facts{HostArch: "arm64", LauncherArch: "amd64", HostArchSource: "sysctl-hardware", Desktop: "quartz-unchecked", WindowObserver: "quartz-onscreen"})
+	diagnostics.ReportArtifact(ctx, diagnostics.Artifact{Path: "cache/native.jar", Member: "lib.dylib", Role: "native-binary", Format: "macho", Architectures: "amd64", State: "header"})
+	if err := store.Save(t.Context(), group); err != nil {
+		t.Fatal(err)
+	}
+	got, err = store.Get(t.Context(), group.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Schema != 3 || got.Evidence.Facts.HostArch != "arm64" || got.Evidence.Facts.LauncherArch != "amd64" || len(got.Evidence.Artifacts) != 1 {
 		t.Fatal(got)
 	}
 }

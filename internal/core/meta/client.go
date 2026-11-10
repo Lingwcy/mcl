@@ -102,7 +102,7 @@ func (c *Client) versionDocument(ctx context.Context, entry ManifestEntry) (Vers
 	parse := func(data []byte) (Version, error) {
 		digest := sha1.Sum(data)
 		if !strings.EqualFold(hex.EncodeToString(digest[:]), entry.SHA1) {
-			return Version{}, fmt.Errorf("version %s metadata checksum mismatch", entry.ID)
+			return Version{}, diagnostics.Wrap("integrity", fmt.Errorf("version %s metadata checksum mismatch", entry.ID))
 		}
 		version, err := ParseVersion(data)
 		if err != nil {

@@ -27,6 +27,8 @@ type Result struct {
 // Execute never persists a success flag. Its caller commits a receipt after
 // every stage finishes, and owns the returned native directory from then on.
 func Execute(ctx context.Context, client *download.Client, plan Plan, nativeParent string, report func(Progress), gameDirectory ...*os.Root) (Result, error) {
+	ctx = withNativeEvidenceBudget(ctx)
+	reportPlan(ctx, plan)
 	stage := func(name string) func(download.Progress) {
 		return func(p download.Progress) {
 			if report != nil {
@@ -45,6 +47,9 @@ func Execute(ctx context.Context, client *download.Client, plan Plan, nativePare
 		return Result{}, err
 	}
 	defer root.Close()
+	for _, native := range plan.NativeJARs {
+		observeNativeArchive(ctx, root, native, nil, "")
+	}
 	var indexFile *download.File
 	for i := range plan.Files {
 		if plan.Files[i].Path == plan.AssetIndexPath {

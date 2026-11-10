@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/java"
 	"mcl/internal/core/launch"
 	"mcl/internal/core/meta"
@@ -27,6 +28,7 @@ func RunLoaderProcessor(ctx context.Context, executable, work string, args []str
 	if err != nil {
 		return err
 	}
+	diagnostics.SetFacts(ctx, runtime.DiagnosticFacts(true))
 	if runtime.Major > 25 {
 		return errors.New("安装工具Java超过已支持范围")
 	}
