@@ -33,6 +33,7 @@ const archiveExe = "mcl.exe"
 // shippedResources are the files besides mcl.exe in update archives: the
 // project's resources directory, which a test keeps in sync.
 var shippedResources = []string{
+	"BRANDING.md",
 	"font-awesome-LICENSE.txt",
 	"go-toml-LICENSE.txt",
 	"icon.png",

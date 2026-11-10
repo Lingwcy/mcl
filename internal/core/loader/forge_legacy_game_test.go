@@ -168,10 +168,9 @@ func TestProcessedLegacyFormatRejectsUnknownSidesAndEntry(t *testing.T) {
 	} {
 		request, _, spec, version, _, _ := processedLegacyFixture(t)
 		change(spec, version)
-		_, _, id, _ := forgeInstaller(request)
 		data, _ := json.Marshal(version)
 		z := legacyArchive(t, spec, map[string][]byte{"version.json": data})
-		if _, _, err := readForgeSpec(t.Context(), z, request, id); err == nil {
+		if _, _, err := readForgeSpec(t.Context(), z, request); err == nil {
 			t.Fatal("unsupported processed legacy format accepted")
 		}
 	}
@@ -180,8 +179,7 @@ func TestProcessedLegacyFormatRejectsUnknownSidesAndEntry(t *testing.T) {
 func TestProcessorLegacyFlagCannotImpersonateOldInstaller(t *testing.T) {
 	request, _, spec, version, _, _ := processedLegacyFixture(t)
 	raw, _ := json.Marshal(version)
-	_, _, id, _ := forgeInstaller(request)
-	prepared, parsed, err := readForgeSpec(t.Context(), legacyArchive(t, spec, map[string][]byte{"version.json": raw}), request, id)
+	prepared, parsed, err := readForgeSpec(t.Context(), legacyArchive(t, spec, map[string][]byte{"version.json": raw}), request)
 	if err != nil || !prepared.LegacyGame || parsed.Java.Major != 8 {
 		t.Fatal("processed legacy format was not normalized", err)
 	}

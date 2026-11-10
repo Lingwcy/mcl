@@ -54,8 +54,7 @@ func TestInstallationCancelRetryAndNavigation(t *testing.T) {
 	complete(install.Receipt{InstanceID: id, VersionID: "1.20.4"}, nil)
 	tester.Frame()
 	click(t, tester, "游戏库")
-	_, ready := tester.Find("检查启动条件")
-	if !ready || s.installation.active {
+	if s.installation.active || !tester.HasText("安装验收") {
 		t.Fatal(tester.Texts())
 	}
 }

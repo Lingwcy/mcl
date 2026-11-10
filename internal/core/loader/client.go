@@ -93,6 +93,12 @@ func (c *Client) requestHeaders(ctx context.Context, method, address string, hea
 		}
 		evidence.Network(diagnostics.Source(address), 0, attempt+1)
 		attemptctx, cancel := context.WithTimeout(ctx, metadataRequestTimeout)
+		transferred := false
+		defer func() {
+			if !transferred {
+				cancel()
+			}
+		}()
 		req, err := http.NewRequestWithContext(attemptctx, method, address, nil)
 		if err != nil {
 			cancel()
@@ -106,7 +112,10 @@ func (c *Client) requestHeaders(ctx context.Context, method, address string, hea
 		}
 		response, fetchErr := c.HTTP.Do(req)
 		if response != nil && response.Body != nil {
+			// The returned body owns the per-attempt deadline until it is closed.
+			// Every path that discards the body closes it, which releases cancel.
 			response.Body = &metadataBody{ReadCloser: response.Body, budget: budget, cancel: cancel}
+			transferred = true
 		}
 		if ctx.Err() != nil {
 			if response != nil {

@@ -22,6 +22,9 @@ const partsDirectory = "download-parts-v1"
 
 var ErrCheckpoint = diagnostics.Wrap("checkpoint", errors.New("下载检查点未能持久化"))
 
+// ErrIntegrity marks bytes that contradict the fixed digest or size.
+var ErrIntegrity = errors.New("下载内容与固定声明不符")
+
 type partialState struct {
 	Schema                            int
 	Key, Path, Source, ETag, Modified string
@@ -79,6 +82,39 @@ func openParts(root *os.Root) (*os.Root, error) {
 	}
 	return realChild(root, partsDirectory)
 }
+
+// pruneParts removes the shared parts directory only when it is empty and no
+// other transfer is using it. Concurrent or unknown state is always left alone.
+func pruneParts(ctx context.Context, root *os.Root, coordination Coordination) {
+	info, err := root.Lstat(partsDirectory)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return
+	}
+	if coordination != nil {
+		lease, err := coordination.Parts(context.WithoutCancel(ctx), true)
+		if err != nil {
+			return
+		}
+		defer lease.Close()
+	}
+	parts, err := root.OpenRoot(partsDirectory)
+	if err != nil {
+		return
+	}
+	directory, err := parts.Open(".")
+	if err != nil {
+		parts.Close()
+		return
+	}
+	entries, readErr := directory.ReadDir(1)
+	directory.Close()
+	parts.Close()
+	if readErr != nil && !errors.Is(readErr, io.EOF) || len(entries) != 0 {
+		return
+	}
+	_ = root.Remove(partsDirectory)
+}
+
 func readPartial(root *os.Root, name string, state *partialState) error {
 	info, err := root.Lstat(name)
 	if err != nil {
@@ -149,6 +185,7 @@ type partial struct {
 	state        partialState
 	marker, blob string
 	offset       int64
+	resumable    bool
 	reset        bool
 	lease        io.Closer
 }
@@ -179,8 +216,16 @@ func openPartial(ctx context.Context, root *os.Root, f File, address string, coo
 		return fail(err)
 	}
 	if errors.Is(err, os.ErrNotExist) {
-		if _, e := parts.Lstat(p.blob); e == nil {
-			return fail(errors.New("下载分片缺少所属标记，未接管"))
+		if info, e := parts.Lstat(p.blob); e == nil {
+			// An empty blob carries no resume value; a retry after a failed
+			// request may replace it. Non-empty data without provenance stays
+			// untouched.
+			if !info.Mode().IsRegular() || info.Size() != 0 {
+				return fail(errors.New("下载分片缺少所属标记，未接管"))
+			}
+			if e := parts.Remove(p.blob); e != nil {
+				return fail(e)
+			}
 		} else if !errors.Is(e, os.ErrNotExist) {
 			return fail(e)
 		}
@@ -192,6 +237,9 @@ func openPartial(ctx context.Context, root *os.Root, f File, address string, coo
 	if info, e := parts.Lstat(p.blob); e == nil {
 		if !info.Mode().IsRegular() {
 			return fail(errors.New("下载分片不是普通文件"))
+		}
+		if info.Size() > 0 || p.state.Offset > 0 {
+			p.resumable = true
 		}
 		before = info
 	} else if !errors.Is(e, os.ErrNotExist) {
@@ -225,9 +273,27 @@ func openPartial(ctx context.Context, root *os.Root, f File, address string, coo
 	}
 	return p, nil
 }
+
+// discard removes bytes proven inconsistent with the fixed identity: the
+// published target, the blob and its marker. Resume is impossible for them.
+func (p *partial) discard(root *os.Root, f File) {
+	_ = p.root.Remove(p.marker)
+	_ = p.root.Remove(p.blob)
+	if directory, err := targetDirectory(root, path.Dir(f.Path), false); err == nil {
+		_ = directory.Remove(path.Base(f.Path))
+		directory.Close()
+	}
+}
+
 func (p *partial) close() {
 	if p.file != nil {
 		p.file.Close()
+	}
+	// Nothing was transferred, so there is no checkpoint to resume; leaving a
+	// marker behind would only block an otherwise empty parts directory.
+	if p.root != nil && !p.resumable {
+		_ = p.root.Remove(p.marker)
+		_ = p.root.Remove(p.blob)
 	}
 	if p.root != nil {
 		p.root.Close()
@@ -252,6 +318,9 @@ func (p *partial) checkpoint(ctx context.Context) error {
 		return errors.Join(ErrCheckpoint, err)
 	}
 	p.state.Offset, p.state.PrefixSHA256 = info.Size(), hash
+	if info.Size() > 0 {
+		p.resumable = true
+	}
 	return checkpointError(savePartial(context.WithoutCancel(ctx), p.root, p.marker, p.state))
 }
 func (p *partial) publish(ctx context.Context, root *os.Root, f File) (bool, time.Duration, error) {
@@ -276,6 +345,7 @@ func (p *partial) publish(ctx context.Context, root *os.Root, f File) (bool, tim
 		}
 		p.state.Offset = 0
 		p.state.PrefixSHA256 = ""
+		p.resumable = false
 		if e := savePartial(context.WithoutCancel(ctx), p.root, p.marker, p.state); e != nil {
 			return false, 0, e
 		}
@@ -326,7 +396,8 @@ func (p *partial) publish(ctx context.Context, root *os.Root, f File) (bool, tim
 		return false, 0, err
 	}
 	if err := Verify(ctx, root, f); err != nil {
-		return false, 0, err
+		p.discard(root, f)
+		return false, 0, errors.Join(ErrIntegrity, err)
 	}
 	if err := p.root.Remove(p.marker); err != nil {
 		return false, 0, err

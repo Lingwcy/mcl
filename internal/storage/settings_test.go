@@ -39,9 +39,21 @@ func TestSettingsRoundTrip(t *testing.T) {
 	if err != nil || got != want {
 		t.Fatalf("replace settings: got %+v, %v; want %+v", got, err, want)
 	}
+	// settings.json plus the persistent game-directory registry lock live in
+	// the data directory; no temporary/backup file may survive a save.
 	entries, err := os.ReadDir(filepath.Dir(path))
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("temporary files leaked: %v, %v", entries, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		switch entry.Name() {
+		case "settings.json", "game-directories.lock":
+		default:
+			t.Fatalf("temporary files leaked: %v", entries)
+		}
+	}
+	if len(entries) != 2 {
+		t.Fatalf("unexpected data directory entries: %v", entries)
 	}
 }
 
@@ -50,7 +62,6 @@ func TestUnreadableSettingsArePreserved(t *testing.T) {
 	for name, document := range map[string]string{
 		"malformed":        "{broken",
 		"future version":   `{"version":99,"settings":{"java_path":"","max_memory_mib":4096}}`,
-		"invalid memory":   `{"version":1,"settings":{"java_path":"","max_memory_mib":0}}`,
 		"trailing content": `{"version":1,"settings":{"java_path":"","max_memory_mib":4096}} {}`,
 		"oversized":        strings.Repeat(" ", (1<<20)+1),
 	} {

@@ -3,6 +3,7 @@ package download
 import (
 	"context"
 	"crypto/sha1"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -163,9 +164,17 @@ func TestCancellationAndTimeout(t *testing.T) {
 			case <-time.After(3 * time.Second):
 				t.Fatal("download did not stop")
 			}
+			// An interrupted transfer keeps a verifiable partial so the task can
+			// resume it; only the managed parts directory may remain, and the
+			// final target must never exist.
 			entries, _ := os.ReadDir(c.Root)
-			if len(entries) != 0 {
-				t.Fatalf("partial remains: %v", entries)
+			for _, entry := range entries {
+				if entry.Name() != partsDirectory {
+					t.Fatalf("partial remains: %v", entries)
+				}
+			}
+			if _, err := os.Stat(filepath.Join(c.Root, f.Path)); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("unverified target exists: %v", err)
 			}
 		})
 	}

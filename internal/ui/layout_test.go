@@ -2,6 +2,7 @@ package ui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"mcl/internal/app"
@@ -24,10 +25,14 @@ func TestWorkspaceNavigationAndSecondarySidebar(t *testing.T) {
 		t.Fatal("market category navigation must retain the search controls")
 	}
 	click(t, tester, "收起或展开侧栏")
+	tester.Advance(2 * time.Second)
+	tester.Frame()
 	if _, found := tester.Find("副侧栏"); found {
 		t.Fatal("secondary sidebar should collapse independently of the navigation rail")
 	}
 	click(t, tester, "Home")
+	tester.Advance(2 * time.Second)
+	tester.Frame()
 	if !tester.HasText("实例") || shell.sidebarCollapsed {
 		t.Fatal("Home must reopen the instance sidebar")
 	}

@@ -211,6 +211,7 @@ dispatch:
 	}
 	close(jobs)
 	wg.Wait()
+	pruneParts(ctx, root, c.Coordination)
 	return context.Cause(work)
 }
 

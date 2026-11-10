@@ -139,6 +139,7 @@ func (g GameSettings) Server() (host string, port int, err error) {
 			return "", 0, invalid
 		}
 	} else if strings.Count(value, ":") == 1 || strings.HasPrefix(value, "[") {
+		bracketed := strings.HasPrefix(value, "[")
 		var rawPort string
 		host, rawPort, err = net.SplitHostPort(value)
 		if err != nil {
@@ -146,6 +147,11 @@ func (g GameSettings) Server() (host string, port int, err error) {
 		}
 		port, err = strconv.Atoi(rawPort)
 		if err != nil || port < 1 || port > 65535 {
+			return "", 0, invalid
+		}
+		// Square brackets are the IPv6 form only; a bracketed hostname would
+		// reach the game as a literal address the client cannot resolve.
+		if bracketed && net.ParseIP(host) == nil {
 			return "", 0, invalid
 		}
 	} else if strings.Contains(value, ":") && net.ParseIP(value) == nil {

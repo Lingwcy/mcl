@@ -33,7 +33,7 @@ func ReadSwiftProfiles(ctx context.Context, snapshot []byte, selected string) ([
 	var prepare func(uintptr, string, int32, *uintptr, uintptr) int32
 	var finalize func(uintptr) int32
 	var step func(uintptr) int32
-	var columnText func(uintptr, int32) uintptr
+	var columnText func(uintptr, int32) *byte
 	var columnBytes func(uintptr, int32) int32
 	var columnType func(uintptr, int32) int32
 	var limit func(uintptr, int32, int32) int32
@@ -82,10 +82,10 @@ func ReadSwiftProfiles(ctx context.Context, snapshot []byte, selected string) ([
 			return "", nil
 		}
 		address := columnText(statement, index)
-		if address == 0 {
+		if address == nil {
 			return "", errors.New("Swift实例索引文本不可读取")
 		}
-		return string(unsafe.Slice((*byte)(unsafe.Pointer(address)), int(length))), nil
+		return string(unsafe.Slice(address, int(length))), nil
 	}
 	makeStatement := func(query string) (uintptr, error) {
 		var statement uintptr
