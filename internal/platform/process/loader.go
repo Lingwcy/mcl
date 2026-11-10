@@ -3,12 +3,12 @@ package process
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"mcl/internal/core/diagnostics"
@@ -21,7 +21,8 @@ import (
 // RunLoaderProcessor owns a short-lived process tree entirely separate from
 // registered game sessions. Its work directory is private installation staging.
 func RunLoaderProcessor(ctx context.Context, executable, work string, args []string) error {
-	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
+	parent := ctx
+	ctx, cancel := context.WithTimeout(ctx, processorExecutionTimeout)
 	defer cancel()
 	args = append([]string{"-Duser.home=" + work, "-Djava.io.tmpdir=" + work}, args...)
 	runtime, err := java.Probe(ctx, executable)
@@ -93,18 +94,21 @@ func RunLoaderProcessor(ctx context.Context, executable, work string, args []str
 	stdout, stderr := output.Stream("stdout"), output.Stream("stderr")
 	defer stdout.Close()
 	defer stderr.Close()
-	cmd.Stdout, cmd.Stderr = processorEvidenceWriter{ctx, stdout}, processorEvidenceWriter{ctx, stderr}
+	var outputBytes atomic.Uint64
+	cmd.Stdout, cmd.Stderr = processorEvidenceWriter{ctx: ctx, writer: stdout, bytes: &outputBytes}, processorEvidenceWriter{ctx: ctx, writer: stderr, bytes: &outputBytes}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("无法启动 Java 安装处理器: %w", err)
+		return processorRunFailure("start", err, outputBytes.Load(), output)
 	}
 	control, err := attach(cmd, ctx.Err)
 	if err != nil {
 		cmd.Process.Kill()
 		cmd.Wait()
-		return err
+		stdout.Close()
+		stderr.Close()
+		return processorRunFailure("attach", err, outputBytes.Load(), output)
 	}
 	defer control.close()
 	done := make(chan error, 1)
@@ -115,32 +119,31 @@ func RunLoaderProcessor(ctx context.Context, executable, work string, args []str
 	case <-ctx.Done():
 		control.kill()
 		<-done
-		return ctx.Err()
+		if err := parent.Err(); err != nil {
+			return err
+		}
+		stdout.Close()
+		stderr.Close()
+		return processorRunFailure("timeout", ctx.Err(), outputBytes.Load(), output)
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		if parentErr := parent.Err(); parentErr != nil {
+			return parentErr
+		}
+		stdout.Close()
+		stderr.Close()
+		return processorRunFailure("timeout", err, outputBytes.Load(), output)
 	}
 	if err == nil {
 		return nil
 	}
 	stdout.Close()
 	stderr.Close()
-	lines := output.Snapshot().Lines
-	var tail []string
-	for _, line := range lines[max(0, len(lines)-3):] {
-		text := strings.TrimSpace(line.Text)
-		runes := []rune(text)
-		if len(runes) > 300 {
-			text = string(runes[:300])
-		}
-		if text != "" {
-			tail = append(tail, text)
-		}
+	kind := "exit"
+	if errors.Is(err, exec.ErrWaitDelay) {
+		kind = "drain"
 	}
-	if len(tail) == 0 {
-		return err
-	}
-	return errors.New(err.Error() + "\n" + strings.Join(tail, "\n"))
+	return processorRunFailure(kind, err, outputBytes.Load(), output)
 }
 
 func processorEnvironment() []string {

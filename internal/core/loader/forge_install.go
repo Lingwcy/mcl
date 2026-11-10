@@ -140,7 +140,7 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err != nil {
 		return Profile{}, err
 	}
-	_, formatEvidence := diagnostics.Start(ctx, "loader-metadata", "installer-format:"+format)
+	_, formatEvidence := diagnostics.Start(ctx, "metadata", "installer-format:"+format)
 	formatEvidence.End()
 	legacy, isLegacy, err := readLegacyForgeSpec(ctx, z, request, base)
 	if err != nil {
@@ -223,6 +223,15 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	}
 	if err := validateProcessorPaths(libraries, processors); err != nil {
 		return Profile{}, err
+	}
+	_, planEvidence := diagnostics.Start(ctx, "metadata", "processor-plan")
+	planErr := validateProcessorPlan(z, libraries, processors, resources, version.Libraries)
+	if planErr != nil {
+		planEvidence.Fail(planErr)
+	}
+	planEvidence.End()
+	if planErr != nil {
+		return Profile{}, planErr
 	}
 	clientID := base.ID
 	if base.ClientVersion != "" {
@@ -374,128 +383,141 @@ func planForgeInputs(z *archive.Zip, libraries map[string]forgeLibrary, processo
 	return inputs, mappings, nil
 }
 
-func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Root, stagePath, executable string, platform meta.Platform, base meta.Version, processors []preparedProcessor, known map[string]meta.Download, report func(download.Progress), javaReport func(java.Progress), gameBaseline ...int) (resultErr error) {
+func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Root, stagePath, executable string, platform meta.Platform, base meta.Version, processors []preparedProcessor, known map[string]meta.Download, report func(download.Progress), javaReport func(java.Progress), gameBaseline ...int) error {
 	classes := 0
 	runtimes := make(map[int]java.Runtime)
 	progress := download.Progress{TotalFiles: len(processors)}
 	report(progress)
 	for index, p := range processors {
-		ctx, step := diagnostics.Start(ctx, "processor", p.jar)
-		step.Step(index+1, len(processors))
-		defer func() {
-			if resultErr != nil {
-				step.Fail(resultErr)
-			}
-			step.End()
-		}()
-		if err := ctx.Err(); err != nil {
-			return err
+		if p.position == 0 {
+			p.position = index + 1
+			p.total = len(processors)
 		}
-		if err := verifyProcessorInputs(ctx, stage, known, p.inputs); err != nil {
-			return err
+		if p.coordinate == "" {
+			if coordinate, err := meta.CoordinateFromPath(strings.TrimPrefix(p.jar, "libraries/")); err == nil {
+				p.coordinate = coordinate.String()
+			}
 		}
-		reused, err := prepareProcessorOutputs(ctx, stage, known, p)
-		if err != nil {
-			return err
+		subject := p.coordinate
+		if !diagnostics.SafeSubject(subject) || subject == "" {
+			subject = "processor"
 		}
-		if reused {
-			step.Work()
-			step.End()
-			progress.Files++
-			report(progress)
-			continue
-		}
-		if p.copyMappings != "" {
-			if err := prepareForgeMappings(ctx, cache, stage, base, p); err != nil {
+		ctx, step := diagnostics.Start(ctx, "processor", subject)
+		step.Step(p.position, p.total)
+		err := func() (stepErr error) {
+			phase := "输入核验"
+			defer func() {
+				if stepErr != nil {
+					stepErr = p.failure(phase, stepErr)
+					step.Fail(stepErr)
+				}
+				step.End()
+			}()
+			if err := ctx.Err(); err != nil {
 				return err
-			}
-		} else if p.nativeTask != "" {
-			if err := runNativeProcessor(ctx, stage, known, p); err != nil {
-				return err
-			}
-		} else {
-			if s.run == nil {
-				return errors.New("Java 安装处理器未配置")
-			}
-			main, err := forgeJarMain(ctx, stage, p.jar, p.classpath)
-			if err != nil {
-				return err
-			}
-			// Modern installers run with at least the official game JVM baseline.
-			// Java 8 class headers only describe the bytecode floor; they do not
-			// require a Java 8 process for a Java 17/21 game installation. Keep
-			// the existing exact-8 policy for historical game/tool combinations.
-			minimum := max(8, base.Java.Major)
-			if len(gameBaseline) > 0 {
-				minimum = max(minimum, gameBaseline[0])
-			}
-			var classpath []string
-			for _, relative := range p.classpath {
-				file, ok := known[relative]
-				if !ok {
-					return fmt.Errorf("安装处理器缺少已校验依赖 %s", relative)
-				}
-				entry := ""
-				if relative == p.jar {
-					entry = main
-				}
-				required, err := processorJarMinimum(ctx, stage, relative, file, entry, &classes, p.classpath)
-				if err != nil {
-					return fmt.Errorf("分析安装工具Java要求 %s: %w", relative, err)
-				}
-				minimum = max(minimum, required)
-				classpath = append(classpath, filepath.Join(stagePath, filepath.FromSlash(relative)))
-			}
-			requirement, err := processorRequirement(ctx, minimum, platform)
-			if err != nil {
-				return err
-			}
-			runtime, found := runtimes[minimum]
-			if !found || requirement.CheckRuntime(runtime) != nil {
-				runtime, err = s.resolveProcessorRequirement(ctx, requirement, []string{executable}, javaReport)
-				if err != nil {
-					return err
-				}
-				runtimes[minimum] = runtime
-			}
-			diagnostics.SetFacts(ctx, runtime.DiagnosticFacts(true))
-			// Java installation may take time; recheck the fixed tools immediately
-			// before handing their paths to the process adapter.
-			for _, relative := range p.classpath {
-				file := known[relative]
-				if _, err := hashForgeFile(ctx, stage, relative, file.SHA1, file.Size); err != nil {
-					return err
-				}
 			}
 			if err := verifyProcessorInputs(ctx, stage, known, p.inputs); err != nil {
 				return err
 			}
-			args := append([]string{"-Xmx1024m", "-Dfile.encoding=UTF-8", "-Djava.net.preferIPv4Stack=true", "-cp",
-				strings.Join(classpath, string(os.PathListSeparator)), main}, p.args...)
-			runctx, err := java.WithRequirement(ctx, requirement)
+			phase = "复用检查"
+			reused, err := prepareProcessorOutputs(ctx, stage, known, p)
 			if err != nil {
 				return err
 			}
-			if err := s.run(runctx, runtime.Executable, filepath.Join(stagePath, "work"), args); err != nil {
-				return fmt.Errorf("安装处理器 %d (%s): %w", index+1, path.Base(p.jar), err)
+			if reused {
+				step.Work()
+				return nil
 			}
-		}
-		for target, expected := range p.outputs {
-			identity, err := hashForgeFile(ctx, stage, target, expected, 0)
-			if err != nil {
+			phase = "生成产物"
+			if p.copyMappings != "" {
+				if err := prepareForgeMappings(ctx, cache, stage, base, p); err != nil {
+					return err
+				}
+			} else if p.nativeTask != "" {
+				if err := runNativeProcessor(ctx, stage, known, p); err != nil {
+					return err
+				}
+			} else {
+				if s.run == nil {
+					return errors.New("Java 安装处理器未配置")
+				}
+				phase = "工具检查"
+				main, err := forgeJarMain(ctx, stage, p.jar, p.classpath)
+				if err != nil {
+					return err
+				}
+				// Modern installers run with at least the official game JVM baseline.
+				// Java 8 class headers only describe the bytecode floor; they do not
+				// require a Java 8 process for a Java 17/21 game installation. Keep
+				// the existing exact-8 policy for historical game/tool combinations.
+				minimum := max(8, base.Java.Major)
+				if len(gameBaseline) > 0 {
+					minimum = max(minimum, gameBaseline[0])
+				}
+				var classpath []string
+				for _, relative := range p.classpath {
+					file, ok := known[relative]
+					if !ok {
+						return fmt.Errorf("安装处理器缺少已校验依赖 %s", relative)
+					}
+					entry := ""
+					if relative == p.jar {
+						entry = main
+					}
+					required, err := processorJarMinimum(ctx, stage, relative, file, entry, &classes, p.classpath)
+					if err != nil {
+						return fmt.Errorf("分析安装工具Java要求 %s: %w", relative, err)
+					}
+					minimum = max(minimum, required)
+					classpath = append(classpath, filepath.Join(stagePath, filepath.FromSlash(relative)))
+				}
+				phase = "工具Java"
+				requirement, err := processorRequirement(ctx, minimum, platform)
+				if err != nil {
+					return err
+				}
+				runtime, found := runtimes[minimum]
+				if !found || requirement.CheckRuntime(runtime) != nil {
+					runtime, err = s.resolveProcessorRequirement(ctx, requirement, []string{executable}, javaReport)
+					if err != nil {
+						return err
+					}
+					runtimes[minimum] = runtime
+				}
+				diagnostics.SetFacts(ctx, runtime.DiagnosticFacts(true))
+				phase = "交接前核验"
+				// Java installation may take time; recheck the fixed tools immediately
+				// before handing their paths to the process adapter.
+				for _, relative := range p.classpath {
+					file := known[relative]
+					if _, err := hashForgeFile(ctx, stage, relative, file.SHA1, file.Size); err != nil {
+						return err
+					}
+				}
+				if err := verifyProcessorInputs(ctx, stage, known, p.inputs); err != nil {
+					return err
+				}
+				args := append([]string{"-Xmx1024m", "-Dfile.encoding=UTF-8", "-Djava.net.preferIPv4Stack=true", "-cp",
+					strings.Join(classpath, string(os.PathListSeparator)), main}, p.args...)
+				runctx, err := java.WithRequirement(ctx, requirement)
+				if err != nil {
+					return err
+				}
+				phase = "执行进程"
+				if err := s.run(runctx, runtime.Executable, filepath.Join(stagePath, "work"), args); err != nil {
+					return err
+				}
+			}
+			phase = "输出核验"
+			if err := commitProcessorOutputs(ctx, stage, known, p); err != nil {
 				return err
 			}
-			known[target] = identity
+			step.Work()
+			return nil
+		}()
+		if err != nil {
+			return err
 		}
-		var generatedBytes int64
-		for _, identity := range known {
-			generatedBytes += identity.Size
-			if generatedBytes > 4<<30 {
-				return errors.New("处理器输入及生成文件累计超过4GiB")
-			}
-		}
-		step.Work()
-		step.End()
 		progress.Files++
 		report(progress)
 	}
@@ -634,9 +656,14 @@ func hashForgeFile(ctx context.Context, root *os.Root, name, expected string, ex
 	}
 	current, err := root.Lstat(name)
 	sum := hex.EncodeToString(hash.Sum(nil))
-	if err != nil || n != size || !os.SameFile(before, current) || current.Size() != size || !current.ModTime().Equal(before.ModTime()) ||
-		(expected != "" && !strings.EqualFold(sum, expected)) {
+	if err != nil || n != size || !os.SameFile(before, current) || current.Size() != size || !current.ModTime().Equal(before.ModTime()) {
 		return meta.Download{}, fmt.Errorf("安装处理器文件已改变或摘要不符 %s", name)
+	}
+	if err := ctx.Err(); err != nil {
+		return meta.Download{}, err
+	}
+	if expected != "" && !strings.EqualFold(sum, expected) {
+		return meta.Download{}, diagnostics.Wrap("integrity", fmt.Errorf("%w: %s", errForgeDigestMismatch, name))
 	}
 	return meta.Download{Path: name, SHA1: sum, Size: size}, ctx.Err()
 }

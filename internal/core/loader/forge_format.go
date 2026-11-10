@@ -9,10 +9,11 @@ import (
 )
 
 const (
-	ForgeFormatLegacy     = "install-version-info"
-	ForgeFormatEmbedded   = "embedded-maven-spec0"
-	ForgeFormatProcessors = "client-processors-spec1"
-	ForgeAdapterPolicy    = "official-installer-v2"
+	ForgeFormatLegacy          = "install-version-info"
+	ForgeFormatEmbedded        = "embedded-maven-spec0"
+	ForgeFormatProcessors      = "client-processors-spec1"
+	ForgeAdapterPolicy         = "official-installer-v3"
+	previousForgeAdapterPolicy = "official-installer-v2"
 )
 
 func installerFormat(data []byte) (string, error) {

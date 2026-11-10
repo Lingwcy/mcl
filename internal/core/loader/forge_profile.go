@@ -13,6 +13,8 @@ import (
 )
 
 type forgeProcessor struct {
+	Position  int `json:"-"`
+	Total     int `json:"-"`
 	Jar       string
 	Classpath []string
 	Args      []string
@@ -146,13 +148,17 @@ func readForgeSpec(ctx context.Context, z *archive.Zip, request Request) (forgeS
 			return spec, version, err
 		}
 	}
+	for index := range spec.Processors {
+		spec.Processors[index].Position = index + 1
+		spec.Processors[index].Total = len(spec.Processors)
+	}
 	for _, processor := range spec.Processors {
-		if len(processor.Sides) > 2 {
-			return spec, version, errors.New("安装处理器sides数量无效")
+		if len(processor.Sides) > 2 || len(processor.Sides) == 2 && processor.Sides[0] == processor.Sides[1] {
+			return spec, version, processorFailure(processor.Position, processor.Jar, "客户端用途", identityError("sides数量无效或重复"))
 		}
 		for _, side := range processor.Sides {
 			if side != "client" && side != "server" {
-				return spec, version, errors.New("未知安装处理器用途，不能静默省略")
+				return spec, version, processorFailure(processor.Position, processor.Jar, "客户端用途", identityError("未知sides用途，不能静默省略"))
 			}
 		}
 	}

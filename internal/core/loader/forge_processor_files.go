@@ -103,14 +103,20 @@ func prepareProcessorOutputs(ctx context.Context, stage *os.Root, known map[stri
 		}
 		if expected == "" {
 			complete = false
-		} else if _, err := hashForgeFile(ctx, stage, name, expected, 0); err != nil {
+		} else if !strings.EqualFold(previous.SHA1, expected) {
 			complete = false
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
 	}
 	if complete {
 		return true, nil
 	}
 	for name := range p.outputs {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
 		if info, err := stage.Lstat(name); err == nil && info.IsDir() && p.nativeTask == "MCP_DATA" {
 			if err := stage.RemoveAll(name); err != nil {
 				return false, err

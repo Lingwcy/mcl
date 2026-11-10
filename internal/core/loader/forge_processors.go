@@ -22,6 +22,8 @@ type forgeValue struct {
 }
 
 type preparedProcessor struct {
+	coordinate       string
+	position, total  int
 	jar              string
 	classpath        []string
 	args             []string
@@ -153,10 +155,10 @@ func forgeArg(input string, values map[string]forgeValue) (forgeValue, error) {
 				return forgeValue{path.Join(value.text, suffix[1:]), true}, nil
 			}
 		}
-		return forgeValue{}, fmt.Errorf("未知或不安全的安装处理器变量 %q", input)
+		return forgeValue{}, errors.New("未知或不安全的安装处理器变量")
 	}
 	if !safeForgeLiteral(input) {
-		return forgeValue{}, fmt.Errorf("不支持的安装处理器参数 %q", input)
+		return forgeValue{}, errors.New("不支持的安装处理器参数")
 	}
 	return forgeValue{input, false}, nil
 }
@@ -177,21 +179,29 @@ func knownForgeProcessor(c meta.Coordinate) bool {
 	return false
 }
 
-func prepareForgeProcessor(spec forgeProcessor, values map[string]forgeValue, stage string) (preparedProcessor, error) {
-	var result preparedProcessor
+func prepareForgeProcessor(spec forgeProcessor, values map[string]forgeValue, stage string) (result preparedProcessor, resultErr error) {
+	result.coordinate = spec.Jar
+	result.position = spec.Position
+	result.total = spec.Total
+	defer func() {
+		if resultErr != nil {
+			resultErr = result.failure("解析声明", resultErr)
+		}
+	}()
 	coordinate, err := meta.ParseCoordinate(spec.Jar)
 	if err != nil {
-		return result, err
+		return result, identityError("工具坐标无效")
 	}
+	result.coordinate = coordinate.String()
 	if !knownForgeProcessor(coordinate) || len(spec.Classpath) > 128 || len(spec.Args) > 128 || len(spec.Outputs) > 16 {
-		return result, fmt.Errorf("不支持的客户端安装处理器 %s", spec.Jar)
+		return result, identityError("工具类型或参数数量尚未支持")
 	}
 	result.jar = path.Join("libraries", coordinate.Path())
 	result.classpath = append(result.classpath, result.jar)
 	for _, name := range spec.Classpath {
 		p, err := forgeMaven(name)
 		if err != nil {
-			return result, err
+			return result, identityError("classpath坐标无效")
 		}
 		if !slices.Contains(result.classpath, p) {
 			result.classpath = append(result.classpath, p)
