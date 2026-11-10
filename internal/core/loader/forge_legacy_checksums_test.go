@@ -210,3 +210,19 @@ func TestLegacySidecarPathHonorsRemainingBudget(t *testing.T) {
 		t.Fatal(err, tr.gets)
 	}
 }
+
+func TestLegacyExplicitArtifactMustMatchInstallerPinBeforeTransfer(t *testing.T) {
+	s, tr, lib, pin := legacyChecksumFixture(t)
+	c, _ := meta.ParseCoordinate(lib.Name)
+	lib.Downloads.Artifact = &meta.Download{Path: c.Path(), URL: "https://maven.minecraftforge.net/" + c.Path(), SHA1: strings.Repeat("0", 40), Size: int64(len(tr.body))}
+	if _, err := s.legacyForgeLibraryIdentity(t.Context(), lib, meta.Version{}); err == nil {
+		t.Fatal("conflicting explicit digest accepted")
+	}
+	if tr.gets != 0 || tr.heads != 0 || tr.sidecars != 0 {
+		t.Fatal("identity contradiction caused network access", tr)
+	}
+	lib.Downloads.Artifact.SHA1 = pin
+	if _, err := s.legacyForgeLibraryIdentity(t.Context(), lib, meta.Version{}); err != nil {
+		t.Fatal(err)
+	}
+}

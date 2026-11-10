@@ -153,6 +153,11 @@ func forgeLibraries(groups ...[]meta.Library) (map[string]forgeLibrary, error) {
 					file.Path = relative
 				}
 			}
+			if file.URL != "" {
+				if _, err := meta.BindMavenURL(file.URL, coordinate); err != nil {
+					return nil, identityError("Forge库仓库地址与声明坐标不一致")
+				}
+			}
 			if file.Path != relative || (file.URL != "" && (!AllowedLibraryURL(file.URL) || file.Validate() != nil || file.Size > 512<<20)) {
 				return nil, fmt.Errorf("加载器库来源、摘要或路径无效 %s", library.Name)
 			}

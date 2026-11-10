@@ -48,3 +48,19 @@ func TestArtifactBoundaryRejectsRawPathsAndInventedHeaderEvidence(t *testing.T) 
 		}
 	}
 }
+
+func TestNativeHeadersOutliveLargeVerifiedLoaderEvidence(t *testing.T) {
+	var snapshot Snapshot
+	ctx := WithObserver(t.Context(), snapshot.Apply)
+	for i := range MaxArtifacts {
+		ReportArtifact(ctx, Artifact{Path: fmt.Sprintf("cache/dependency-%d.bin", i), Role: "loader-dependency", Coordinate: fmt.Sprintf("org.example:dependency:%d", i), Repository: "forge", SHA1: strings.Repeat("a", 40), State: "verified"})
+	}
+	ReportArtifact(ctx, Artifact{Path: "cache/native.jar", Member: "lib.so", Role: "native-binary", State: "header", Format: "elf", Architectures: "amd64"})
+	found := false
+	for _, a := range snapshot.Artifacts {
+		found = found || a.Role == "native-binary"
+	}
+	if !found || len(snapshot.Artifacts) != MaxArtifacts || snapshot.ArtifactsDropped != 1 {
+		t.Fatal("native observation was displaced by dependency volume", found, len(snapshot.Artifacts), snapshot.ArtifactsDropped)
+	}
+}

@@ -83,6 +83,7 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 		return Profile{}, fmt.Errorf("读取官方安装包摘要和大小: %w", err)
 	}
 	bundle := forgeInput(installer)
+	reportMavenInput(ctx, coordinate, installer, "loader-installer", "planned", bundle.Path)
 	progress := func(stage string) func(download.Progress) {
 		return func(p download.Progress) {
 			if report != nil {
@@ -93,6 +94,7 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err := s.downloads.Run(ctx, []download.File{bundle}, progress("loader-download")); err != nil {
 		return Profile{}, err
 	}
+	reportMavenInput(ctx, coordinate, installer, "loader-installer", "verified", bundle.Path)
 	cache, err := os.OpenRoot(s.downloads.Root)
 	if err != nil {
 		return Profile{}, err
@@ -154,6 +156,7 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 		if err := fileio.PublishDirectory(parent, temporary, profile.Generation); err != nil {
 			return Profile{}, err
 		}
+		reportLoaderGeneration(ctx, profile)
 		return profile, nil
 	}
 	spec, version, err := readForgeSpec(ctx, z, request, versionID)
@@ -232,6 +235,23 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 			return Profile{}, err
 		}
 		known[target] = identity
+		coordinate, err := meta.ParseCoordinate(libraries[key].name)
+		if err != nil {
+			return Profile{}, err
+		}
+		role := "loader-dependency"
+		for _, processor := range processors {
+			if processor.jar == target {
+				role = "loader-tool"
+				break
+			}
+		}
+		observed := identity
+		observed.URL = file.URL
+		if z.Has(path.Join("maven", key)) {
+			observed.URL = ""
+		}
+		reportMavenInput(ctx, coordinate, observed, role, "verified", path.Join(parentName, temporary, target))
 	}
 	known["work/installer.jar"] = installer
 	known["work/client.jar"] = client.Download
@@ -285,6 +305,7 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err := fileio.PublishDirectory(parent, temporary, profile.Generation); err != nil {
 		return Profile{}, err
 	}
+	reportLoaderGeneration(ctx, profile)
 	return profile, nil
 }
 

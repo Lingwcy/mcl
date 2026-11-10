@@ -53,7 +53,7 @@ func (g Group) Validate() error {
 	if err := g.Evidence.Validate(); err != nil {
 		return err
 	}
-	if (g.Schema < 1 || g.Schema > 5) || !instance.ValidID(g.ID) || g.CreatedAt.IsZero() || g.UpdatedAt.IsZero() || !utf8.ValidString(g.Intent.Name) || len(g.Intent.Name) > 320 || strings.ContainsFunc(g.Intent.Name, unicode.IsControl) || g.Intent.InstanceID != "" && !instance.ValidID(g.Intent.InstanceID) || len(g.Intent.Payload) > 4<<20 || !json.Valid(g.Intent.Payload) || len(g.Files) > MaxFiles {
+	if (g.Schema < 1 || g.Schema > 6) || !instance.ValidID(g.ID) || g.CreatedAt.IsZero() || g.UpdatedAt.IsZero() || !utf8.ValidString(g.Intent.Name) || len(g.Intent.Name) > 320 || strings.ContainsFunc(g.Intent.Name, unicode.IsControl) || g.Intent.InstanceID != "" && !instance.ValidID(g.Intent.InstanceID) || len(g.Intent.Payload) > 4<<20 || !json.Valid(g.Intent.Payload) || len(g.Files) > MaxFiles {
 		return errors.New("下载任务记录身份或边界无效")
 	}
 	switch g.Intent.Kind {

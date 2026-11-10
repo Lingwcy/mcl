@@ -21,6 +21,44 @@ func (e *metadataStatusError) Error() string {
 	return fmt.Sprintf("加载器服务返回 HTTP %d", e.status)
 }
 
+func legacyChecksumPins(checksums []string) ([]string, map[string]bool, error) {
+	if len(checksums) > 16 {
+		return nil, nil, identityError("旧Forge依赖checksum数量超过边界")
+	}
+	pins := make([]string, 0, len(checksums))
+	seen := make(map[string]bool)
+	for _, pin := range checksums {
+		if !meta.ValidSHA1(pin) {
+			return nil, nil, identityError("旧Forge依赖checksum声明无效")
+		}
+		pin = strings.ToLower(pin)
+		if !seen[pin] {
+			pins = append(pins, pin)
+			seen[pin] = true
+		}
+	}
+	return pins, seen, nil
+}
+func validateLegacyFixedArtifact(file meta.Download, relative string, checksums []string, maxSize int64) error {
+	if err := file.Validate(); err != nil {
+		return identityError("旧Forge显式制品身份无效")
+	}
+	if err := validateMavenLocation(file.URL, relative); err != nil {
+		return err
+	}
+	if file.Path != relative || file.Size > maxSize {
+		return identityError("旧Forge显式制品路径或剩余预算不符")
+	}
+	pins, seen, err := legacyChecksumPins(checksums)
+	if err != nil {
+		return err
+	}
+	if len(pins) > 0 && !seen[strings.ToLower(file.SHA1)] {
+		return identityError("旧Forge显式制品与安装器checksum矛盾")
+	}
+	return nil
+}
+
 // Legacy installers may pin several historical variants of one artifact while
 // their repository serves the JAR without a SHA-1 sidecar. Never infer identity
 // from HEAD alone, a filename, a different coordinate or freshly downloaded bytes.
@@ -34,20 +72,9 @@ func (s *ForgeInstaller) legacyForgePinnedMetadata(ctx context.Context, address,
 	}
 	ctx, evidence := diagnostics.Start(ctx, "metadata", relative)
 	defer evidence.End()
-	if len(checksums) > 16 {
-		return meta.Download{}, identityError("旧Forge依赖checksum数量超过边界")
-	}
-	pins := make([]string, 0, len(checksums))
-	seen := make(map[string]bool)
-	for _, pin := range checksums {
-		if !meta.ValidSHA1(pin) {
-			return meta.Download{}, identityError("旧Forge依赖checksum声明无效")
-		}
-		pin = strings.ToLower(pin)
-		if !seen[pin] {
-			pins = append(pins, pin)
-			seen[pin] = true
-		}
+	pins, seen, err := legacyChecksumPins(checksums)
+	if err != nil {
+		return meta.Download{}, err
 	}
 	fixed, err := s.catalog.mavenMetadata(ctx, address, relative)
 	if ctx.Err() != nil {

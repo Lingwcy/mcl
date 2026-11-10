@@ -39,6 +39,17 @@ func ParseCoordinate(value string) (Coordinate, error) {
 	return coordinate, nil
 }
 
+func (c Coordinate) String() string {
+	value := c.Group + ":" + c.Artifact + ":" + c.Version
+	if c.Classifier != "" {
+		value += ":" + c.Classifier
+	}
+	if c.Extension != "jar" {
+		value += "@" + c.Extension
+	}
+	return value
+}
+
 func (c Coordinate) Path() string {
 	name := c.Artifact + "-" + c.Version
 	if c.Classifier != "" {

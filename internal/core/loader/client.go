@@ -234,9 +234,9 @@ func (c *Client) Resolve(ctx context.Context, request Request) (Profile, error) 
 	if err != nil {
 		return Profile{}, err
 	}
-	var raw rawProfile
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return Profile{}, errors.New("加载器启动配置无效")
+	raw, err := decodeLoaderProfile(data)
+	if err != nil {
+		return Profile{}, err
 	}
 	if raw.InheritsFrom != request.GameVersion || len(raw.Libraries) == 0 || len(raw.Libraries) > 128 {
 		return Profile{}, errors.New("加载器配置继承版本或依赖数量无效")
@@ -265,7 +265,12 @@ func (c *Client) Resolve(ctx context.Context, request Request) (Profile, error) 
 				expectedPath := coordinate.Path()
 				artifact := lib.Downloads.Artifact
 				if artifact == nil {
-					address := strings.TrimRight(lib.URL, "/") + "/" + expectedPath
+					root, err := meta.MavenRepositoryRoot(lib.URL)
+					if err != nil {
+						cancel(identityError("加载器库仓库根无效"))
+						return
+					}
+					address := root + expectedPath
 					if !AllowedLibraryURL(address) {
 						cancel(errors.New("加载器库来源不受支持"))
 						return
@@ -283,6 +288,11 @@ func (c *Client) Resolve(ctx context.Context, request Request) (Profile, error) 
 						artifact.Path = expectedPath
 					}
 				}
+				if _, err := meta.BindMavenURL(artifact.URL, coordinate); err != nil {
+					cancel(identityError("加载器库地址与声明坐标不一致"))
+					return
+				}
+				reportMavenInput(work, coordinate, *artifact, "loader-dependency", "planned", "cache/libraries/"+artifact.Path)
 				p.Libraries[index] = meta.Library{Name: lib.Name, Rules: lib.Rules}
 				p.Libraries[index].Downloads.Artifact = artifact
 			}

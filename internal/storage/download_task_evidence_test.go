@@ -68,4 +68,16 @@ func TestTaskStoreReadsLegacyAndRoundTripsBoundedEvidence(t *testing.T) {
 	if got.Schema != 5 || got.Evidence.Code != "metadata-budget" {
 		t.Fatal(got)
 	}
+	group.Schema = 6
+	diagnostics.ReportArtifact(ctx, diagnostics.Artifact{Path: "cache/installer.bin", Role: "loader-installer", Coordinate: "net.minecraftforge:forge:1.12.2-14.23.5.2860:installer", Repository: "forge", State: "planned"})
+	if err := store.Save(t.Context(), group); err != nil {
+		t.Fatal(err)
+	}
+	got, err = store.Get(t.Context(), group.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Schema != 6 || len(got.Evidence.Artifacts) != 2 || got.Evidence.Artifacts[1].Repository != "forge" {
+		t.Fatal(got)
+	}
 }

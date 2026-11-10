@@ -33,3 +33,21 @@ func TestLoaderMergeKeepsPinnedConditionalVariants(t *testing.T) {
 		t.Fatal("same conditional path accepted conflicting digest")
 	}
 }
+
+func TestCachedLoaderProfileCannotBindAnotherCoordinateOnAllowedHost(t *testing.T) {
+	_, base, _, _ := legacyFixture(t)
+	request := Request{Type: "fabric", Version: "0.16.0", GameVersion: base.ID, BaseSHA1: strings.Repeat("a", 40)}
+	c, _ := meta.ParseCoordinate("net.fabricmc:fabric-loader:0.16.0")
+	library := meta.Library{Name: c.String()}
+	library.Downloads.Artifact = &meta.Download{Path: c.Path(), URL: "https://maven.fabricmc.net/" + c.Path(), SHA1: strings.Repeat("b", 40), Size: 100}
+	profile := Profile{Request: request, ID: "fabric-fixture", MainClass: "net.fabricmc.loader.impl.launch.knot.KnotClient", Libraries: []meta.Library{library}}
+	if err := profile.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	other := c
+	other.Version = "0.15.0"
+	profile.Libraries[0].Downloads.Artifact.URL = "https://maven.fabricmc.net/" + other.Path()
+	if err := profile.Validate(); err == nil {
+		t.Fatal("trusted hostname allowed another coordinate")
+	}
+}

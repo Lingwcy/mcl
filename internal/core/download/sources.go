@@ -22,9 +22,9 @@ type sourceHealth struct {
 	until  time.Time
 }
 
-// mirrorURL deliberately excludes platform files, signed query URLs, credentials
-// and arbitrary Maven repositories. The fixed Temurin archive mapping is the
-// only Java mirror route. Callers must already hold an independent pinned digest.
+// mirrorURL excludes signed query URLs, credentials and arbitrary Maven
+// repositories. Only existing Mojang routes, fixed Forge distributions and
+// fixed Temurin archives are mapped. Callers hold an independent pinned digest.
 func mirrorURL(original string) string {
 	u, err := url.Parse(original)
 	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || !meta.ValidPath(strings.TrimPrefix(u.Path, "/")) {
@@ -45,6 +45,9 @@ func mirrorURL(original string) string {
 	if u.RawPath != "" {
 		return ""
 	}
+	if fixed := forgeDistributionMirror(original); fixed != "" {
+		return fixed
+	}
 	switch strings.ToLower(u.Hostname()) {
 	case "resources.download.minecraft.net":
 		return mirrorOrigin + "/assets" + u.Path
@@ -60,9 +63,13 @@ func mirrorURL(original string) string {
 }
 
 func (c *TransferControl) candidates(original string) []string {
+	official := []string{original}
+	if alternate := centralAlternate(original); alternate != "" {
+		official = append(official, alternate)
+	}
 	mirror := mirrorURL(original)
 	if c == nil || mirror == "" {
-		return []string{original}
+		return official
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -78,7 +85,7 @@ func (c *TransferControl) candidates(original string) []string {
 	case SourceOfficialFirst:
 		return []string{original, mirror}
 	default:
-		return []string{original}
+		return official
 	}
 }
 

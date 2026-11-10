@@ -2,7 +2,6 @@ package loader
 
 import (
 	"bytes"
-	"net/url"
 	"path"
 	"strings"
 
@@ -47,21 +46,15 @@ func parseMavenSHA1(data []byte, relative string) (string, error) {
 	}
 	return strings.ToLower(digest), nil
 }
-func validMavenAddress(address string) bool {
-	if !AllowedLibraryURL(address) {
-		return false
-	}
-	u, err := url.Parse(address)
-	return err == nil && !u.ForceQuery && u.RawPath == "" && meta.ValidPath(strings.TrimPrefix(u.Path, "/"))
-}
+func validMavenAddress(address string) bool { _, err := meta.ParseMavenURL(address); return err == nil }
 
 func validateMavenLocation(address, relative string) error {
-	if !validMavenAddress(address) || !meta.ValidPath(relative) {
-		return identityError("Maven制品来源或路径不受支持")
+	coordinate, err := meta.CoordinateFromPath(relative)
+	if err != nil {
+		return identityError("Maven固定制品路径无效")
 	}
-	u, err := url.Parse(address)
-	if err != nil || u.ForceQuery || u.RawPath != "" || !strings.HasSuffix(u.Path, "/"+relative) {
-		return identityError("Maven地址与固定制品路径不匹配")
+	if _, err := meta.BindMavenURL(address, coordinate); err != nil {
+		return identityError("Maven仓库地址与固定坐标不一致")
 	}
 	return nil
 }

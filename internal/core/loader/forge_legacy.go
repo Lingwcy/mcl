@@ -442,10 +442,7 @@ func (s *ForgeInstaller) legacyForgeLibraryIdentityWithin(ctx context.Context, l
 		if fixed.Path == "" {
 			fixed.Path = relative
 		}
-		if fixed.Path != relative || !AllowedLibraryURL(fixed.URL) {
-			return meta.Download{}, errors.New("旧Forge固定依赖来源或路径无效")
-		}
-		return fixed, fixed.Validate()
+		return fixed, validateLegacyFixedArtifact(fixed, relative, lib.Checksums, maxSize)
 	}
 	var candidates []meta.Download
 	for _, library := range base.Libraries {
@@ -463,10 +460,7 @@ func (s *ForgeInstaller) legacyForgeLibraryIdentityWithin(ctx context.Context, l
 				return meta.Download{}, errors.New("官方客户端同名依赖有平台差异，不能猜测")
 			}
 		}
-		if fixed.Path != relative || !AllowedLibraryURL(fixed.URL) {
-			return meta.Download{}, errors.New("官方依赖路径或来源不匹配")
-		}
-		return fixed, fixed.Validate()
+		return fixed, validateLegacyFixedArtifact(fixed, relative, lib.Checksums, maxSize)
 	}
 	root, err := legacyForgeLibraryRoot(lib.URL)
 	if err != nil {

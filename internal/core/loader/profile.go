@@ -179,6 +179,11 @@ func (p Profile) Validate() error {
 		if err := artifact.ValidateIdentity(); err != nil {
 			return err
 		}
+		if !prepared {
+			if _, err := meta.BindMavenURL(artifact.URL, coordinate); err != nil {
+				return identityError("加载器库仓库地址与声明坐标不一致")
+			}
+		}
 		if artifact.Path != coordinate.Path() || (prepared && artifact.URL != "") || (!prepared && !AllowedLibraryURL(artifact.URL)) {
 			return errors.New("加载器库路径或来源无效")
 		}

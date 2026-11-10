@@ -139,6 +139,7 @@ func (s *LoaderService) resolve(ctx context.Context, value instance.Instance, ba
 			}
 		}
 	}
+	profile.ReportEvidence(ctx)
 	paths := make(map[string]bool, len(profile.Libraries))
 	for _, library := range profile.Libraries {
 		paths["cache/libraries/"+library.Downloads.Artifact.Path] = true
