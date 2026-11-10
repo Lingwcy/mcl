@@ -22,6 +22,7 @@ type legacyChecksumTransport struct {
 	sidecarStatus, headStatus int
 	sidecar, size             string
 	gets, heads               int
+	probes, sidecars          int
 	failDownload              bool
 }
 
@@ -30,11 +31,17 @@ func (t *legacyChecksumTransport) RoundTrip(r *http.Request) (*http.Response, er
 	h := make(http.Header)
 	switch {
 	case strings.HasSuffix(r.URL.Path, ".sha1"):
+		t.sidecars++
 		status, body = t.sidecarStatus, []byte(t.sidecar)
 	case r.Method == http.MethodHead:
 		t.heads++
 		status, body = t.headStatus, nil
 		h.Set("Content-Length", t.size)
+	case r.Header.Get("Range") == "bytes=0-0":
+		t.probes++
+		status, body = 206, t.body[:1]
+		h.Set("Content-Length", "1")
+		h.Set("Content-Range", "bytes 0-0/"+strconv.Itoa(len(t.body)))
 	default:
 		t.gets++
 		if t.failDownload {
@@ -166,5 +173,40 @@ func TestLegacyForgeChecksumFallbackRespectsRemainingInstallBudget(t *testing.T)
 	_, err := s.legacyForgeLibraryIdentityWithin(t.Context(), lib, meta.Version{}, int64(len(tr.body)-1))
 	if err == nil || tr.gets != 0 {
 		t.Fatal("download exceeded remaining group budget", err, tr.gets)
+	}
+}
+
+func TestLegacyPinnedChecksumAndHEADCapabilityFallbackCompose(t *testing.T) {
+	for _, sidecar := range []int{200, 404, 410} {
+		for _, head := range []int{405, 501} {
+			s, tr, lib, pin := legacyChecksumFixture(t)
+			tr.sidecarStatus, tr.headStatus, tr.sidecar = sidecar, head, pin
+			fixed, err := s.legacyForgeLibraryIdentity(t.Context(), lib, meta.Version{})
+			wantGets := 0
+			if sidecar != 200 {
+				wantGets = 1
+			}
+			if err != nil || fixed.SHA1 != pin || fixed.Size != int64(len(tr.body)) || tr.gets != wantGets || tr.probes != 1 || tr.heads != 1 {
+				t.Fatal(sidecar, head, fixed, err, tr.gets, tr.probes, tr.heads)
+			}
+		}
+	}
+}
+
+func TestMissingArtifactIsNotConfusedWithMissingChecksum(t *testing.T) {
+	s, tr, lib, pin := legacyChecksumFixture(t)
+	tr.sidecarStatus, tr.sidecar, tr.headStatus = 200, pin, 404
+	_, err := s.legacyForgeLibraryIdentity(t.Context(), lib, meta.Version{})
+	if err == nil || tr.sidecars != 1 || tr.heads != 1 || tr.probes != 0 || tr.gets != 0 {
+		t.Fatal(err, tr.sidecars, tr.heads, tr.probes, tr.gets)
+	}
+}
+
+func TestLegacySidecarPathHonorsRemainingBudget(t *testing.T) {
+	s, tr, lib, pin := legacyChecksumFixture(t)
+	tr.sidecarStatus, tr.sidecar = 200, pin
+	_, err := s.legacyForgeLibraryIdentityWithin(t.Context(), lib, meta.Version{}, int64(len(tr.body)-1))
+	if err == nil || tr.gets != 0 {
+		t.Fatal(err, tr.gets)
 	}
 }

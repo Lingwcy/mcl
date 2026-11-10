@@ -54,6 +54,7 @@ func NewForgeInstallerWithRequirements(catalog *Client, downloads *download.Clie
 }
 
 func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta.Version, executable string, platform meta.Platform, report func(string, download.Progress)) (Profile, error) {
+	ctx = WithResolutionBudget(ctx)
 	// Downloads retain their active-network budgets; user rate-limit waits and
 	// automatic tool-Java installation are not charged to one wall-clock timer.
 	// The production processor adapter bounds each actual child separately.

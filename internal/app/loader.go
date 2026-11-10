@@ -45,6 +45,7 @@ func (s *LoaderService) resolve(ctx context.Context, value instance.Instance, ba
 	if !ok {
 		return resolvedVersion{version: base}, nil
 	}
+	ctx = loader.WithResolutionBudget(ctx)
 	diagnostics.SetFacts(ctx, diagnostics.Facts{Game: value.Version.ID, Loader: required.Type, LoaderVersion: required.Version})
 	ctx, evidence := diagnostics.Start(ctx, "work", required.Type+":"+required.Version)
 	defer evidence.End()

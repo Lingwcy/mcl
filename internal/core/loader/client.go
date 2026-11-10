@@ -58,12 +58,15 @@ func (c *Client) bytes(ctx context.Context, address string, limit int64) ([]byte
 	if response.StatusCode != 200 {
 		return nil, &metadataStatusError{status: response.StatusCode}
 	}
+	if encodedMavenResponse(response) {
+		return nil, identityError("加载器元数据响应包含内容编码")
+	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
 		return nil, err
 	}
 	if int64(len(data)) > limit {
-		return nil, errors.New("加载器响应超过限制")
+		return nil, identityError("加载器响应超过限制")
 	}
 	evidence.Work()
 	return data, ctx.Err()
@@ -72,22 +75,44 @@ func (c *Client) bytes(ctx context.Context, address string, limit int64) ([]byte
 // Only transient transport/status failures are retried. A long Retry-After is
 // returned to the user instead of sleeping indefinitely or retrying too early.
 func (c *Client) request(ctx context.Context, method, address string) (*http.Response, error) {
+	return c.requestHeaders(ctx, method, address, nil)
+}
+
+func (c *Client) requestHeaders(ctx context.Context, method, address string, headers http.Header) (*http.Response, error) {
+	ctx = WithResolutionBudget(ctx)
+	budget := ctx.Value(resolutionBudgetKey{}).(*resolutionBudget)
 	ctx, evidence := diagnostics.Start(ctx, "network", "loader-metadata")
 	defer evidence.End()
 	for attempt := range 3 {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := budget.admit(attempt > 0); err != nil {
+			evidence.Fail(err)
+			return nil, err
+		}
 		evidence.Network(diagnostics.Source(address), 0, attempt+1)
-		req, err := http.NewRequestWithContext(ctx, method, address, nil)
+		attemptctx, cancel := context.WithTimeout(ctx, metadataRequestTimeout)
+		req, err := http.NewRequestWithContext(attemptctx, method, address, nil)
 		if err != nil {
+			cancel()
 			return nil, errors.New("加载器请求地址无效")
 		}
 		req.Header.Set("User-Agent", "mcl/0.1.0")
 		req.Header.Set("Accept", "application/json, text/plain")
 		req.Header.Set("Accept-Encoding", "identity")
+		if value := headers.Get("Range"); value != "" {
+			req.Header.Set("Range", value)
+		}
 		response, fetchErr := c.HTTP.Do(req)
+		if response != nil && response.Body != nil {
+			response.Body = &metadataBody{ReadCloser: response.Body, budget: budget, cancel: cancel}
+		}
 		if ctx.Err() != nil {
 			if response != nil {
 				response.Body.Close()
 			}
+			cancel()
 			return nil, ctx.Err()
 		}
 		delay := time.Duration(1<<attempt) * 300 * time.Millisecond
@@ -96,6 +121,7 @@ func (c *Client) request(ctx context.Context, method, address string) (*http.Res
 			if response != nil {
 				response.Body.Close()
 			}
+			cancel()
 			code := diagnostics.Code(fetchErr)
 			if code == "unknown" {
 				code = "network"
@@ -105,7 +131,7 @@ func (c *Client) request(ctx context.Context, method, address string) (*http.Res
 		} else {
 			status := response.StatusCode
 			evidence.Network(diagnostics.Source(address), status, attempt+1)
-			if status != http.StatusTooManyRequests && status != http.StatusRequestTimeout && status < 500 {
+			if status != http.StatusTooManyRequests && status != http.StatusRequestTimeout && (status < 500 || method == http.MethodHead && status == http.StatusNotImplemented) {
 				return response, nil
 			}
 			failure = diagnostics.Wrap(diagnostics.HTTPCode(status), fmt.Errorf("加载器服务繁忙，HTTP %d", status))
@@ -127,17 +153,21 @@ func (c *Client) request(ctx context.Context, method, address string) (*http.Res
 		if attempt == 2 {
 			return nil, failure
 		}
+		_, waiting := diagnostics.Start(ctx, "backoff", "loader-metadata")
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+			waiting.End()
 			return nil, ctx.Err()
 		case <-timer.C:
+			waiting.End()
 		}
 	}
 	panic("unreachable loader retry loop")
 }
 func (c *Client) Releases(ctx context.Context, kind, game string) ([]Release, error) {
+	ctx = WithResolutionBudget(ctx)
 	if !meta.ValidID(game) {
 		return nil, errors.New("游戏版本无效")
 	}
@@ -192,6 +222,7 @@ type rawProfile struct {
 }
 
 func (c *Client) Resolve(ctx context.Context, request Request) (Profile, error) {
+	ctx = WithResolutionBudget(ctx)
 	if err := request.Validate(); err != nil {
 		return Profile{}, err
 	}
@@ -276,40 +307,27 @@ dispatch:
 	return p, nil
 }
 func (c *Client) mavenMetadata(ctx context.Context, address, relative string) (meta.Download, error) {
+	ctx = WithResolutionBudget(ctx)
+	if err := validateMavenLocation(address, relative); err != nil {
+		return meta.Download{}, err
+	}
 	ctx, evidence := diagnostics.Start(ctx, "metadata", relative)
 	defer evidence.End()
 	data, err := c.bytes(ctx, address+".sha1", 1024)
 	if err != nil {
-		return meta.Download{}, err
+		return meta.Download{}, &mavenChecksumError{cause: err}
 	}
-	fields := strings.Fields(string(data))
-	if len(fields) == 0 || !meta.ValidSHA1(fields[0]) {
-		return meta.Download{}, errors.New("Maven SHA-1 无效")
+	digest, err := parseMavenSHA1(data, relative)
+	if err != nil {
+		return meta.Download{}, err
 	}
 	size, err := c.mavenSize(ctx, address)
 	if err != nil {
 		return meta.Download{}, err
 	}
-	return meta.Download{Path: relative, URL: address, SHA1: strings.ToLower(fields[0]), Size: size}, nil
+	return meta.Download{Path: relative, URL: address, SHA1: digest, Size: size}, nil
 }
 
-// Keep size discovery separate: a legacy fixed installer may already pin SHA-1
-// even when the repository does not publish a .sha1 sidecar for that artifact.
-func (c *Client) mavenSize(ctx context.Context, address string) (int64, error) {
-	response, err := c.request(ctx, http.MethodHead, address)
-	if err != nil {
-		return 0, err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != 200 {
-		return 0, diagnostics.Wrap(diagnostics.HTTPCode(response.StatusCode), fmt.Errorf("Maven 文件返回 HTTP %d", response.StatusCode))
-	}
-	size, err := strconv.ParseInt(response.Header.Get("Content-Length"), 10, 64)
-	if err != nil || size <= 0 || size > 512<<20 {
-		return 0, errors.New("Maven 未提供有效文件大小")
-	}
-	return size, ctx.Err()
-}
 func AllowedLibraryURL(address string) bool {
 	u, err := url.Parse(address)
 	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || u.RawQuery != "" || u.Fragment != "" {

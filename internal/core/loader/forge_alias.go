@@ -36,6 +36,7 @@ func ValidateForgeAlias(requested, canonical Request) error {
 // CanonicalForgeRequest resolves short pack build IDs before looking up an
 // installer. Fully-qualified requests and modern builds retain exact identity.
 func (c *Client) CanonicalForgeRequest(ctx context.Context, request Request) (Request, error) {
+	ctx = WithResolutionBudget(ctx)
 	if err := request.Validate(); err != nil {
 		return request, err
 	}

@@ -84,7 +84,7 @@ func SafeSubject(s string) bool {
 }
 func ValidCode(s string) bool {
 	switch s {
-	case "", "unknown", "canceled", "deadline", "network", "unauthorized", "forbidden", "not-found", "rate-limited", "server", "integrity", "disk-full", "permission", "filesystem", "checkpoint", "interrupted", "java-requirement":
+	case "", "unknown", "canceled", "deadline", "network", "unauthorized", "forbidden", "not-found", "rate-limited", "server", "integrity", "disk-full", "permission", "filesystem", "checkpoint", "interrupted", "java-requirement", "artifact-identity", "metadata-budget":
 		return true
 	}
 	return false

@@ -187,6 +187,7 @@ func compareBuild(a, b string) int {
 // The files-site JSON and Maven XML are both official indices. An unavailable
 // primary index must not force guessing a suffix or selecting a newer build.
 func (c *Client) forgeVersions(ctx context.Context, game string) ([]string, error) {
+	ctx = WithResolutionBudget(ctx)
 	data, primaryErr := c.bytes(ctx, c.ForgeURL+"/maven-metadata.json", 4<<20)
 	if primaryErr == nil {
 		var catalog map[string][]string
