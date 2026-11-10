@@ -140,7 +140,13 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 		}
 		classifier, ok := lib.Natives[platform.OS]
 		if !ok {
-			return Plan{}, fmt.Errorf("library %s has no natives for %s", lib.Name, platform.OS)
+			if lib.Downloads.Artifact == nil {
+				return Plan{}, fmt.Errorf("library %s has neither a Java artifact nor natives for %s", lib.Name, platform.OS)
+			}
+			// The native map declares only the systems needing this optional native
+			// component. Keep any Java artifact already added above (e.g. 1.12.2
+			// text2speech on macOS); do not invent a native for an undeclared OS.
+			continue
 		}
 		// ${arch} in the legacy format means x86 bitness, not host pointer
 		// width. Do not substitute 64 and accidentally select x86 on ARM.
