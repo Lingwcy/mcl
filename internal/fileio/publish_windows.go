@@ -51,7 +51,9 @@ func renameManaged(source *os.Root, old string, target *os.Root, name string, re
 		return err
 	}
 	length := (len(encoded) - 1) * 2
-	size := int(unsafe.Offsetof(renameInformation{}.FileName)) + length
+	// NtSetInformationFile requires at least sizeof(FILE_RENAME_INFORMATION),
+	// including ABI tail padding even when FileName has just one UTF-16 unit.
+	size := max(int(unsafe.Sizeof(renameInformation{})), int(unsafe.Offsetof(renameInformation{}.FileName))+length)
 	buffer := make([]byte, size)
 	info := (*renameInformation)(unsafe.Pointer(&buffer[0]))
 	if replace {
