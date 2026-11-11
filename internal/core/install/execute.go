@@ -29,6 +29,17 @@ type Result struct {
 func Execute(ctx context.Context, client *download.Client, plan Plan, nativeParent string, report func(Progress), gameDirectory ...*os.Root) (Result, error) {
 	ctx = withNativeEvidenceBudget(ctx)
 	reportPlan(ctx, plan)
+	if len(plan.LocalLibraries) > 0 || len(plan.RuntimeLookups) > 0 {
+		root, err := os.OpenRoot(client.Root)
+		if err != nil {
+			return Result{}, err
+		}
+		err = VerifyLocalLibraries(ctx, root, plan)
+		root.Close()
+		if err != nil {
+			return Result{}, err
+		}
+	}
 	stage := func(name string) func(download.Progress) {
 		return func(p download.Progress) {
 			if report != nil {

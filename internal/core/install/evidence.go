@@ -47,6 +47,10 @@ func reportPlan(ctx context.Context, p Plan) {
 		diagnostics.ReportArtifact(ctx, diagnostics.Artifact{Path: file.Path, Role: "generated", SHA1: file.SHA1, State: "planned"})
 		known[file.Path] = true
 	}
+	for _, file := range p.RuntimeLookups {
+		diagnostics.ReportArtifact(ctx, diagnostics.Artifact{Path: file.Path, Role: "generated", SHA1: file.SHA1, State: "planned"})
+		known[file.Path] = true
+	}
 	for _, name := range p.Classpath {
 		if !known[name] {
 			diagnostics.ReportArtifact(ctx, diagnostics.Artifact{Path: name, Role: "generated", State: "planned"})

@@ -32,6 +32,7 @@ type Plan struct {
 	Natives                                 []NativeArchive
 	NativeJARs                              []download.File
 	LocalLibraries                          []download.File
+	RuntimeLookups                          []download.File
 	NeedsGameAssets                         bool
 }
 
@@ -195,6 +196,10 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 		}
 		nativeArchives[file.Path] = len(p.Natives)
 		p.Natives = append(p.Natives, NativeArchive{File: file, Exclude: slices.Clone(lib.Extract.Exclude)})
+	}
+	for _, file := range version.RuntimeLookups {
+		local := path.Join(version.LibraryDirectory, file.Path)
+		p.RuntimeLookups = append(p.RuntimeLookups, download.File{Path: local, Download: file})
 	}
 	for group, matched := range nativeGroups {
 		if !matched {

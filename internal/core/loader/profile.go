@@ -223,6 +223,12 @@ func (p Profile) Validate() error {
 			found = found || coordinate.Group == expected
 		}
 	}
+	if _, err := p.runtimeLookups(); err != nil {
+		return err
+	}
+	if err := validateLibraryDirectoryArguments(p.Arguments.JVM); err != nil {
+		return err
+	}
 	for _, output := range p.Outputs {
 		if err := output.ValidateIdentity(); err != nil {
 			return err
@@ -269,6 +275,11 @@ func (p Profile) Merge(base meta.Version) (meta.Version, error) {
 	effective.MainClass = p.MainClass
 	if UsesProcessors(p.Request.Type) {
 		effective.LibraryDirectory, effective.LaunchName = p.LibraryDirectory(), p.ID
+		lookups, err := p.runtimeLookups()
+		if err != nil {
+			return meta.Version{}, err
+		}
+		effective.RuntimeLookups = lookups
 	}
 	effective.Java.Major = max(base.Java.Major, p.JavaMajor)
 	args := *base.Arguments

@@ -326,6 +326,9 @@ func (p *Prepared) Start(session launch.Session) (launch.Game, error) {
 		return nil, err
 	}
 	p.options.MaxMemoryMiB = memoryMiB
+	if err := verifyLaunchLibraries(p.ctx, p.options); err != nil {
+		return nil, err
+	}
 	plan, err := launch.Build(p.options, session)
 	if err != nil {
 		return nil, err

@@ -262,6 +262,7 @@ func cloneArguments(arguments []Argument) []Argument {
 func cloneVersion(v Version) Version {
 	v.fields = maps.Clone(v.fields)
 	v.Sources = slices.Clone(v.Sources)
+	v.RuntimeLookups = slices.Clone(v.RuntimeLookups)
 	v.Downloads = maps.Clone(v.Downloads)
 	if v.Arguments != nil {
 		v.Arguments = &Arguments{Game: cloneArguments(v.Arguments.Game), JVM: cloneArguments(v.Arguments.JVM)}

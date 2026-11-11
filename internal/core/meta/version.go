@@ -147,6 +147,7 @@ type Version struct {
 	Jar              string              `json:"jar,omitempty"`
 	Patches          []json.RawMessage   `json:"patches,omitempty"`
 	LibraryDirectory string              `json:"-"`
+	RuntimeLookups   []Download          `json:"-"`
 	LaunchName       string              `json:"-"`
 	ID               string              `json:"id"`
 	Type             string              `json:"type"`
@@ -187,6 +188,9 @@ func ParseVersion(data []byte) (Version, error) {
 // ValidateVanilla defines the currently implemented version format. Legacy and
 // inherited documents are decoded but cannot silently enter the modern pipeline.
 func (v Version) ValidateVanilla() error {
+	if err := v.validateRuntimeLookups(); err != nil {
+		return err
+	}
 	if v.LegacyArguments != "" && v.Arguments != nil {
 		return errors.New("新旧参数模板冲突，必须先规范化")
 	}

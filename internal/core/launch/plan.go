@@ -304,6 +304,10 @@ func build(o Options, s *Session) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
+	jvm, err = libraryDirectoryArguments(jvm, o.Version)
+	if err != nil {
+		return Preview{}, err
+	}
 	game, err := meta.SelectArguments(o.Version.Arguments.Game, gamePlatform)
 	if err != nil {
 		return Preview{}, err
@@ -329,6 +333,9 @@ func build(o Options, s *Session) (Preview, error) {
 		if strings.HasPrefix(value, "-javaagent:") || strings.HasPrefix(value, "-agentlib:") || strings.HasPrefix(value, "-agentpath:") || strings.HasPrefix(value, "@") {
 			return Preview{}, errors.New("当前原版管线不接受 Agent 或额外参数文件")
 		}
+		if value == "--class-path" || strings.HasPrefix(value, "--class-path=") || value == "-Djava.class.path" || strings.HasPrefix(value, "-Djava.class.path=") {
+			return Preview{}, errors.New("版本不能用其它参数覆盖classpath")
+		}
 		args = append(args, value)
 	}
 	if !slices.Contains(jvm, "-cp") && !slices.Contains(jvm, "-classpath") {
@@ -348,15 +355,13 @@ func build(o Options, s *Session) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
-	if o.Java.Major == 8 {
-		p := Plan{arguments: args, mainIndex: len(args)}
-		index, err := p.classpathIndex()
-		if err != nil {
-			return Preview{}, err
-		}
-		if args[index] != values["classpath"] {
-			return Preview{}, errors.New("Java 8 classpath 必须使用已校验的运行库计划")
-		}
+	p := Plan{arguments: args, mainIndex: len(args)}
+	index, err := p.classpathIndex()
+	if err != nil {
+		return Preview{}, err
+	}
+	if args[index] != values["classpath"] {
+		return Preview{}, errors.New("classpath 必须使用已校验的运行库计划")
 	}
 	args = append(args, o.Version.MainClass)
 	args = append(args, gameArgs...)

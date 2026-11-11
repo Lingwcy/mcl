@@ -48,13 +48,13 @@ func (p Plan) classpathIndex() (int, error) {
 			continue
 		}
 		if index != -1 || i+1 >= p.mainIndex || p.arguments[i+1] == "" {
-			return 0, errors.New("Java 8 需要唯一且非空的 classpath 参数")
+			return 0, errors.New("启动需要唯一且非空的 classpath 参数")
 		}
 		index = i + 1
 		i++
 	}
 	if index == -1 {
-		return 0, errors.New("Java 8 缺少 classpath 参数")
+		return 0, errors.New("启动缺少 classpath 参数")
 	}
 	return index, nil
 }

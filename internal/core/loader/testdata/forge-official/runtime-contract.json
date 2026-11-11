@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "mainClass": "net.minecraftforge.bootstrap.ForgeBootstrap",
+  "game": "1.20.4",
+  "build": "49.0.3",
+  "fmlloader_sources_sha1": "d1d472fb83bccd0c23d231d4f3da1a3b9b95abb6",
+  "fmlloader_sources_size": 101338,
+  "bootstrap_sources_sha1": "0dddd4f0d7bfdd74986254d452b389bb9be3297b",
+  "bootstrap_sources_size": 8209,
+  "official_sha1_sidecars_matched": true,
+  "observed_contract": "LibraryFinder resolves libraryDirectory, default libraries; ForgeProdLaunchHandler opens same-build forge client by Maven path.",
+  "scope": "Read-only source and metadata evidence; no JAR saved or executed, no source implementation redistributed, not game acceptance.",
+  "fmlloader_sources_url": "https://maven.minecraftforge.net/net/minecraftforge/fmlloader/1.20.4-49.0.3/fmlloader-1.20.4-49.0.3-sources.jar",
+  "bootstrap_sources_url": "https://maven.minecraftforge.net/net/minecraftforge/bootstrap/2.0.0/bootstrap-2.0.0-sources.jar",
+  "inspected_files": [
+    "net/minecraftforge/fml/loading/LibraryFinder.java",
+    "net/minecraftforge/fml/loading/targets/ForgeProdLaunchHandler.java",
+    "net/minecraftforge/bootstrap/ForgeBootstrap.java",
+    "net/minecraftforge/bootstrap/Bootstrap.java"
+  ]
+}
