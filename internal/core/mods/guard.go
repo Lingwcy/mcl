@@ -71,6 +71,9 @@ func GuardTransition(ctx context.Context, before, after []File, runtime Runtime,
 	}
 	for _, issue := range next.structural {
 		if !oldProblems[issueKey(issue)] {
+			if issue.Code == "duplicate" && issue.PeerPath != "" && issue.PeerPath != issue.Path {
+				return fmt.Errorf("%w：重复的模组 ID %s：%s ↔ %s", ErrUnsafeChange, issue.ModID, issue.PeerPath, issue.Path)
+			}
 			return fmt.Errorf("%w：%s · %s · %s", ErrUnsafeChange, issue.Path, issue.Title, issue.Detail)
 		}
 	}

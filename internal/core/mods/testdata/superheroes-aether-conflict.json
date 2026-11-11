@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "project": "m2PsjPTL",
+  "version": "V3tfASVA",
+  "version_number": "1.2.0",
+  "index_source": "modrinth.index.json",
+  "pack_sha512": "7fdf89eb0e872a9fc2e56cceb8a39a3f2ab51eafc8f45b731fb44e8acdf38a6bea4fd7a47925263d5e530e4b5824b791c6382fdc85656c7f1c9c37dae3e75c72",
+  "pack_size": 104144723,
+  "runtime": {
+    "minecraft": "1.20.1",
+    "forge": "47.4.13"
+  },
+  "providers": [
+    {
+      "source": "index",
+      "path": "mods/aether-1.20.1-1.5.2-neoforge.jar",
+      "sha1": "e2fdd161f35ca1b6db774906e88e266d7f12eab6",
+      "sha512": "60b23e439b244645eafda5f3ddd620ac37e94bd75441d2deea9c328e1e154362f48b08aff1959849a7428ae7664422723fdbdb12aaeddfd56409ba4b54a7eaaf",
+      "size": 39746073,
+      "mod_id": "aether",
+      "descriptor": "META-INF/mods.toml"
+    },
+    {
+      "source": "overrides",
+      "path": "overrides/mods/aether-1.20.1-1.5.1-neoforge.jar",
+      "sha1": "21e6846f6a0c5598a871f728d19191d46db22e6f",
+      "size": 39709386,
+      "mod_id": "aether",
+      "descriptor": "META-INF/mods.toml"
+    }
+  ],
+  "observations": [
+    "Both archives were checked from fixed platform identities; no JAR saved or executed.",
+    "Both provider IDs were read from the actual descriptors, not inferred from filenames.",
+    "The newer file is indexed and required; the older file is a differently named overrides/mods entry.",
+    "The guard must reject this real duplicate, not silently delete, disable, replace or choose a mod."
+  ]
+}
