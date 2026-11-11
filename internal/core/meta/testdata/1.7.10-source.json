@@ -1,0 +1,10 @@
+{
+  "id": "1.7.10",
+  "url": "https://piston-meta.mojang.com/v1/packages/ed5d8789ed29872ea2ef1c348302b0c55e3f3468/1.7.10.json",
+  "sha1": "ed5d8789ed29872ea2ef1c348302b0c55e3f3468",
+  "size": 14777,
+  "sha256": "265c7e47aad4c74f6085a49667d3a828f48d63f484def2ae70b5e426e5b7cba6",
+  "manifest_url": "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json",
+  "manifest_sha256": "f27326fe134922d1c983d35e22d6508c8d0e93c790b60b9528863b085cef1ba6",
+  "scope": "Official version JSON only; no Java, artifacts, installer or game executed."
+}

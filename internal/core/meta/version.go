@@ -146,6 +146,7 @@ type Version struct {
 	ClientVersion    string              `json:"-"`
 	Jar              string              `json:"jar,omitempty"`
 	Patches          []json.RawMessage   `json:"patches,omitempty"`
+	LoaderProfile    string              `json:"-"` // Derived profile fingerprint; prevents layering a second loader.
 	LibraryDirectory string              `json:"-"`
 	RuntimeLookups   []Download          `json:"-"`
 	LaunchName       string              `json:"-"`

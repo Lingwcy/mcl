@@ -102,6 +102,7 @@ type Plan struct {
 }
 
 type Preview struct {
+	mainIndex  int
 	Priority   ProcessPriority `json:"process_priority,omitempty"`
 	Executable string          `json:"executable"`
 	Directory  string          `json:"directory"`
@@ -116,7 +117,7 @@ func Build(options Options, session Session) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	index := slices.Index(preview.Arguments, options.Version.MainClass)
+	index := preview.mainIndex
 	return Plan{priority: options.Game.Priority, executable: preview.Executable, directory: preview.Directory, root: options.Root, instanceID: options.InstanceID, arguments: preview.Arguments, mainIndex: index, javaMajor: options.Java.Major, nativeEncoding: options.Java.NativeEncoding, secrets: []string{session.token}, target: meta.Platform{OS: options.Platform.OS, Arch: meta.NormalizeArch(options.Platform.Arch)}}, nil
 }
 
@@ -328,6 +329,9 @@ func build(o Options, s *Session) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
+	if err := validateEntrypointTemplates(o.Version.MainClass, game); err != nil {
+		return Preview{}, err
+	}
 	args := []string{fmt.Sprintf("-Xmx%dm", o.MaxMemoryMiB), "-Dfile.encoding=UTF-8"}
 	if o.MinMemoryMiB > 0 {
 		args = append(args, fmt.Sprintf("-Xms%dm", o.MinMemoryMiB))
@@ -374,6 +378,9 @@ func build(o Options, s *Session) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
+	if err := validateJVMEntrypoint(args); err != nil {
+		return Preview{}, err
+	}
 	p := Plan{arguments: args, mainIndex: len(args)}
 	index, err := p.classpathIndex()
 	if err != nil {
@@ -382,9 +389,10 @@ func build(o Options, s *Session) (Preview, error) {
 	if args[index] != values["classpath"] {
 		return Preview{}, errors.New("classpath 必须使用已校验的运行库计划")
 	}
+	mainIndex := len(args)
 	args = append(args, o.Version.MainClass)
 	args = append(args, gameArgs...)
-	return Preview{Priority: o.Game.Priority, Executable: o.Java.Executable, Directory: values["game_directory"], Arguments: args}, nil
+	return Preview{mainIndex: mainIndex, Priority: o.Game.Priority, Executable: o.Java.Executable, Directory: values["game_directory"], Arguments: args}, nil
 }
 
 func substitute(value string, values map[string]string) (string, error) {

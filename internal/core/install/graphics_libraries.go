@@ -27,7 +27,7 @@ func checkGraphicsLibraries(libraries []LibraryFile) (GraphicsLibraries, error) 
 			return result, err
 		}
 		if library.Role != LibraryRuntimeLookup {
-			module := c.Group + ":" + c.Artifact + ":" + c.Classifier + "@" + c.Extension
+			module := c.Module()
 			if previous, ok := modules[module]; ok && previous != c.Version {
 				return result, fmt.Errorf("同一运行模块存在多个已启用版本: %s", module)
 			}

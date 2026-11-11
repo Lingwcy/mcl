@@ -1025,3 +1025,13 @@ main.go gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...以�
 Java8仍manifest-only classpath JAR、Java9+仍只写非秘密JVM参数，令牌只在直接game argv；禁止自定义/metadata覆盖原生编码属性。文件按编码/转义后限制4MiB，Java8清单在附加前按含头部和折行开销的实际字节限制1MiB，覆盖中文/空格/百分号/引号/非BMP/组合字符及折行顺序。Windows命令不用含令牌的完整字符串或无界UTF16副本，而累计CreateProcess转义后的UTF16单元/尾NUL，纯值测试在所有宿主跑。工具支持文件也改Root/O_EXCL/私有权限/身份核对清理，不删除外部替换。
 
 全量vet/test/build、MyGo vet通过；darwin/amd64、windows/amd64、linux/amd64主程序和Windows java/launch/process测试目标编译通过。Windows专用EscapeArg比对只编译未执行；没有真实Java/安装器/游戏/UI验收、用户实例修改、新DMG/main合并/Release。任务schema6和Loader官方策略v3不变。现代UNC/长路径、Unix非UTF8 locale、Java属性输出的非UTF8路径解析、合并层/重复tweaker、固定Loader的ASM/Guava/Scala规则和PC3/PC5/PC6仍未完成，不能称三平台/老Forge兼容已验收。
+
+## 44. PC4d：Loader单层合并、条件模块与固定入口
+
+Profile.Merge原先在平台rules选择前拒绝同模块不同版本，且浅复制内部参数切片/规则映射/库摘要指针。本批改为按group/artifact/classifier/extension成组覆盖，保留Loader条件变体，最终install.Build按rules选中后拒绝真正同时启用多版本；不取最高版本，不复活被完整子组替换的父组。Version/Arguments/Library纯值Clone隔离双向修改，内存LoaderProfile指纹拒绝重复叠加；不作为新增来源权限/磁盘格式。任务schema6与Forge官方策略v3不改，旧代际不删除。
+
+游戏模板在rules选择后、账户替换前检查重复Tweaker、重复单值身份/路径/launchTarget、旧现代会话混用及缺值；不同Tweaker保持顺序，旧Forge适配器仍要求唯一固定FMLTweaker，不增加组合组件。JVM不能提前替换JAR/模块/额外main或退出型入口，合法模块选项操作数保留；mainIndex在构建时固定，避免将同名JVM操作数当主类。错误只含固定选项名，不输出账户/token/路径值，StartTracked与原锁/生命周期不改。
+
+新增固定原始官方1.7.10 JSON/来源摘要（14777字节，SHA1 ed5d8789ed29872ea2ef1c348302b0c55e3f3468），复用1.12.2/1.20.4及四份Forge投影，独立merge-library-evidence.json固定Guava/ASM/Scala预期顺序。1.7.10 Forge Guava17替换base15；1.12.2两样本未声明Guava，保留base21；不同ASM/Scala模块/classifier/extension不凭名字替换。覆盖三OS x64install计划及完整launch.Build/支持文件/exec参数纯值链。旧1.7.10省略文件身份与现代generated size为明确合成补位，不证明实际文件完整/安装成功。
+
+全量测试曾暴露既有辅助进程测试Stat/WriteFile就绪竞争，读取未写完的PID为空；仅改测试等待完整正PID，目标连续5次和后续全量通过。gofmt、diff --check、全量CGO_ENABLED=0 vet/test/build、MyGo vet和三平台x64主程序编译通过。未运行真实Java/Forge/游戏/UI，未操作用户实例/凭据/存档，无DMG/main合并/版本/Release。跨不同模块真实类重叠/ABI、特定Loader未声明冲突、其余PC4平台能力及PC3/PC5/PC6仍未收口，不能宣称三平台老Forge已可玩。

@@ -19,3 +19,9 @@ Metadata-only tests may put placeholder bytes at an embedded Maven path to
 exercise structural checks. Such bytes do not match the official artifact hash
 and are not evidence of extraction, installation, linkage or a playable game.
 Any full-pipeline synthetic payload fixture is labeled separately.
+
+merge-library-evidence.json fixes the declared ASM/Guava/Scala selection and
+module-group override expectations against those projection digests and the
+original Mojang base digests. These are metadata/plan tests only. Omitted
+1.7.10 artifact identities and modern generated-file size may be explicitly
+synthetic in the test builder, never evidence of verified payloads or a game.

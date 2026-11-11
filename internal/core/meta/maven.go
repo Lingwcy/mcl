@@ -50,6 +50,12 @@ func (c Coordinate) String() string {
 	return value
 }
 
+// Module identifies an override group without imposing version ordering.
+// Classifiers and extensions are distinct modules, not interchangeable files.
+func (c Coordinate) Module() string {
+	return c.Group + ":" + c.Artifact + ":" + c.Classifier + "@" + c.Extension
+}
+
 func (c Coordinate) Path() string {
 	name := c.Artifact + "-" + c.Version
 	if c.Classifier != "" {

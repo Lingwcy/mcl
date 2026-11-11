@@ -235,7 +235,7 @@ func libraryModule(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return c.Group + ":" + c.Artifact + ":" + c.Classifier + "@" + c.Extension, nil
+	return c.Module(), nil
 }
 
 func (v Version) has(field string) bool { _, ok := v.fields[field]; return ok }
@@ -259,13 +259,44 @@ func cloneArguments(arguments []Argument) []Argument {
 	}
 	return out
 }
+
+// Clone returns an independent snapshot, including nested arguments, rules,
+// download identities and native maps. Derived runtime fields remain in memory.
+func (v Version) Clone() Version { return cloneVersion(v) }
+
+// Clone snapshots argument values and nested rule conditions.
+func (a Arguments) Clone() Arguments {
+	return Arguments{Game: cloneArguments(a.Game), JVM: cloneArguments(a.JVM)}
+}
+
+// Clone snapshots fixed file identities, native maps and conditional rules.
+func (lib Library) Clone() Library {
+	lib.Natives = maps.Clone(lib.Natives)
+	lib.Rules = cloneRules(lib.Rules)
+	lib.Extract.Exclude = slices.Clone(lib.Extract.Exclude)
+	lib.Downloads.Classifiers = maps.Clone(lib.Downloads.Classifiers)
+	if lib.Downloads.Artifact != nil {
+		value := *lib.Downloads.Artifact
+		lib.Downloads.Artifact = &value
+	}
+	return lib
+}
+
 func cloneVersion(v Version) Version {
 	v.fields = maps.Clone(v.fields)
+	for key, raw := range v.fields {
+		v.fields[key] = slices.Clone(raw)
+	}
+	v.Patches = slices.Clone(v.Patches)
+	for i := range v.Patches {
+		v.Patches[i] = slices.Clone(v.Patches[i])
+	}
 	v.Sources = slices.Clone(v.Sources)
 	v.RuntimeLookups = slices.Clone(v.RuntimeLookups)
 	v.Downloads = maps.Clone(v.Downloads)
 	if v.Arguments != nil {
-		v.Arguments = &Arguments{Game: cloneArguments(v.Arguments.Game), JVM: cloneArguments(v.Arguments.JVM)}
+		args := v.Arguments.Clone()
+		v.Arguments = &args
 	}
 	if v.Logging.Client != nil {
 		logging := *v.Logging.Client
@@ -273,15 +304,7 @@ func cloneVersion(v Version) Version {
 	}
 	v.Libraries = slices.Clone(v.Libraries)
 	for i := range v.Libraries {
-		lib := &v.Libraries[i]
-		lib.Natives = maps.Clone(lib.Natives)
-		lib.Rules = cloneRules(lib.Rules)
-		lib.Extract.Exclude = slices.Clone(lib.Extract.Exclude)
-		lib.Downloads.Classifiers = maps.Clone(lib.Downloads.Classifiers)
-		if lib.Downloads.Artifact != nil {
-			value := *lib.Downloads.Artifact
-			lib.Downloads.Artifact = &value
-		}
+		v.Libraries[i] = v.Libraries[i].Clone()
 	}
 	return v
 }

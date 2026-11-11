@@ -1,0 +1,78 @@
+{
+  "scope": "Fixed declared-module expectations only. No artifact/class loading/ABI/game success is established. 1.7.10 omitted artifact identities and modern generated-file size in these tests are synthetic.",
+  "module_policy": "Loader-declared group replaces the entire same group of the base, without sorting versions. Group key includes Maven group, artifact, classifier and extension. Conditional variants remain ordered; inactive child variants do not resurrect the replaced parent group.",
+  "non_alias_policy": "ASM monolithic/debug bundles, individual ASM modules, Scala compiler/library/plugins and classifiers/extensions are distinct identities, not substitutes inferred from names.",
+  "cases": [
+    {
+      "game": "1.7.10",
+      "build": "10.13.4.1614-1.7.10",
+      "official_base_sha1": "ed5d8789ed29872ea2ef1c348302b0c55e3f3468",
+      "profile_projection_sha256": "e88439691947adb582ca60cf04299ca4b4bad4fec484d108f0de322e044174a5",
+      "expected_relevant_classpath": [
+        "org.ow2.asm:asm-all:5.0.3",
+        "org.scala-lang:scala-actors-migration_2.11:1.1.0",
+        "org.scala-lang:scala-compiler:2.11.1",
+        "org.scala-lang.plugins:scala-continuations-library_2.11:1.0.2",
+        "org.scala-lang.plugins:scala-continuations-plugin_2.11.1:1.0.2",
+        "org.scala-lang:scala-library:2.11.1",
+        "org.scala-lang:scala-parser-combinators_2.11:1.0.1",
+        "org.scala-lang:scala-reflect:2.11.1",
+        "org.scala-lang:scala-swing_2.11:1.0.1",
+        "org.scala-lang:scala-xml_2.11:1.0.2",
+        "com.google.guava:guava:17.0"
+      ]
+    },
+    {
+      "game": "1.12.2",
+      "build": "14.23.5.2859",
+      "official_base_sha1": "832d95b9f40699d4961394dcf6cf549e65f15dc5",
+      "profile_projection_sha256": "f3c8fe2b1e3f40fb6fa8c4ddb9768e16914a5676241a1a8340c8aba57a8badcb",
+      "expected_relevant_classpath": [
+        "org.ow2.asm:asm-debug-all:5.2",
+        "org.scala-lang:scala-actors-migration_2.11:1.1.0",
+        "org.scala-lang:scala-compiler:2.11.1",
+        "org.scala-lang.plugins:scala-continuations-library_2.11:1.0.2_mc",
+        "org.scala-lang.plugins:scala-continuations-plugin_2.11.1:1.0.2_mc",
+        "org.scala-lang:scala-library:2.11.1",
+        "org.scala-lang:scala-parser-combinators_2.11:1.0.1",
+        "org.scala-lang:scala-reflect:2.11.1",
+        "org.scala-lang:scala-swing_2.11:1.0.1",
+        "org.scala-lang:scala-xml_2.11:1.0.2",
+        "com.google.guava:guava:21.0"
+      ]
+    },
+    {
+      "game": "1.12.2",
+      "build": "14.23.5.2860",
+      "official_base_sha1": "832d95b9f40699d4961394dcf6cf549e65f15dc5",
+      "profile_projection_sha256": "be79c606699009c4cb28d4bcc1bad59e8a513a420389cfe1df6676e1cf65b758",
+      "expected_relevant_classpath": [
+        "org.ow2.asm:asm-debug-all:5.2",
+        "org.scala-lang:scala-actors-migration_2.11:1.1.0",
+        "org.scala-lang:scala-compiler:2.11.1",
+        "org.scala-lang.plugins:scala-continuations-library_2.11:1.0.2_mc",
+        "org.scala-lang.plugins:scala-continuations-plugin_2.11.1:1.0.2_mc",
+        "org.scala-lang:scala-library:2.11.1",
+        "org.scala-lang:scala-parser-combinators_2.11:1.0.1",
+        "org.scala-lang:scala-reflect:2.11.1",
+        "org.scala-lang:scala-swing_2.11:1.0.1",
+        "org.scala-lang:scala-xml_2.11:1.0.2",
+        "com.google.guava:guava:21.0"
+      ]
+    },
+    {
+      "game": "1.20.4",
+      "build": "49.0.3",
+      "official_base_sha1": "3753ef41f9540d84b13d8c203a48cc1afecc90d5",
+      "profile_projection_sha256": "6b4edd68dd629692c021226a4ea42f744d924b7d15df078e2a5604a3911504e6",
+      "expected_relevant_classpath": [
+        "com.google.guava:guava:32.1.2-jre",
+        "org.ow2.asm:asm:9.6",
+        "org.ow2.asm:asm-tree:9.6",
+        "org.ow2.asm:asm-util:9.6",
+        "org.ow2.asm:asm-commons:9.6",
+        "org.ow2.asm:asm-analysis:9.6"
+      ]
+    }
+  ]
+}

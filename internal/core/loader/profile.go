@@ -259,8 +259,9 @@ func (p Profile) Validate() error {
 }
 
 // Merge keeps official client/assets/natives and JVM defaults. Loader libraries
-// take precedence for an identical Maven module (including classifier), so the
-// classpath never contains two versions of one overridden module.
+// replace the official module group (including classifier/extension). All
+// conditional variants of the chosen group survive until platform selection;
+// install.Build rejects simultaneously active versions instead of picking one.
 func (p Profile) Merge(base meta.Version) (meta.Version, error) {
 	if err := p.Validate(); err != nil {
 		return meta.Version{}, err
@@ -271,7 +272,11 @@ func (p Profile) Merge(base meta.Version) (meta.Version, error) {
 	if err := base.ValidateVanilla(); err != nil {
 		return meta.Version{}, err
 	}
-	effective := base
+	if base.LoaderProfile != "" || base.LibraryDirectory != "" || base.LaunchName != "" || len(base.RuntimeLookups) != 0 {
+		return meta.Version{}, errors.New("加载器只能合并到官方基底，不能叠加已合并的运行配置")
+	}
+	effective := base.Clone()
+	effective.LoaderProfile = p.Fingerprint()
 	effective.MainClass = p.MainClass
 	if UsesProcessors(p.Request.Type) {
 		effective.LibraryDirectory, effective.LaunchName = p.LibraryDirectory(), p.ID
@@ -282,16 +287,17 @@ func (p Profile) Merge(base meta.Version) (meta.Version, error) {
 		effective.RuntimeLookups = lookups
 	}
 	effective.Java.Major = max(base.Java.Major, p.JavaMajor)
-	args := *base.Arguments
-	args.Game = append(slices.Clone(args.Game), p.Arguments.Game...)
+	args := *effective.Arguments
+	loaderArgs := p.Arguments.Clone()
+	args.Game = append(args.Game, loaderArgs.Game...)
 	if p.Legacy || p.LegacyGame {
 		if base.Java.Major != 8 {
 			return meta.Version{}, errors.New("旧 Forge 配置要求稳定 Java 8 的官方客户端")
 		}
 		// The old profile owns a complete game template, not incremental flags.
-		args.Game = slices.Clone(p.Arguments.Game)
+		args.Game = loaderArgs.Game
 	}
-	args.JVM = append(slices.Clone(args.JVM), p.Arguments.JVM...)
+	args.JVM = append(args.JVM, loaderArgs.JVM...)
 	if UsesProcessors(p.Request.Type) {
 		for index, argument := range args.JVM {
 			for _, value := range argument.Values {
@@ -308,20 +314,19 @@ func (p Profile) Merge(base meta.Version) (meta.Version, error) {
 	effective.Arguments = &args
 	module := func(name string) string {
 		coordinate, _ := meta.ParseCoordinate(name)
-		return coordinate.Group + ":" + coordinate.Artifact + ":" + coordinate.Classifier + "@" + coordinate.Extension
+		return coordinate.Module()
 	}
-	seen := make(map[string]string)
+	seen := make(map[string]bool)
+	baseLibraries := effective.Libraries
 	effective.Libraries = nil
 	for _, library := range p.Libraries {
 		key := module(library.Name)
-		if previous, exists := seen[key]; exists && previous != library.Name {
-			return meta.Version{}, errors.New("加载器包含同一模块的多个版本")
-		}
-		seen[key] = library.Name
+		seen[key] = true
+		library = library.Clone()
 		library.LocalRoot = effective.LibraryDirectory
 		effective.Libraries = append(effective.Libraries, library)
 	}
-	for _, library := range base.Libraries {
+	for _, library := range baseLibraries {
 		if _, overridden := seen[module(library.Name)]; !overridden {
 			effective.Libraries = append(effective.Libraries, library)
 		}

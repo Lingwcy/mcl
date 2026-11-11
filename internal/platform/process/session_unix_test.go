@@ -25,15 +25,15 @@ func TestStopEscalatesAndTerminatesDescendants(t *testing.T) {
 		t.Fatal(err)
 	}
 	stopCleanup(t, s)
-	waitFor(t, func() bool { _, err := os.Stat(pidFile); return err == nil })
-	data, err := os.ReadFile(pidFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	var pid int
+	waitFor(t, func() bool {
+		data, err := os.ReadFile(pidFile)
+		if err != nil {
+			return false
+		}
+		pid, err = strconv.Atoi(strings.TrimSpace(string(data)))
+		return err == nil && pid > 0
+	})
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if err := s.Stop(ctx); err != nil {
