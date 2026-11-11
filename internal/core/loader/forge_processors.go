@@ -300,6 +300,9 @@ func prepareForgeProcessor(spec forgeProcessor, values map[string]forgeValue, st
 			return result, fmt.Errorf("不支持的客户端安装任务 %q", task)
 		}
 	}
+	if err := validateProcessorContract(coordinate, nativeValues, result.outputs); err != nil {
+		return result, err
+	}
 	if result.nativeTask != "" {
 		if err := validateNativeTask(&result); err != nil {
 			return result, err

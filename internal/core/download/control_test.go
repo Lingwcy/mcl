@@ -119,25 +119,36 @@ func TestTransferControlIsSharedAcrossClientsAndSkipsVerifiedCache(t *testing.T)
 	for _, client := range []*Client{first, second} {
 		go func() { results <- client.Run(ctx, files, nil) }()
 	}
+	completed := 0
+	waitForRequest := func() {
+		for {
+			select {
+			case <-entered:
+				return
+			case err := <-results:
+				completed++
+				if err != nil {
+					t.Fatalf("client failed while waiting for transfer %d: %v", requests.Load()+1, err)
+				}
+				if completed == 2 {
+					t.Fatal("clients ended before all expected requests")
+				}
+			case <-ctx.Done():
+				t.Fatalf("awaiting transfer %d with %d completed clients: %v", requests.Load()+1, completed, ctx.Err())
+			}
+		}
+	}
 	// Fill both slots before releasing either response, then allow the rest.
 	for range 2 {
-		select {
-		case <-entered:
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		}
+		waitForRequest()
 	}
 	permit <- struct{}{}
 	permit <- struct{}{}
 	for range total - 2 {
-		select {
-		case <-entered:
-			permit <- struct{}{}
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		}
+		waitForRequest()
+		permit <- struct{}{}
 	}
-	for range 2 {
+	for range 2 - completed {
 		if err := <-results; err != nil {
 			t.Fatal(err)
 		}

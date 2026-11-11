@@ -1,0 +1,87 @@
+{
+  "scope": "Read-only official sources whose complete SHA-1 matched separately fetched Maven sidecars. No Java or upstream implementation was executed/copied. Sources identify CLI contracts; no JDK or update cap is inferred from absent source usage.",
+  "sources": [
+    {
+      "url": "https://maven.minecraftforge.net/net/minecraftforge/installertools/1.4.0/installertools-1.4.0-sources.jar",
+      "size": 32791,
+      "sha1": "9f57a41dccdb23fcbe6671dc948fc36a7bf033e6",
+      "sha256": "1ed91ca017026ef395b0d75194c6a877f030d3c23b93cd2f19fa1cb942cf4db1",
+      "entries": [
+        {
+          "name": "net/minecraftforge/installertools/CreateParents.java",
+          "sha256": "b6dc5d182da178aad7cb6ebcb253b55364c499540359a6c7d5f21f8a07ab4e93"
+        },
+        {
+          "name": "net/minecraftforge/installertools/SrgMcpRenamer.java",
+          "sha256": "07fa07df3ba42686e713749765256b8dccf82adac4407072353a6b851be6cee4"
+        },
+        {
+          "name": "net/minecraftforge/installertools/McpData.java",
+          "sha256": "72abb604cd9c1e8a273f21dea14ff5a1b2f7d74c94f1a034235c8d51aed01c6a"
+        },
+        {
+          "name": "net/minecraftforge/installertools/CreateDirectory.java",
+          "sha256": "62944c348319327a7a460c11f3e78c218f9e314a5e1029ce7e4fdb2831724428"
+        },
+        {
+          "name": "net/minecraftforge/installertools/ExtractInheritance.java",
+          "sha256": "c4c69598f0421a22fc4eb81c483a91ef0ca322ab0e76b4acc7b31b47b3b66937"
+        },
+        {
+          "name": "net/minecraftforge/installertools/BundlerExtract.java",
+          "sha256": "1e95953fdecd436991b332de7a8e827f350f648d3c0af18f9297872b3e783458"
+        },
+        {
+          "name": "net/minecraftforge/installertools/ChainMappings.java",
+          "sha256": "d3eb7cff51dfe304667bc7acca53d60c791f7e4614b1d546a112700de8d8fb0a"
+        },
+        {
+          "name": "net/minecraftforge/installertools/ExtractFiles.java",
+          "sha256": "f712e2c905b59c04c0b26f41ba522ab72e37481cb824fb54282ab22baa0f4f82"
+        },
+        {
+          "name": "net/minecraftforge/installertools/DownloadMojmaps.java",
+          "sha256": "7d6599f85eab89d3a40c0f7a3314d349639b751116e95760258c1db19d7986fc"
+        }
+      ]
+    },
+    {
+      "url": "https://maven.minecraftforge.net/net/minecraftforge/ForgeAutoRenamingTool/1.0.6/ForgeAutoRenamingTool-1.0.6-sources.jar",
+      "size": 41518,
+      "sha1": "76c1c6a31bf76acf0d6a25d9011bc1f12a73098c",
+      "sha256": "7973c5e0842a04c7840f11b20fb913cf81fc38a63c1824df008c0e5f4ebaf86f",
+      "entries": [
+        {
+          "name": "net/minecraftforge/fart/Main.java",
+          "sha256": "500fc88f6463de22fd8d747d2435da4b03cafa5ce57aabc46ead61f31f4d0e66"
+        }
+      ]
+    },
+    {
+      "url": "https://maven.minecraftforge.net/net/minecraftforge/binarypatcher/1.2.0/binarypatcher-1.2.0-sources.jar",
+      "size": 9743,
+      "sha1": "bc9653c17fca2d93f86c59c59ddb0b311afb6b76",
+      "sha256": "2021979b37c03814a800ec881cdd7aa518e323b48ce191729b5a081bc010268b",
+      "entries": [
+        {
+          "name": "net/minecraftforge/binarypatcher/ConsoleTool.java",
+          "sha256": "675f417220073fcac5be2d52476c88362194afc155af4077bc882067597f7490"
+        }
+      ]
+    }
+  ],
+  "contracts": {
+    "installertools:1.4.0": [
+      "Typed native/mapping adapters own archive tasks.",
+      "MERGE_MAPPING/CHAIN_MAPPING bind left/right/output; EXTRACT_INHERITANCE binds input/lib/output; SRG_TO_MCP binds mcp/input/output."
+    ],
+    "ForgeAutoRenamingTool:1.0.6": [
+      "Require explicit output to prevent the official implicit in-place overwrite default.",
+      "Reject implicit --cfg input and unplanned --log writes; observed standard fixing flags accepted with no optional value.",
+      "Input/names/map/lib/ff-line-numbers must be typed private staging paths."
+    ],
+    "binarypatcher:1.2.0": [
+      "Client apply mode requires clean/apply/output. Creation and legacy pack200 modes are not enabled by the client adapter."
+    ]
+  }
+}
