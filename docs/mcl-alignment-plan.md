@@ -1053,3 +1053,13 @@ PC5接入Windows同进程身份前后核验的只读窗口观测（User32/DWM，
 会话在受管根上启动前建立标准日志基线；只读本次改变的latest/debug/client crash/确切PID hs_err，固定目录/候选/尾部/行数边界、链接/身份/变化检查、已知及通用秘密脱敏、整段命令/URL省略。退出前保存有限脱敏副本并释放目录/redactor，历史不重读下一会话日志。诊断纯值分类不把声音/WARN/运行时间当成功或根因；明示来源、观察置信、退出归属与main-menu未确认。既有日志工具栏显式诊断/取消/复制和同列表结果，不新建解释页，后台Window.Update与generation拒绝过期结果。
 
 新离线CI在原生Windows/Linux/macOS执行普通vet/test、无窗口Tester、MyGo vet、build，不执行真实Java/安装器/游戏或发行；需观察实际CI结果，不把本机/交叉编译说成对应系统行为通过。实际实例、凭据、存档未操作。完整决策0062与新回归证据分别记录，整体剩余项继续执行。
+
+## 47. 原生三平台离线收口与证据审计
+
+5584700的Compatibility checks 42981759481实际通过Windows2025、Ubuntu24.04和macOS15原生vet/全量普通单元与无窗口Tester/MyGo vet/build。CI暴露并修正了干净克隆可选开发文档、固定JSON换行、Java home规范化和部分测试宿主路径/POSIX假设；生产Windows短名称发布因FILE_RENAME_INFORMATION缓冲区未覆盖结构最小对齐长度而失败，已修为max(sizeof,offset+UTF16名称长度)，保留Root句柄/非覆盖，不用换下载器或忽略错误。新增实际短名/中文/非BMP/长名/目录/非覆盖/受管替换回归在三系统执行成功。
+
+固定Forge工具sources经独立旁车SHA1匹配，只提取来源/摘要/CLI事实：installertools1.4.0任务选项、FART1.0.6显式输出且拒绝cfg/log外部副作用、binarypatcher1.2.0客户端apply模式进入类型化契约。不从source中未发现JavaCompiler就断言JRE万能，也不将未知工具版本误绑新契约。
+
+只读来源比较按Modrinth manifest实际URL固定三个forge-v0响应摘要，明确与官方样本的字段/坐标变化，未接入转换执行/自动provider切换。官方36.2.26变更与PR8423只确证ModLauncher8.1.3，未证明精确8u321上限/所有旧Forge范围；相关证据不足记录进java-policy-audit，不凭参考代码强制全局Java补丁规则。
+
+用户要求整体完成再汇报，且最新删除旧请求兼容；当前仅v4策略，旧v2/v3不升级、不读取。真实Java/安装器/游戏原限制尚在，不操作用户数据。已准备独立.tools根、固定三组合、原版→Forge无mod及资源/进程/窗口/主菜单、取消/修复/恢复的具体验收方案；未执行，缺Windows/Linux真实桌面验收，不能宣称整体可玩完成。本机已实际执行并发race（app/launch/process）成功；未合并main、未新版本/DMG/Release。

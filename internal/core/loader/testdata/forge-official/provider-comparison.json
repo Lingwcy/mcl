@@ -1,0 +1,177 @@
+{
+  "purpose": "Source/dialect separation audit only. No transformed profile, credential, executable patch, repository override or automatic network fallback is enabled.",
+  "reference": "Read-only Swift URLConfig.swift launcherMeta forge-v0 route at pinned reference revision d9417dc54025d8d276a959374b89bfd84a387caa.",
+  "cases": [
+    {
+      "minecraft": "1.7.10",
+      "forge": "10.13.4.1614-1.7.10",
+      "provider": "modrinth-launcher-meta",
+      "dialect": "forge-v0",
+      "enabled_for_execution": false,
+      "manifest_url": "https://launcher-meta.modrinth.com/forge/v0/manifest.json",
+      "manifest_sha256": "4f1bdb16b33c9b6446f57f2cefc852cc4133675bf95bc8e5aae57569ee4b2404",
+      "declared_id": "10.13.4.1614",
+      "url": "https://launcher-meta.modrinth.com/forge/v0/versions/10.13.4.1614.json",
+      "status": 200,
+      "size": 4190,
+      "sha256": "7ee505f39f6992a43232f6574eac03bd14104a500beeadc05ba7f325b3f67065",
+      "top_level_keys": [
+        "arguments",
+        "id",
+        "inheritsFrom",
+        "libraries",
+        "mainClass",
+        "minecraftArguments",
+        "releaseTime",
+        "time",
+        "type"
+      ],
+      "official_projection_sha256": "e88439691947adb582ca60cf04299ca4b4bad4fec484d108f0de322e044174a5",
+      "main_class": {
+        "official": "net.minecraft.launchwrapper.Launch",
+        "transformed": "net.minecraft.launchwrapper.Launch"
+      },
+      "java_requirement": {
+        "official": null,
+        "transformed": null
+      },
+      "added_coordinates": [],
+      "omitted_coordinates": [],
+      "library_dialect": "list",
+      "transformed_arguments": {
+        "game": [
+          "--username",
+          "${auth_player_name}",
+          "--version",
+          "${version_name}",
+          "--gameDir",
+          "${game_directory}",
+          "--assetsDir",
+          "${assets_root}",
+          "--assetIndex",
+          "${assets_index_name}",
+          "--uuid",
+          "${auth_uuid}",
+          "--accessToken",
+          "${auth_access_token}",
+          "--userProperties",
+          "${user_properties}",
+          "--userType",
+          "${user_type}",
+          "--tweakClass",
+          "cpw.mods.fml.common.launcher.FMLTweaker"
+        ]
+      },
+      "scope": "Public declaration comparison only; transformed metadata cannot authorize execution or replace official fixed identity. Raw third-party body not redistributed."
+    },
+    {
+      "minecraft": "1.12.2",
+      "forge": "14.23.5.2860",
+      "provider": "modrinth-launcher-meta",
+      "dialect": "forge-v0",
+      "enabled_for_execution": false,
+      "manifest_url": "https://launcher-meta.modrinth.com/forge/v0/manifest.json",
+      "manifest_sha256": "4f1bdb16b33c9b6446f57f2cefc852cc4133675bf95bc8e5aae57569ee4b2404",
+      "declared_id": "14.23.5.2860",
+      "url": "https://launcher-meta.modrinth.com/forge/v0/versions/14.23.5.2860.json",
+      "status": 200,
+      "size": 10842,
+      "sha256": "4cd085f3b33f7e0f4e73cd9c58dfc92ba47a07d0fcb4923f3c31ba75b0c5ff4b",
+      "top_level_keys": [
+        "data",
+        "id",
+        "inheritsFrom",
+        "libraries",
+        "mainClass",
+        "minecraftArguments",
+        "processors",
+        "releaseTime",
+        "time",
+        "type"
+      ],
+      "official_projection_sha256": "be79c606699009c4cb28d4bcc1bad59e8a513a420389cfe1df6676e1cf65b758",
+      "main_class": {
+        "official": "net.minecraft.launchwrapper.Launch",
+        "transformed": "net.minecraft.launchwrapper.Launch"
+      },
+      "java_requirement": {
+        "official": null,
+        "transformed": null
+      },
+      "added_coordinates": [
+        "de.oceanlabs.mcp:mcp_config:1.12.2-20200226.224830@zip"
+      ],
+      "omitted_coordinates": [],
+      "library_dialect": "list",
+      "transformed_arguments": "--username ${auth_player_name} --version ${version_name} --gameDir ${game_directory} --assetsDir ${assets_root} --assetIndex ${assets_index_name} --uuid ${auth_uuid} --accessToken ${auth_access_token} --userType ${user_type} --tweakClass net.minecraftforge.fml.common.launcher.FMLTweaker --versionType Forge",
+      "scope": "Public declaration comparison only; transformed metadata cannot authorize execution or replace official fixed identity. Raw third-party body not redistributed."
+    },
+    {
+      "minecraft": "1.20.4",
+      "forge": "49.0.3",
+      "provider": "modrinth-launcher-meta",
+      "dialect": "forge-v0",
+      "enabled_for_execution": false,
+      "manifest_url": "https://launcher-meta.modrinth.com/forge/v0/manifest.json",
+      "manifest_sha256": "4f1bdb16b33c9b6446f57f2cefc852cc4133675bf95bc8e5aae57569ee4b2404",
+      "declared_id": "49.0.3",
+      "url": "https://launcher-meta.modrinth.com/forge/v0/versions/49.0.3.json",
+      "status": 200,
+      "size": 29374,
+      "sha256": "ce5054f99e73712797bf47fd8a83324c04e62aace5e0d89a02decb1bae44693b",
+      "top_level_keys": [
+        "arguments",
+        "data",
+        "id",
+        "inheritsFrom",
+        "libraries",
+        "mainClass",
+        "processors",
+        "releaseTime",
+        "time",
+        "type"
+      ],
+      "official_projection_sha256": "6b4edd68dd629692c021226a4ea42f744d924b7d15df078e2a5604a3911504e6",
+      "main_class": {
+        "official": "net.minecraftforge.bootstrap.ForgeBootstrap",
+        "transformed": "net.minecraftforge.bootstrap.ForgeBootstrap"
+      },
+      "java_requirement": {
+        "official": null,
+        "transformed": null
+      },
+      "added_coordinates": [
+        "com.github.jponge:lzma-java:1.3",
+        "com.google.code.gson:gson:2.10.1",
+        "com.nothome:javaxdelta:2.0.1",
+        "de.oceanlabs.mcp:mcp_config:1.20.4-20231207.112700@zip",
+        "de.siegmar:fastcsv:2.2.2",
+        "net.minecraftforge:ForgeAutoRenamingTool:1.0.6",
+        "net.minecraftforge:binarypatcher:1.2.0",
+        "net.minecraftforge:forge:1.20.4-49.0.3:shim",
+        "net.minecraftforge:installertools:1.4.0",
+        "net.minecraftforge:srgutils:0.5.1",
+        "net.minecraftforge:srgutils:0.5.6",
+        "net.sf.jopt-simple:jopt-simple:6.0-alpha-3",
+        "org.ow2.asm:asm-commons:9.5",
+        "org.ow2.asm:asm-tree:9.5",
+        "org.ow2.asm:asm:9.5",
+        "trove:trove:1.0.2",
+        "com.modrinth.daedalus:forge-installer-extracts:1.20.4-49.0.3:client@lzma",
+        "com.modrinth.daedalus:forge-installer-extracts:1.20.4-49.0.3:server@lzma"
+      ],
+      "omitted_coordinates": [],
+      "library_dialect": "list",
+      "transformed_arguments": {
+        "game": [
+          "--launchTarget",
+          "forge_client"
+        ],
+        "jvm": [
+          "-Djava.net.preferIPv6Addresses=system"
+        ]
+      },
+      "scope": "Public declaration comparison only; transformed metadata cannot authorize execution or replace official fixed identity. Raw third-party body not redistributed."
+    }
+  ]
+}
