@@ -1,6 +1,54 @@
 package ui
 
-import "testing"
+import (
+	"github.com/egoist/mygo/ui"
+	"mcl/internal/app"
+	"mcl/internal/core/launch"
+	"testing"
+)
+
+func TestDiagnosticActionRejectsCanceledAndOtherSessionResults(t *testing.T) {
+	shell := NewShell(app.DefaultSettings(), t.TempDir(), nil, nil)
+	var completions []func(launch.RuntimeDiagnosis, error)
+	cancels := 0
+	shell.ConnectGames(GameActions{Diagnose: func(id string, done func(launch.RuntimeDiagnosis, error)) func() {
+		if id != "game-1" {
+			t.Fatal("wrong session requested")
+		}
+		completions = append(completions, done)
+		return func() { cancels++ }
+	}})
+	shell.SetGames([]app.GameSnapshot{{ID: "game-1", VersionID: "1.12.2", Running: true, Window: app.GameWindowPending}})
+	shell.showLogs("game-1")
+	tester := ui.NewTester(shell.View, 1080, 720)
+	click(t, tester, "诊断")
+	tester.Frame()
+	click(t, tester, "取消诊断")
+	report := launch.DiagnoseRuntime(launch.OutputSnapshot{}, launch.Exit{}, true, "pending", nil)
+	completions[0](report, nil)
+	tester.Frame()
+	if shell.games.showDiagnosis || shell.games.diagnosing || cancels != 1 {
+		t.Fatal("canceled result changed view")
+	}
+	click(t, tester, "诊断")
+	completions[1](report, nil)
+	tester.Frame()
+	if !shell.games.showDiagnosis || shell.games.diagnosing {
+		t.Fatal("current result not shown")
+	}
+	click(t, tester, "返回日志")
+	tester.Frame()
+	tester.SetDark(true)
+	tester.SetScale(2)
+	tester.Frame()
+	click(t, tester, "诊断")
+	shell.showLogs("other-session")
+	completions[2](report, nil)
+	tester.Frame()
+	if shell.games.showDiagnosis || shell.games.selected != "other-session" {
+		t.Fatal("obsolete session stole diagnostic view")
+	}
+}
 
 func TestAutomaticGameLogsRespectLaunchAndNavigation(t *testing.T) {
 	for _, tc := range []struct {

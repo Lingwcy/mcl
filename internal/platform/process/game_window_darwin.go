@@ -19,13 +19,7 @@ func GameWindowProbe() func(launch.ProcessIdentity) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		visible, err := api.visible(expected.PID)
-		if err != nil || !visible {
-			return false, err
-		}
-		// Recheck the registered process identity so a reused PID cannot
-		// complete this launch.
-		return Running(expected)
+		return observeProcessWindow(expected, Running, api.visible)
 	}
 }
 

@@ -24,6 +24,8 @@ const (
 // Completed snapshots remain bounded; no UI object or credential is retained.
 type GameSnapshot struct {
 	Evidence                  diagnostics.Snapshot
+	DiagnosticFiles           []launch.DiagnosticLog
+	DiagnosticFileState       string
 	WindowCheckedAt           time.Time
 	WindowProbeCode           string
 	Warnings                  []string
@@ -38,6 +40,8 @@ type GameSnapshot struct {
 }
 
 type managedGame struct {
+	files    *sessionLogs
+	record   launch.Record
 	snapshot GameSnapshot
 	game     launch.Game
 	redact   func(string) string
@@ -52,6 +56,10 @@ func (s *LaunchService) notify() {
 }
 
 func (s *LaunchService) manage(record launch.Record, game launch.Game, release func(), redact func(string) string, evidence ...diagnostics.Snapshot) {
+	s.manageSession(record, game, release, redact, nil, "not-configured", evidence...)
+}
+
+func (s *LaunchService) manageSession(record launch.Record, game launch.Game, release func(), redact func(string) string, files *sessionLogs, fileCode string, evidence ...diagnostics.Snapshot) {
 	snapshot := GameSnapshot{Warnings: launch.StartupWarnings(game), ID: record.ID, InstanceID: record.InstanceID, VersionID: record.VersionID, PID: game.PID(), StartedAt: time.Now().UTC(), Running: true}
 	if len(evidence) > 0 && evidence[0].Validate() == nil {
 		snapshot.Evidence = evidence[0].Clone()
@@ -59,7 +67,8 @@ func (s *LaunchService) manage(record launch.Record, game launch.Game, release f
 	if s.windowVisible != nil {
 		snapshot.Window = GameWindowPending
 	}
-	entry := &managedGame{game: game, redact: redact, snapshot: snapshot}
+	snapshot.DiagnosticFileState = fileCode
+	entry := &managedGame{files: files, record: record, game: game, redact: redact, snapshot: snapshot}
 	s.gamesMu.Lock()
 	s.games[record.ID] = entry
 	s.gamesMu.Unlock()
@@ -110,10 +119,25 @@ func (s *LaunchService) manage(record launch.Record, game launch.Game, release f
 				s.notify()
 			case <-game.Done():
 				exit, output := game.Wait(), game.Output()
+				var logs []launch.DiagnosticLog
+				fileState := fileCode
+				if files != nil {
+					capture, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					var err error
+					logs, err = files.Capture(capture, record.Process.PID, redact)
+					cancel()
+					files.Close()
+					if err != nil {
+						fileState = diagnostics.Code(err)
+					} else {
+						fileState = "captured"
+					}
+				}
 				release()
 				s.gamesMu.Lock()
 				entry.snapshot.Running, entry.snapshot.Stopping = false, false
 				entry.snapshot.Exit, entry.snapshot.Output = exit, output
+				entry.snapshot.DiagnosticFiles, entry.snapshot.DiagnosticFileState = logs, fileState
 				entry.game, entry.redact = nil, nil
 				s.history = append(s.history, record.ID)
 				for len(s.history) > maxSessionHistory {
@@ -136,6 +160,7 @@ func (s *LaunchService) Sessions() []GameSnapshot {
 		value := entry.snapshot
 		value.Evidence = value.Evidence.Clone()
 		value.Warnings = slices.Clone(value.Warnings)
+		value.DiagnosticFiles = cloneDiagnosticLogs(value.DiagnosticFiles)
 		if entry.game != nil {
 			value.Output = entry.game.Output()
 		} else {
@@ -180,13 +205,95 @@ func (s *LaunchService) DetachAll() {
 	s.stopWindowWatch()
 	s.gamesMu.Lock()
 	var games []launch.Game
+	var sources []*sessionLogs
 	for _, entry := range s.games {
 		if entry.game != nil {
 			games = append(games, entry.game)
+			if entry.files != nil {
+				sources = append(sources, entry.files)
+			}
 		}
 	}
 	s.gamesMu.Unlock()
 	for _, game := range games {
 		game.Detach()
 	}
+	for _, source := range sources {
+		source.Close()
+	}
+}
+
+func cloneDiagnosticLogs(logs []launch.DiagnosticLog) []launch.DiagnosticLog {
+	result := slices.Clone(logs)
+	for i := range result {
+		result[i].Lines = slices.Clone(result[i].Lines)
+	}
+	return result
+}
+
+// Diagnose reads only the exact managed session, never a PID guessed from an
+// instance or a later default directory. Completed sessions use redacted copies.
+func (s *LaunchService) Diagnose(ctx context.Context, id string) (launch.RuntimeDiagnosis, error) {
+	s.gamesMu.Lock()
+	entry := s.games[id]
+	if entry == nil {
+		s.gamesMu.Unlock()
+		return launch.RuntimeDiagnosis{}, errors.New("会话已不在保留范围")
+	}
+	snapshot := entry.snapshot
+	if entry.game != nil {
+		snapshot.Output = entry.game.Output()
+	}
+	logs := cloneDiagnosticLogs(snapshot.DiagnosticFiles)
+	files, redact, record := entry.files, entry.redact, entry.record
+	s.gamesMu.Unlock()
+	fileState := snapshot.DiagnosticFileState
+	if snapshot.Running && files != nil {
+		var err error
+		logs, err = files.Capture(ctx, record.Process.PID, redact)
+		if err != nil {
+			if ctx.Err() != nil {
+				return launch.RuntimeDiagnosis{}, ctx.Err()
+			}
+			fileState = diagnostics.Code(err)
+		} else {
+			fileState = "captured"
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return launch.RuntimeDiagnosis{}, err
+	}
+	// Exit may have completed while a live file snapshot was being read.
+	s.gamesMu.Lock()
+	if current := s.games[id]; current == entry {
+		snapshot = current.snapshot
+		if current.game != nil {
+			snapshot.Output = current.game.Output()
+		}
+		if !snapshot.Running {
+			logs = cloneDiagnosticLogs(snapshot.DiagnosticFiles)
+			fileState = snapshot.DiagnosticFileState
+		}
+	}
+	s.gamesMu.Unlock()
+	window := "unsupported"
+	if !snapshot.WindowCheckedAt.IsZero() {
+		window = "unavailable"
+	}
+	if snapshot.Window == GameWindowPending {
+		window = "pending"
+	} else if snapshot.Window == GameWindowVisible {
+		window = "visible"
+	}
+	result := launch.DiagnoseRuntime(snapshot.Output, snapshot.Exit, snapshot.Running, window, logs)
+	if fileState == "" {
+		fileState = "not-configured"
+	}
+	result.Observations = append(result.Observations, launch.RuntimeObservation{Code: "diagnostic-files", Value: fileState})
+	checked := "unobserved"
+	if !snapshot.WindowCheckedAt.IsZero() {
+		checked = snapshot.WindowCheckedAt.UTC().Format(time.RFC3339Nano)
+	}
+	result.Observations = append(result.Observations, launch.RuntimeObservation{Code: "window-checked-at", Value: checked})
+	return result, nil
 }

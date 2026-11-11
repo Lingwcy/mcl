@@ -10,7 +10,8 @@ func Environment(parent []string) []string {
 	for _, entry := range parent {
 		key, _, _ := strings.Cut(entry, "=")
 		switch strings.ToUpper(key) {
-		case "_JAVA_OPTIONS", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "CLASSPATH":
+		case "_JAVA_OPTIONS", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "CLASSPATH",
+			"MCL_CURSEFORGE_API_KEY", "GRUN_CURSEFORGE_API_KEY", "MYGO_UPDATER_PRIVATE_KEY":
 			continue
 		}
 		result = append(result, entry)

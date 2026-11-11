@@ -10,13 +10,21 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-type GameActions struct{ Stop func(string, func(error)) }
+type GameActions struct {
+	Stop     func(string, func(error))
+	Diagnose func(string, func(launch.RuntimeDiagnosis, error)) func()
+}
 type gameState struct {
 	actions                   GameActions
 	rows                      []app.GameSnapshot
 	selected, filter, message string
 	errorsOnly                bool
 	list                      ui.ListState
+	diagnosticGeneration      uint64
+	diagnosing, showDiagnosis bool
+	diagnosticText            string
+	diagnosticLines           []launch.Line
+	cancelDiagnosis           func()
 }
 
 func (s *Shell) ConnectGames(actions GameActions) {
@@ -53,7 +61,7 @@ func gameStatus(value app.GameSnapshot) string {
 		if value.Window == app.GameWindowUnavailable {
 			return "进程运行中 · 窗口状态不可用"
 		}
-		return "窗口已出现"
+		return "进程窗口已出现"
 	}
 	if value.Exit.Stopped {
 		return "已停止"
@@ -65,6 +73,14 @@ func gameStatus(value app.GameSnapshot) string {
 }
 
 func (s *Shell) showLogs(id string) {
+	if s.games.cancelDiagnosis != nil {
+		s.games.cancelDiagnosis()
+		s.games.cancelDiagnosis = nil
+	}
+	s.games.diagnosticGeneration++
+	s.games.diagnosing, s.games.showDiagnosis = false, false
+	s.games.diagnosticText = ""
+	s.games.diagnosticLines = nil
 	s.games.selected, s.games.filter, s.games.message = id, "", ""
 	s.games.list = ui.ListState{FollowEnd: true}
 	s.page = logsPage
@@ -88,6 +104,46 @@ func (s *Shell) stopGame(id string) {
 		if err != nil {
 			s.Notify(ToastError, err.Error())
 		}
+	})
+}
+
+func (s *Shell) requestGameDiagnosis(id string) {
+	g := &s.games
+	if g.diagnosing {
+		g.diagnosticGeneration++
+		if g.cancelDiagnosis != nil {
+			g.cancelDiagnosis()
+			g.cancelDiagnosis = nil
+		}
+		g.diagnosing = false
+		return
+	}
+	if g.actions.Diagnose == nil {
+		return
+	}
+	g.diagnosticGeneration++
+	generation := g.diagnosticGeneration
+	g.diagnosing = true
+	g.cancelDiagnosis = g.actions.Diagnose(id, func(report launch.RuntimeDiagnosis, err error) {
+		if g.diagnosticGeneration != generation || g.selected != id {
+			return
+		}
+		g.diagnosing = false
+		g.cancelDiagnosis = nil
+		if s.page != logsPage {
+			return
+		}
+		if err != nil {
+			s.Notify(ToastError, err.Error())
+			return
+		}
+		g.diagnosticText = report.Text()
+		g.diagnosticLines = nil
+		for index, text := range strings.Split(g.diagnosticText, "\n") {
+			g.diagnosticLines = append(g.diagnosticLines, launch.Line{Sequence: uint64(index + 1), Text: text, Stream: "diagnostic"})
+		}
+		g.showDiagnosis = true
+		g.list = ui.ListState{FollowEnd: false}
 	})
 }
 
@@ -132,10 +188,14 @@ func (s *Shell) logView(c *ui.Context) {
 			status = "此会话的日志已不在保留范围"
 		}
 	}
+	if g.showDiagnosis {
+		lines = g.diagnosticLines
+		status = "会话诊断"
+	}
 	query := strings.ToLower(strings.TrimSpace(g.filter))
 	filtered := make([]launch.Line, 0, len(lines))
 	for _, line := range lines {
-		if g.errorsOnly && line.Stream != "stderr" {
+		if !g.showDiagnosis && g.errorsOnly && line.Stream != "stderr" {
 			continue
 		}
 		if query != "" && !strings.Contains(strings.ToLower(line.Text), query) {
@@ -165,19 +225,36 @@ func (s *Shell) logView(c *ui.Context) {
 			ui.Button(c.Key("log-errors"), label).Height(26).OnClick(func() { g.errorsOnly = !g.errorsOnly })
 			ui.Button(c.Key("log-follow"), "回到最新").Height(26).OnClick(func() { g.list.ScrollToEnd() })
 			if current != nil {
-				snapshot := *current
-				ui.Button(c.Key("copy-session-evidence"), "复制诊断").Height(26).OnClick(func() {
-					services.WriteClipboard(fmt.Sprintf("session=%s instance=%s pid=%d status=%s window_checked=%s window_code=%s\n%s", snapshot.ID, snapshot.InstanceID, snapshot.PID, gameStatus(snapshot), snapshot.WindowCheckedAt.UTC().Format("2006-01-02T15:04:05Z07:00"), snapshot.WindowProbeCode, snapshot.Evidence.Text()))
+				id := current.ID
+				label := "诊断"
+				if g.diagnosing {
+					label = "取消诊断"
+				}
+				if g.actions.Diagnose != nil {
+					ui.Button(c.Key("inspect-session"), label).Height(26).OnClick(func() { s.requestGameDiagnosis(id) })
+				}
+				if g.diagnosticText != "" {
+					toggle := "查看诊断"
+					if g.showDiagnosis {
+						toggle = "返回日志"
+					}
+					ui.Button(c.Key("toggle-diagnosis"), toggle).Height(26).OnClick(func() { g.showDiagnosis = !g.showDiagnosis; g.list = ui.ListState{FollowEnd: !g.showDiagnosis} })
+					snapshot := *current
+					ui.Button(c.Key("copy-session-evidence"), "复制诊断").Height(26).OnClick(func() {
+						services.WriteClipboard(fmt.Sprintf("session=%s instance=%s pid=%d status=%s window_checked=%s window_code=%s\n%s\n%s", snapshot.ID, snapshot.InstanceID, snapshot.PID, gameStatus(snapshot), snapshot.WindowCheckedAt.UTC().Format("2006-01-02T15:04:05Z07:00"), snapshot.WindowProbeCode, g.diagnosticText, snapshot.Evidence.Text()))
+					})
+				}
+			}
+			if !g.showDiagnosis {
+				ui.Button(c.Key("copy-logs"), "复制日志").Height(26).OnClick(func() {
+					var text strings.Builder
+					for _, line := range filtered {
+						fmt.Fprintf(&text, "[%s] [%s] %s\n", line.Time.Local().Format("15:04:05"), line.Stream, line.Text)
+					}
+					services.WriteClipboard(text.String())
+					s.Notify(ToastSuccess, "已复制当前筛选日志")
 				})
 			}
-			ui.Button(c.Key("copy-logs"), "复制日志").Height(26).OnClick(func() {
-				var text strings.Builder
-				for _, line := range filtered {
-					fmt.Fprintf(&text, "[%s] [%s] %s\n", line.Time.Local().Format("15:04:05"), line.Stream, line.Text)
-				}
-				services.WriteClipboard(text.String())
-				s.Notify(ToastSuccess, "已复制当前筛选日志")
-			})
 		})
 		if current != nil && (current.Output.Dropped > 0 || current.Exit.OutputIncomplete) {
 			ui.Textf(c, "保留最近日志；已丢弃 %d 行。退出或脱离时可能未取得完整输出。", current.Output.Dropped).FontSize(11).TextColor(t.TextMuted)
@@ -194,7 +271,9 @@ func (s *Shell) logView(c *ui.Context) {
 				color = t.Danger
 			}
 			ui.Column(c).FillWidth().Padding(5, 8).Gap(2).Children(func() {
-				ui.Textf(c, "%s · %s", line.Time.Local().Format("15:04:05"), line.Stream).FontSize(10).TextColor(colors(t).Metadata)
+				if !g.showDiagnosis {
+					ui.Textf(c, "%s · %s", line.Time.Local().Format("15:04:05"), line.Stream).FontSize(10).TextColor(colors(t).Metadata)
+				}
 				ui.Text(c, line.Text).FillWidth().FontSize(11).TextColor(color).MaxLines(8).Ellipsis("…").Selectable()
 				if line.Truncated {
 					ui.Text(c, "此行已截断").FontSize(10).TextColor(t.Warning)

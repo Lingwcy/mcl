@@ -99,7 +99,7 @@ func (s *Shell) launchView(c *ui.Context) {
 		case exited:
 			status = "游戏已退出"
 		case windowOpened:
-			status = "游戏窗口已打开"
+			status = "进程窗口已出现"
 		case running:
 			status = "游戏进程运行中"
 		}

@@ -1,0 +1,48 @@
+name: Compatibility checks
+
+on:
+  pull_request:
+  push:
+    branches: [main, feature/runtime-library-contract]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compatibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline:
+    name: Offline checks on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, windows-2025, macos-15]
+    env:
+      CGO_ENABLED: "0"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Record native toolchain
+        run: |
+          go version
+          go env GOOS GOARCH
+      - name: Vet
+        run: go vet ./...
+      - name: Offline unit and headless UI tests
+        run: go test ./... -count=1 -timeout=5m
+      - name: MyGo lifetime checks
+        run: go tool mygo vet .
+      - name: Build
+        run: go build ./...

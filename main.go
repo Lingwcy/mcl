@@ -421,6 +421,10 @@ func run() error {
 				defer finish()
 				return struct{}{}, launcher.Stop(stop, id)
 			}, func(_ struct{}, err error) { done(err) })
+		}, Diagnose: func(id string, done func(launch.RuntimeDiagnosis, error)) func() {
+			task, cancel := context.WithTimeout(ctx, 2*time.Second)
+			background(ctx, &workers, window, func(context.Context) (launch.RuntimeDiagnosis, error) { return launcher.Diagnose(task, id) }, func(report launch.RuntimeDiagnosis, err error) { cancel(); done(report, err) })
+			return cancel
 		}})
 		workers.Go(func() {
 			var pendingMu sync.Mutex

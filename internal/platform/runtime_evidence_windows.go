@@ -21,4 +21,6 @@ func hostArchitecture() (string, string) {
 	}
 	return arch, "windows-native-machine"
 }
-func desktopEvidence(_ func(string) string) (string, string) { return "win32-unchecked", "unsupported" }
+func desktopEvidence(_ func(string) string) (string, string) {
+	return "win32-unchecked", "win32-pid-window"
+}

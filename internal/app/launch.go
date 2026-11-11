@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -136,6 +139,9 @@ func (s *LaunchService) Run(ctx context.Context, id string, settings Settings, r
 // the preparation context closes an unstarted preparation, never a live game.
 type Prepared struct {
 	memoryProbe MemoryProbe
+	openLogs    func(context.Context) (*sessionLogs, error)
+	files       *sessionLogs
+	fileCode    string
 	mu          sync.Mutex
 	ctx         context.Context
 	options     launch.Options
@@ -268,8 +274,49 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	facts = facts.Merge(runtime.DiagnosticFacts(false))
 	evidence.Facts = facts
 	evidence.Finish("")
+	p.openLogs = func(ctx context.Context) (*sessionLogs, error) {
+		var root *os.Root
+		var err error
+		if s.installations.openGameDirectory != nil {
+			root, err = s.installations.openGameDirectory(ctx, id)
+		} else if value.GameDirectoryID != "" {
+			return nil, errors.New("外部诊断目录未配置受管打开方式")
+		} else {
+			expected := filepath.Join(options.Root, "instances", id, "game")
+			if options.GameDirectory != "" && filepath.Clean(options.GameDirectory) != expected {
+				return nil, errors.New("诊断目录与当前启动计划不一致")
+			}
+			data, openErr := os.OpenRoot(options.Root)
+			if openErr != nil {
+				return nil, openErr
+			}
+			for _, name := range []string{"instances", path.Join("instances", id), path.Join("instances", id, "game")} {
+				info, statErr := data.Lstat(name)
+				if statErr != nil {
+					data.Close()
+					return nil, statErr
+				}
+				if !info.IsDir() {
+					data.Close()
+					return nil, errors.New("诊断目录包含链接或其他类型")
+				}
+			}
+			root, err = data.OpenRoot(path.Join("instances", id, "game"))
+			data.Close()
+		}
+		if err != nil {
+			return nil, err
+		}
+		source, err := newSessionLogs(ctx, root)
+		if err != nil {
+			root.Close()
+			return nil, err
+		}
+		return source, nil
+	}
 	p.started = func(record launch.Record, game launch.Game, release func(), redact func(string) string) {
-		s.manage(record, game, release, redact, evidence)
+		s.manageSession(record, game, release, redact, p.files, p.fileCode, evidence)
+		p.files = nil
 	}
 	transferred = true
 	go func() {
@@ -333,12 +380,31 @@ func (p *Prepared) Start(session launch.Session) (launch.Game, error) {
 	if err != nil {
 		return nil, err
 	}
+	if p.openLogs != nil {
+		p.files, err = p.openLogs(p.ctx)
+		if err != nil {
+			p.fileCode = diagnostics.Code(err)
+		} else {
+			p.fileCode = "ready"
+		}
+	}
+	if err := p.ctx.Err(); err != nil {
+		if p.files != nil {
+			p.files.Close()
+			p.files = nil
+		}
+		return nil, err
+	}
 	record := launch.Record{ID: instance.NewID(), InstanceID: p.options.InstanceID, VersionID: p.options.Version.ID, VersionSHA1: p.versionSHA1, NativeDirectory: p.options.NativeDirectory}
 	game, err := p.start(plan, func(identity launch.ProcessIdentity) error {
 		record.Process, record.CreatedAt = identity, time.Now().UTC()
 		return p.lease.Track(p.ctx, record)
 	})
 	if err != nil || game == nil {
+		if p.files != nil {
+			p.files.Close()
+			p.files = nil
+		}
 		p.state = 2
 		p.release()
 		close(p.settled)
