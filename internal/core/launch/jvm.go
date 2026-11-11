@@ -157,7 +157,7 @@ func ValidateJVMArguments(mode GCMode, args []string) error {
 		switch {
 		case strings.HasPrefix(arg, "-D"):
 			key, _, _ := strings.Cut(strings.TrimPrefix(arg, "-D"), "=")
-			if key == "" || strings.ContainsAny(key, " \t") || key == "java.class.path" || key == "java.library.path" || key == "sun.java.command" || key == "java.home" || key == "libraryDirectory" {
+			if key == "" || strings.ContainsAny(key, " \t") || key == "java.class.path" || key == "java.library.path" || key == "sun.java.command" || key == "java.home" || key == "libraryDirectory" || key == "sun.jnu.encoding" || key == "native.encoding" {
 				return errors.New("JVM 参数不能覆盖启动路径或主类")
 			}
 		case strings.HasPrefix(arg, "-XX:"):

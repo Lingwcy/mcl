@@ -2,6 +2,7 @@ package process
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"os"
 	"os/exec"
@@ -60,16 +61,27 @@ func RunLoaderProcessor(ctx context.Context, executable, work string, args []str
 		data, err = launch.ClasspathSupportJAR(strings.Split(args[index+1], string(os.PathListSeparator)), meta.CurrentPlatform().OS)
 		extension = ".jar"
 	} else {
-		data, err = java.EncodeArgumentFile(args)
+		data, err = java.EncodeRuntimeArgumentFile(args, host.OS, runtime.NativeEncoding)
 	}
 	if err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(work, "processor-*"+extension)
+	supportRoot, err := os.OpenRoot(work)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
+	defer supportRoot.Close()
+	supportName := "processor-" + rand.Text() + extension
+	f, err := supportRoot.OpenFile(supportName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	identity, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return err
+	}
+	defer removeSupportFile(supportRoot, supportName, identity)
 	if _, err := f.Write(data); err != nil {
 		f.Close()
 		return err
@@ -77,10 +89,13 @@ func RunLoaderProcessor(ctx context.Context, executable, work string, args []str
 	if err := f.Close(); err != nil {
 		return err
 	}
-	commandArgs := []string{"@" + filepath.Base(f.Name())}
+	commandArgs := []string{"@" + supportName}
 	if runtime.Major == 8 {
 		commandArgs = slices.Clone(args)
-		commandArgs[slices.Index(commandArgs, "-cp")+1] = f.Name()
+		commandArgs[slices.Index(commandArgs, "-cp")+1] = filepath.Join(work, supportName)
+	}
+	if err := java.ValidateNativeArguments(append([]string{executable}, commandArgs...), host.OS, runtime.NativeEncoding); err != nil {
+		return err
 	}
 	if err := validateCommandSize(executable, commandArgs); err != nil {
 		return err

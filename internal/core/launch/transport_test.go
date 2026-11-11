@@ -115,7 +115,7 @@ func TestClasspathJARLongUnicodeAndEscaping(t *testing.T) {
 		t.Run(target, func(t *testing.T) {
 			var paths []string
 			for i := range 1000 {
-				path := fmt.Sprintf("/中文 空格/库/#%%问号?/单引号'/长目录%s/%d.jar", strings.Repeat("目录", 8), i)
+				path := fmt.Sprintf("/中文😀 空格/库/é-e\u0301/#%%问号?/单引号'/长目录%s/%d.jar", strings.Repeat("目录", 8), i)
 				if target == "windows" {
 					path = strings.ReplaceAll("C:"+strings.ReplaceAll(path, "?", ""), "/", string(rune(92)))
 				}
@@ -143,6 +143,34 @@ func TestClasspathJARLongUnicodeAndEscaping(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestClasspathManifestLimitIncludesFolding(t *testing.T) {
+	// This URL body is below 1MiB; adding continuation prefixes exceeds it.
+	if _, err := ClasspathSupportJAR([]string{"/" + strings.Repeat("a", maxClasspathManifest-100)}, "linux"); err == nil {
+		t.Fatal("folded manifest exceeded bound")
+	}
+	data, err := ClasspathSupportJAR([]string{"/" + strings.Repeat("a", maxClasspathManifest*9/10)}, "linux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := archive.File[0].Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	actual, err := io.ReadAll(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	urls := manifestClasspath(t, data)
+	if len(actual) > maxClasspathManifest || len(actual) != classpathManifestSize(len(urls[0])) {
+		t.Fatal("fold accounting does not match real manifest bytes")
 	}
 }
 

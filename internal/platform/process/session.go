@@ -144,7 +144,10 @@ func start(plan launch.Plan, register func(launch.ProcessIdentity) error, direct
 	if err := f.Close(); err != nil {
 		return nil, err
 	}
-	args := plan.ProcessArguments(filepath.Join(plan.DataRoot(), filepath.FromSlash(argumentPath)))
+	args, err := plan.ProcessCommand(filepath.Join(plan.DataRoot(), filepath.FromSlash(argumentPath)))
+	if err != nil {
+		return nil, err
+	}
 	if len(args) == 0 {
 		return nil, errors.New("empty process arguments")
 	}

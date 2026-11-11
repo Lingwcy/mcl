@@ -27,7 +27,7 @@ func options(t *testing.T, id string) Options {
 	}
 	root := filepath.Join(t.TempDir(), "中文 空格")
 	instanceID := instance.NewID()
-	return Options{Root: root, InstanceID: instanceID, Version: v, Platform: meta.Platform{OS: "osx", Arch: "arm64"}, Java: java.Runtime{Executable: filepath.Join(root, "Java Home/bin/java"), Version: fmt.Sprintf("%d.0.8", v.Java.Major), Major: v.Java.Major, Arch: "arm64"}, NativeDirectory: "instances/" + instanceID + "/natives/ready-" + strings.Repeat("A", 26), MaxMemoryMiB: 4096}
+	return Options{Root: root, InstanceID: instanceID, Version: v, Platform: meta.Platform{OS: "osx", Arch: "arm64"}, Java: java.Runtime{NativeEncoding: "UTF-8", Executable: filepath.Join(root, "Java Home/bin/java"), Version: fmt.Sprintf("%d.0.8", v.Java.Major), Major: v.Java.Major, Arch: "arm64"}, NativeDirectory: "instances/" + instanceID + "/natives/ready-" + strings.Repeat("A", 26), MaxMemoryMiB: 4096}
 }
 
 func session(t *testing.T) Session {

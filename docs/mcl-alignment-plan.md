@@ -1017,3 +1017,11 @@ LoaderService先读原缓存和受保护别名，再在缓存未命中时规范�
 main.go唯一文本冲突位于窗口绑定后的更新/任务接入：保留主线connectUpdates(window,shell,portable)，同时加入connectDownloadTasks及分支原有共享下载TaskService；portable初始化/退出清理、原更新适配与原任务生命周期均保留，不选一侧覆盖另一侧。
 
 main.go gofmt、git diff --check、CGO_ENABLED=0 ./scripts/go.sh build ./...以及Windows amd64/Linux amd64主程序交叉编译通过。本次仅合并与必要编译，未运行test/vet/race、测试目标编译、UI自动化/安装器/Java/真实游戏/用户数据操作；先前窗口修复及T行为仍待用户验收，不把合并或编译当验收。未修改版本号/打标签/发布Release。用户已暂缓I，R只介绍未获开发授权，不自动启动后续阶段。
+
+## 43. PC4c：原生参数编码与传输边界
+
+继PC4a固定Forge库目录、PC4b统一最终库角色后，本批核对固定OpenJDK17/21公开源码（来源/大小/SHA256账本在core/java/testdata/transport-source-evidence.json，不复制上游实现），修复把Windows JVM参数文件一律当UTF-8的缺口。Probe保留sun.jnu.encoding，缺省才用native.encoding，不用file.encoding猜；Plan固定实际Java编码，游戏与处理器复用无损编码后再做字节转义。CP932的ソ包含0x5c尾字节，须编码后转义；直接exec仍原始[]string/CreateProcessW，但先检查实际支持文件路径及argv可表示性，不能转换时给脱敏错误，不写替换字符。Windows缺原生编码只允ASCII，未知编码名拒绝；Unix仍UTF-8，非UTF8 locale待补。
+
+Java8仍manifest-only classpath JAR、Java9+仍只写非秘密JVM参数，令牌只在直接game argv；禁止自定义/metadata覆盖原生编码属性。文件按编码/转义后限制4MiB，Java8清单在附加前按含头部和折行开销的实际字节限制1MiB，覆盖中文/空格/百分号/引号/非BMP/组合字符及折行顺序。Windows命令不用含令牌的完整字符串或无界UTF16副本，而累计CreateProcess转义后的UTF16单元/尾NUL，纯值测试在所有宿主跑。工具支持文件也改Root/O_EXCL/私有权限/身份核对清理，不删除外部替换。
+
+全量vet/test/build、MyGo vet通过；darwin/amd64、windows/amd64、linux/amd64主程序和Windows java/launch/process测试目标编译通过。Windows专用EscapeArg比对只编译未执行；没有真实Java/安装器/游戏/UI验收、用户实例修改、新DMG/main合并/Release。任务schema6和Loader官方策略v3不变。现代UNC/长路径、Unix非UTF8 locale、Java属性输出的非UTF8路径解析、合并层/重复tweaker、固定Loader的ASM/Guava/Scala规则和PC3/PC5/PC6仍未完成，不能称三平台/老Forge兼容已验收。

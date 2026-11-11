@@ -97,6 +97,7 @@ type Plan struct {
 	executable, directory, root, instanceID string
 	arguments, secrets                      []string
 	mainIndex, javaMajor                    int
+	nativeEncoding                          string
 	target                                  meta.Platform
 }
 
@@ -116,7 +117,7 @@ func Build(options Options, session Session) (Plan, error) {
 		return Plan{}, err
 	}
 	index := slices.Index(preview.Arguments, options.Version.MainClass)
-	return Plan{priority: options.Game.Priority, executable: preview.Executable, directory: preview.Directory, root: options.Root, instanceID: options.InstanceID, arguments: preview.Arguments, mainIndex: index, javaMajor: options.Java.Major, secrets: []string{session.token}, target: meta.Platform{OS: options.Platform.OS, Arch: meta.NormalizeArch(options.Platform.Arch)}}, nil
+	return Plan{priority: options.Game.Priority, executable: preview.Executable, directory: preview.Directory, root: options.Root, instanceID: options.InstanceID, arguments: preview.Arguments, mainIndex: index, javaMajor: options.Java.Major, nativeEncoding: options.Java.NativeEncoding, secrets: []string{session.token}, target: meta.Platform{OS: options.Platform.OS, Arch: meta.NormalizeArch(options.Platform.Arch)}}, nil
 }
 
 // PreviewOptions produces a reviewable command with explicit unresolved login
@@ -156,19 +157,34 @@ func (p Plan) Target() meta.Platform { return p.target }
 // Java 8 receives JVM options directly, with only its classpath replaced by a
 // manifest-only JAR. Java 9+ retains its JVM argument-file transport.
 func (p Plan) ProcessArguments(supportFile string) []string {
+	args, _ := p.ProcessCommand(supportFile)
+	return args
+}
+
+// ProcessCommand validates the real support path and direct exec arguments
+// without exposing sensitive text in encoding failures.
+func (p Plan) ProcessCommand(supportFile string) ([]string, error) {
 	if p.mainIndex < 1 || p.mainIndex >= len(p.arguments) || p.javaMajor < 8 {
-		return nil
+		return nil, errors.New("invalid launch plan")
 	}
+	if !safeText(supportFile) || supportFile == "" {
+		return nil, errors.New("invalid JVM support path")
+	}
+	var args []string
 	if p.javaMajor == 8 {
 		index, err := p.classpathIndex()
 		if err != nil {
-			return nil
+			return nil, err
 		}
-		args := slices.Clone(p.arguments)
+		args = slices.Clone(p.arguments)
 		args[index] = supportFile
-		return args
+	} else {
+		args = append([]string{"@" + supportFile}, p.arguments[p.mainIndex:]...)
 	}
-	return append([]string{"@" + supportFile}, p.arguments[p.mainIndex:]...)
+	if err := java.ValidateNativeArguments(append([]string{p.executable}, args...), p.target.OS, p.nativeEncoding); err != nil {
+		return nil, err
+	}
+	return args, nil
 }
 
 func (p Plan) JVMArgumentFile() ([]byte, error) {
@@ -185,7 +201,7 @@ func (p Plan) JVMArgumentFile() ([]byte, error) {
 			}
 		}
 	}
-	return encodeArgumentFile(p.arguments[:p.mainIndex])
+	return java.EncodeRuntimeArgumentFile(p.arguments[:p.mainIndex], p.target.OS, p.nativeEncoding)
 }
 
 func build(o Options, s *Session) (Preview, error) {
@@ -332,6 +348,9 @@ func build(o Options, s *Session) (Preview, error) {
 		}
 		if strings.HasPrefix(value, "-javaagent:") || strings.HasPrefix(value, "-agentlib:") || strings.HasPrefix(value, "-agentpath:") || strings.HasPrefix(value, "@") {
 			return Preview{}, errors.New("当前原版管线不接受 Agent 或额外参数文件")
+		}
+		if reservedNativeEncodingOption(value) {
+			return Preview{}, errors.New("版本不能覆盖Java原生字符编码")
 		}
 		if value == "--class-path" || strings.HasPrefix(value, "--class-path=") || value == "-Djava.class.path" || strings.HasPrefix(value, "-Djava.class.path=") {
 			return Preview{}, errors.New("版本不能用其它参数覆盖classpath")

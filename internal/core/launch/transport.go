@@ -71,17 +71,24 @@ func classpathJAR(paths []string, targetOS string) ([]byte, error) {
 	}
 	var value strings.Builder
 	for i, path := range paths {
+		if len(path) > maxClasspathManifest {
+			return nil, errors.New("Java 8 classpath 清单超过 1 MiB")
+		}
 		u, err := classpathURL(path, targetOS)
 		if err != nil {
 			return nil, err
 		}
+		separator := 0
 		if i != 0 {
+			separator = 1
+		}
+		if len(u) > maxClasspathManifest-value.Len()-separator || classpathManifestSize(value.Len()+separator+len(u)) > maxClasspathManifest {
+			return nil, errors.New("Java 8 classpath 清单超过 1 MiB")
+		}
+		if separator != 0 {
 			value.WriteByte(' ')
 		}
 		value.WriteString(u)
-		if value.Len() > maxClasspathManifest {
-			return nil, errors.New("Java 8 classpath 清单超过 1 MiB")
-		}
 	}
 	var manifest bytes.Buffer
 	crlf := string([]byte{13, 10})
@@ -108,6 +115,17 @@ func classpathJAR(paths []string, targetOS string) ([]byte, error) {
 		return nil, err
 	}
 	return slices.Clone(out.Bytes()), nil
+}
+
+// The first physical line has 70 bytes; continuation lines use one byte
+// for their prefix, leaving 69 value bytes. Each fold adds CRLF + space.
+func classpathManifestSize(valueBytes int) int {
+	lineBytes := len("Class-Path: ") + valueBytes
+	folds := 0
+	if lineBytes > 70 {
+		folds = (lineBytes - 70 + 68) / 69
+	}
+	return len("Manifest-Version: 1.0\r\n") + lineBytes + folds*3 + 4
 }
 
 func classpathURL(path, targetOS string) (string, error) {

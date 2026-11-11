@@ -19,6 +19,7 @@ type Runtime struct {
 	Executable     string
 	Version        string
 	RuntimeVersion string
+	NativeEncoding string `json:",omitempty"`
 	Compiler       string
 	Major          int
 	Arch           string
@@ -91,6 +92,13 @@ func ParseProperties(output string) (Runtime, error) {
 		Version: version, RuntimeVersion: properties["java.runtime.version"], Major: major, Arch: arch, Vendor: properties["java.vendor"], VM: runtimeVM(properties["java.vm.name"]),
 		EarlyAccess:   !parsed.Stable(),
 		HomeDirectory: properties["java.home"],
+	}
+	runtime.NativeEncoding = properties["sun.jnu.encoding"]
+	if runtime.NativeEncoding == "" {
+		runtime.NativeEncoding = properties["native.encoding"]
+	}
+	if len(runtime.NativeEncoding) > 64 || strings.ContainsAny(runtime.NativeEncoding, "\x00\r\n") {
+		return Runtime{}, errors.New("Java原生字符编码字段无效")
 	}
 	if _, err := runtime.NormalizedVersion(); err != nil {
 		return Runtime{}, err

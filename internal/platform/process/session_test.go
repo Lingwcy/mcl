@@ -130,7 +130,8 @@ func launchPlanWithMajor(t *testing.T, major int, selected ...string) launch.Pla
 		executable = selected[0]
 	}
 	v.Java.Major = major
-	runtime := java.Runtime{Executable: executable, Version: fmt.Sprint(major), Major: major, Arch: meta.CurrentPlatform().Arch}
+	// The helper is a Go binary, not evidence about any real JVM code page.
+	runtime := java.Runtime{NativeEncoding: "UTF-8", Executable: executable, Version: fmt.Sprint(major), Major: major, Arch: meta.CurrentPlatform().Arch}
 	session, err := launch.NewSession("Player", strings.Repeat("a", 32), syntheticToken, "test-client", "12345", time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)

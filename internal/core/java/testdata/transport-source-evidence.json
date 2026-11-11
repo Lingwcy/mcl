@@ -1,0 +1,85 @@
+{
+  "scope": "Read-only upstream source inspection; no Java, installer, game or UI execution. No upstream implementation copied. Source facts do not establish Windows runtime acceptance.",
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/openjdk/jdk17u/jdk-17.0.16+8/src/java.base/share/native/libjli/args.c",
+      "size": 22291,
+      "sha256": "a51019277ebd4df5e757f5dbe228fa92b67a0fbcc2db402b2751f767472c9808"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/openjdk/jdk17u/jdk-17.0.16+8/src/java.base/windows/native/libjli/java_md.c",
+      "size": 34659,
+      "sha256": "a4eca01ca2ec0210bcd06db80abe2c663d6298c5ecdcda31045bd700694e80a9"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/openjdk/jdk21u/jdk-21.0.8+9/src/java.base/windows/native/libjli/java_md.c",
+      "size": 32743,
+      "sha256": "b4a5083efa4872e333bfff89f78256e52f7302bc51be26b49ffa8c427e56f257"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/openjdk/jdk17u/jdk-17.0.16+8/src/java.base/windows/native/libjli/cmdtoargs.c",
+      "size": 17878,
+      "sha256": "4111870fe8db023ef63eccc4f4a5450bee23602c6612abc8a2f9e7bf4d06dc7d"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/openjdk/jdk17u/jdk-17.0.16+8/src/java.base/share/native/launcher/main.c",
+      "size": 7328,
+      "sha256": "1305388b8a31f9f5e3c937922e2af822174a500a1d95a9ddba6aa3204c0f2221"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/openjdk/jdk17u/jdk-17.0.16+8/src/java.base/share/native/libjli/java.c",
+      "size": 76051,
+      "sha256": "9d93cab8bb43e33f299f4054855b83ea9531e1fb659e2e53172c2fbd40334a3c"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/openjdk/jdk17u/jdk-17.0.16+8/src/java.base/share/classes/sun/launcher/LauncherHelper.java",
+      "size": 47103,
+      "sha256": "3e6eeaa5956b1287f595c26c2a87c07affe3ade3f7910c302e870b0f0edb439d"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/openjdk/jdk17u/jdk-17.0.16+8/src/hotspot/share/prims/jvm.cpp",
+      "size": 151584,
+      "sha256": "5057686a66a8872f3a5f06526123eb28c790b0afdab9bfd94a6362aff5a520cd"
+    }
+  ],
+  "observations": [
+    {
+      "source_suffix": "args.c",
+      "facts": [
+        "Argument-file lexical handling consumes bytes and escapes backslash, quote and n/r/t/f inside quotes.",
+        "Application arguments after the main class are not expanded as argument files.",
+        "No UTF-8 to native-charset transcode is performed while reading the argument file."
+      ]
+    },
+    {
+      "source_suffix": "cmdtoargs.c",
+      "facts": [
+        "Windows command parsing uses CharNextExA(CP_ACP). Native encoding must not be inferred from -Dfile.encoding=UTF-8."
+      ]
+    },
+    {
+      "source_suffix": "main.c",
+      "facts": [
+        "Windows launcher command parsing starts with GetCommandLine, not the Go parent process locale."
+      ]
+    },
+    {
+      "source_suffix": "LauncherHelper.java",
+      "facts": [
+        "makePlatformString decodes platform bytes using sun.jnu.encoding."
+      ]
+    },
+    {
+      "source_suffix": "jvm.cpp",
+      "facts": [
+        "JVM_GetProperties converts command-line -D property strings using create_from_platform_dependent_str."
+      ]
+    }
+  ],
+  "limitations": [
+    "Only named standard Windows encodings are adapted, with a strict local round trip. Unsupported named encodings fail; absent encoding evidence permits ASCII only.",
+    "The JVM-reported sun.jnu.encoding is used first; native.encoding is a fallback, never file.encoding.",
+    "No claims of all vendor or Windows-locale compatibility; effective native encoding, Java8 manifest loading and Java9+ argument-file loading still require isolated runtime acceptance.",
+    "Unspecified Unix native encodings remain outside this Windows adaptation; existing UTF-8 transport is unchanged."
+  ]
+}
