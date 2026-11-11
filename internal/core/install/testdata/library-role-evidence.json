@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "official_version_sha1": "832d95b9f40699d4961394dcf6cf549e65f15dc5",
+  "artifacts": [
+    {
+      "coordinate": "org.lwjgl.lwjgl:lwjgl-platform:2.9.4-nightly-20150209",
+      "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl/lwjgl-platform/2.9.4-nightly-20150209/lwjgl-platform-2.9.4-nightly-20150209.jar",
+      "size": 22,
+      "sha1": "b04f3ee8f5e43fa3b162981b50bb72fe1acabb33",
+      "entries": 0,
+      "class_entries": 0,
+      "read_only": true
+    },
+    {
+      "coordinate": "com.mojang:text2speech:1.10.3",
+      "url": "https://libraries.minecraft.net/com/mojang/text2speech/1.10.3/text2speech-1.10.3.jar",
+      "size": 11055,
+      "sha1": "48fd510879dff266c3815947de66e3d4809f8668",
+      "entries": 17,
+      "class_entries": 12,
+      "read_only": true
+    },
+    {
+      "coordinate": "ca.weblite:java-objc-bridge:1.0.0",
+      "url": "https://libraries.minecraft.net/ca/weblite/java-objc-bridge/1.0.0/java-objc-bridge-1.0.0.jar",
+      "size": 40502,
+      "sha1": "6ef160c3133a78de015830860197602ca1c855d3",
+      "entries": 41,
+      "class_entries": 22,
+      "read_only": true
+    }
+  ],
+  "scope": "Bounded official archive inventory only; no JAR saved, extracted or executed; no runtime acceptance."
+}

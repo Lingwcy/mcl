@@ -4,10 +4,11 @@ package install
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"path"
-	"slices"
 	"strings"
 
+	"mcl/internal/core/archive"
 	"mcl/internal/core/download"
 	"mcl/internal/core/meta"
 )
@@ -33,6 +34,8 @@ type Plan struct {
 	NativeJARs                              []download.File
 	LocalLibraries                          []download.File
 	RuntimeLookups                          []download.File
+	Libraries                               []LibraryFile
+	Graphics                                GraphicsLibraries
 	NeedsGameAssets                         bool
 }
 
@@ -44,6 +47,7 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 		return Plan{}, err
 	}
 	platform.Arch = meta.NormalizeArch(platform.Arch)
+	platform.Features = maps.Clone(platform.Features)
 	if (platform.OS != "osx" && platform.OS != "windows" && platform.OS != "linux") || (platform.Arch != "amd64" && platform.Arch != "arm64" && platform.Arch != "386") {
 		return Plan{}, errors.New("unsupported installation platform")
 	}
@@ -55,13 +59,12 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 	}
 	seen := make(map[string]download.File)
 	nativeGroups := make(map[string]bool)
-	nativeArchives := make(map[string]int)
 	add := func(target string, data meta.Download) (download.File, error) {
 		f := download.File{Path: target, Download: data}
 		if err := f.Validate(); err != nil {
 			return f, err
 		}
-		key := strings.ToLower(target)
+		key := archive.Key(target)
 		if previous, ok := seen[key]; ok {
 			if previous.Path != target || previous.Size != f.Size || !strings.EqualFold(previous.SHA1, f.SHA1) {
 				return f, fmt.Errorf("conflicting installation target %s", target)
@@ -72,6 +75,7 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 		p.Files = append(p.Files, f)
 		return f, nil
 	}
+	selection := newLibrarySelection(&p, add)
 	clientVersion := version.ID
 	if version.ClientVersion != "" {
 		clientVersion = version.ClientVersion
@@ -106,32 +110,24 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 			}
 			nativeGroups[group] = true
 		}
-		if lib.Downloads.Artifact != nil {
+		if lib.Downloads.Artifact != nil && !legacyNativeContainer(coordinate, lib) {
 			data := *lib.Downloads.Artifact
 			relative := data.Path
 			if relative == "" {
 				relative = coordinate.Path()
 			}
-			if lib.LocalRoot != "" {
-				local := path.Join(lib.LocalRoot, relative)
-				if !slices.Contains(p.Classpath, local) {
-					p.Classpath = append(p.Classpath, local)
-					p.LocalLibraries = append(p.LocalLibraries, download.File{Path: local, Download: data})
-					if strings.HasPrefix(coordinate.Classifier, "natives-") {
-						p.NativeJARs = append(p.NativeJARs, download.File{Path: local, Download: data})
-					}
-				}
-				continue
+			role := LibraryClasspath
+			if strings.HasPrefix(coordinate.Classifier, "natives-") {
+				role = LibraryNativeClasspath
 			}
-			file, err := add("cache/libraries/"+relative, data)
-			if err != nil {
+			local := lib.LocalRoot != ""
+			root := "cache/libraries"
+			if local {
+				root = lib.LocalRoot
+			}
+			file := download.File{Path: path.Join(root, relative), Download: data}
+			if err := selection.add(LibraryFile{Coordinate: coordinate.String(), File: file, Role: role, Local: local}); err != nil {
 				return Plan{}, err
-			}
-			if !slices.Contains(p.Classpath, file.Path) {
-				p.Classpath = append(p.Classpath, file.Path)
-				if strings.HasPrefix(coordinate.Classifier, "natives-") {
-					p.NativeJARs = append(p.NativeJARs, file)
-				}
 			}
 		} else if len(lib.Natives) == 0 {
 			return Plan{}, fmt.Errorf("library %s has no verified artifact", lib.Name)
@@ -141,7 +137,7 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 		}
 		classifier, ok := lib.Natives[platform.OS]
 		if !ok {
-			if lib.Downloads.Artifact == nil {
+			if lib.Downloads.Artifact == nil || legacyNativeContainer(coordinate, lib) {
 				return Plan{}, fmt.Errorf("library %s has neither a Java artifact nor natives for %s", lib.Name, platform.OS)
 			}
 			// The native map declares only the systems needing this optional native
@@ -179,27 +175,25 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 		if !ok {
 			return Plan{}, fmt.Errorf("library %s is missing classifier %s", lib.Name, classifier)
 		}
+		coordinate.Classifier = classifier
 		relative := data.Path
 		if relative == "" {
-			coordinate.Classifier = classifier
 			relative = coordinate.Path()
 		}
-		file, err := add("cache/libraries/"+relative, data)
-		if err != nil {
+		file := download.File{Path: "cache/libraries/" + relative, Download: data}
+		if err := selection.add(LibraryFile{Coordinate: coordinate.String(), File: file, Role: LibraryNativeArchive, Exclude: lib.Extract.Exclude}); err != nil {
 			return Plan{}, err
 		}
-		if previous, ok := nativeArchives[file.Path]; ok {
-			if !slices.Equal(p.Natives[previous].Exclude, lib.Extract.Exclude) {
-				return Plan{}, errors.New("同一本地库归档存在不同的解压排除项")
-			}
-			continue
-		}
-		nativeArchives[file.Path] = len(p.Natives)
-		p.Natives = append(p.Natives, NativeArchive{File: file, Exclude: slices.Clone(lib.Extract.Exclude)})
 	}
 	for _, file := range version.RuntimeLookups {
 		local := path.Join(version.LibraryDirectory, file.Path)
-		p.RuntimeLookups = append(p.RuntimeLookups, download.File{Path: local, Download: file})
+		coordinate, err := meta.CoordinateFromPath(file.Path)
+		if err != nil {
+			return Plan{}, err
+		}
+		if err := selection.add(LibraryFile{Coordinate: coordinate.String(), File: download.File{Path: local, Download: file}, Role: LibraryRuntimeLookup, Local: true}); err != nil {
+			return Plan{}, err
+		}
 	}
 	for group, matched := range nativeGroups {
 		if !matched {
@@ -209,6 +203,11 @@ func Build(version meta.Version, platform meta.Platform) (Plan, error) {
 			return Plan{}, fmt.Errorf("library %s has no native artifact for %s/%s", group, platform.OS, platform.Arch)
 		}
 	}
+	graphics, err := checkGraphicsLibraries(p.Libraries)
+	if err != nil {
+		return Plan{}, err
+	}
+	p.Graphics = graphics
 	p.Classpath = append(p.Classpath, p.ClientPath)
 	p.AssetIndexPath = "cache/assets/indexes/" + version.AssetIndex.ID + ".json"
 	if version.AssetIndex.Size > MaxAssetIndexSize {

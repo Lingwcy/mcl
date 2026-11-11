@@ -10,6 +10,7 @@ import (
 
 	"mcl/internal/core/diagnostics"
 	"mcl/internal/core/download"
+	"mcl/internal/core/meta"
 	"mcl/internal/core/nativeabi"
 )
 
@@ -19,17 +20,27 @@ func reportPlan(ctx context.Context, p Plan) {
 	if !diagnostics.Observed(ctx) {
 		return
 	}
-	natives := map[string]string{}
-	for _, a := range p.Natives {
-		natives[a.File.Path] = "native-archive"
+	known := make(map[string]bool)
+	for _, library := range p.Libraries {
+		role := string(library.Role)
+		repository := ""
+		if library.Local {
+			repository = "managed-generation"
+		} else if location, err := meta.ParseMavenURL(library.File.URL); err == nil {
+			repository = location.Repository
+		}
+		if library.Role == LibraryRuntimeLookup || library.Local && library.Role == LibraryClasspath {
+			role = "generated"
+		}
+		diagnostics.ReportArtifact(ctx, diagnostics.Artifact{Path: library.File.Path, Role: role, Coordinate: library.Coordinate, Repository: repository, SHA1: library.File.SHA1, State: "planned"})
+		known[library.File.Path] = true
 	}
-	for _, f := range p.NativeJARs {
-		natives[f.Path] = "native-classpath"
-	}
-	known := map[string]bool{}
-	for _, f := range p.Files {
+	for _, file := range p.Files {
+		if known[file.Path] {
+			continue
+		}
 		role := "classpath"
-		switch f.Path {
+		switch file.Path {
 		case p.ClientPath:
 			role = "client"
 		case p.AssetIndexPath:
@@ -37,24 +48,11 @@ func reportPlan(ctx context.Context, p Plan) {
 		case p.LoggingPath:
 			role = "logging"
 		}
-		if native := natives[f.Path]; native != "" {
-			role = native
-		}
-		diagnostics.ReportArtifact(ctx, diagnostics.Artifact{Path: f.Path, Role: role, SHA1: f.SHA1, State: "planned"})
-		known[f.Path] = true
+		diagnostics.ReportArtifact(ctx, diagnostics.Artifact{Path: file.Path, Role: role, SHA1: file.SHA1, State: "planned"})
 	}
-	for _, file := range p.LocalLibraries {
-		diagnostics.ReportArtifact(ctx, diagnostics.Artifact{Path: file.Path, Role: "generated", SHA1: file.SHA1, State: "planned"})
-		known[file.Path] = true
-	}
-	for _, file := range p.RuntimeLookups {
-		diagnostics.ReportArtifact(ctx, diagnostics.Artifact{Path: file.Path, Role: "generated", SHA1: file.SHA1, State: "planned"})
-		known[file.Path] = true
-	}
-	for _, name := range p.Classpath {
-		if !known[name] {
-			diagnostics.ReportArtifact(ctx, diagnostics.Artifact{Path: name, Role: "generated", State: "planned"})
-		}
+	if p.Graphics.Family != "" && p.Graphics.Family != "unobserved" {
+		_, span := diagnostics.Start(ctx, "metadata", "graphics-plan:"+p.Graphics.Family)
+		span.End()
 	}
 }
 
