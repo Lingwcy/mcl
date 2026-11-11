@@ -18,7 +18,11 @@ func commitProcessorOutputs(ctx context.Context, stage *os.Root, known map[strin
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		identity, err := hashForgeFile(ctx, stage, target, p.outputs[target], 0)
+		size := int64(0)
+		if p.extraction != nil {
+			size = p.extraction.files[target].Size
+		}
+		identity, err := hashForgeFile(ctx, stage, target, p.outputs[target], size)
 		if err != nil {
 			return err
 		}

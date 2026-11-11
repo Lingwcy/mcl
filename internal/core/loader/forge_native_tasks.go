@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -237,68 +236,14 @@ func runNativeProcessor(ctx context.Context, stage *os.Root, known map[string]me
 			return z.Extract(ctx, stage, mappings)
 		})
 	case "MCP_DATA":
-		return withForgeArchive(ctx, stage, known, first("--input"), func(z *archive.Zip) error {
-			data, err := z.Read(ctx, "config.json", 4<<20)
-			if err != nil {
-				return err
-			}
-			var config struct{ Data map[string]json.RawMessage }
-			if err := json.Unmarshal(data, &config); err != nil {
-				return err
-			}
-			keys := strings.Split(first("--key"), ".")
-			if len(keys) > 16 {
-				return errors.New("MCP数据键超过边界")
-			}
-			values := config.Data
-			for index, key := range keys {
-				raw, ok := values[key]
-				if !ok {
-					return errors.New("MCP数据键不存在")
-				}
-				if index == len(keys)-1 {
-					var source string
-					if err := json.Unmarshal(raw, &source); err != nil {
-						return err
-					}
-					if strings.HasSuffix(source, "/") {
-						prefix := strings.TrimSuffix(source, "/")
-						if !archive.SafePath(prefix) || p.outputs[first("--output")] != "" {
-							return errors.New("MCP目录声明或摘要无效")
-						}
-						var mappings []archive.Mapping
-						for _, entry := range z.Entries() {
-							if entry.Directory || !strings.HasPrefix(entry.Name, source) {
-								continue
-							}
-							suffix := strings.TrimPrefix(entry.Name, source)
-							mappings = append(mappings, archive.Mapping{Source: entry.Name, Target: path.Join(first("--output"), suffix)})
-							if len(mappings) > 4096 {
-								return errors.New("MCP目录输出超过4096项")
-							}
-						}
-						if len(mappings) == 0 {
-							return errors.New("MCP目录数据为空")
-						}
-						if err := z.Extract(ctx, stage, mappings); err != nil {
-							return err
-						}
-						delete(p.outputs, first("--output"))
-						for _, mapping := range mappings {
-							p.outputs[mapping.Target] = ""
-						}
-						return nil
-					}
-					if !archive.SafePath(source) {
-						return errors.New("MCP客户端数据路径无效")
-					}
-					return z.Extract(ctx, stage, []archive.Mapping{{Source: source, Target: first("--output")}})
-				}
-				if err := json.Unmarshal(raw, &values); err != nil {
-					return err
-				}
-			}
-			return errors.New("MCP数据键为空")
+		if p.extraction == nil {
+			return errors.New("MCP任务缺少已解析的固定提取计划")
+		}
+		if current, ok := known[p.extraction.input]; !ok || current != p.extraction.identity {
+			return errors.New("MCP输入与固定计划身份不符")
+		}
+		return withForgeArchive(ctx, stage, known, p.extraction.input, func(z *archive.Zip) error {
+			return z.Extract(ctx, stage, p.extraction.mappings)
 		})
 	case "BUNDLER_EXTRACT":
 		return withForgeArchive(ctx, stage, known, first("--input"), func(z *archive.Zip) error {

@@ -299,6 +299,10 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 	if err := bundleFile.Close(); err != nil {
 		return Profile{}, err
 	}
+	processors, err = materializeProcessorPlan(ctx, stage, known, processors, version.Libraries)
+	if err != nil {
+		return Profile{}, err
+	}
 	if err := s.runProcessors(ctx, cache, stage, stagePath, executable, platform, base, processors, known, progress("loader-processors"), func(p java.Progress) {
 		if report != nil {
 			report(p.Stage, download.Progress{Bytes: p.Bytes, TotalBytes: p.Total})
@@ -311,7 +315,15 @@ func (s *ForgeInstaller) Prepare(ctx context.Context, request Request, base meta
 			return Profile{}, errors.New("安装处理器缺少客户端补丁产物")
 		}
 	}
+	// A generation may contain only recorded library files, not untracked
+	// side effects of a processor that happened to return success.
+	if err := verifyProcessorDirectory(ctx, stage, known, "libraries"); err != nil {
+		return Profile{}, err
+	}
 	for _, key := range slices.Sorted(maps.Keys(known)) {
+		if strings.HasPrefix(key, "libraries/") {
+			continue
+		} // already hashed by the closed inventory above
 		identity := known[key]
 		if _, err := hashForgeFile(ctx, stage, key, identity.SHA1, identity.Size); err != nil {
 			return Profile{}, err
@@ -417,6 +429,11 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 				return err
 			}
 			if err := verifyProcessorInputs(ctx, stage, known, p.inputs); err != nil {
+				return err
+			}
+			phase = "归档计划"
+			p, err := resolveMCPProcessor(ctx, stage, known, p)
+			if err != nil {
 				return err
 			}
 			phase = "复用检查"
@@ -562,23 +579,37 @@ func (p Profile) VerifyRuntime(ctx context.Context, root *os.Root) error {
 	if !UsesProcessors(p.Request.Type) {
 		return nil
 	}
-	libraries, err := root.OpenRoot(p.LibraryDirectory())
+	generation, err := root.OpenRoot(path.Dir(p.LibraryDirectory()))
 	if err != nil {
 		return err
 	}
-	defer libraries.Close()
+	defer generation.Close()
+	known := make(map[string]meta.Download)
+	add := func(file meta.Download) error {
+		if file.ValidateIdentity() != nil || file.Path == "" {
+			return errors.New("运行库文件身份无效")
+		}
+		name := path.Join("libraries", file.Path)
+		if previous, exists := known[name]; exists && previous != file {
+			return errors.New("运行库清单存在冲突文件身份")
+		}
+		known[name] = file
+		return nil
+	}
 	for _, library := range p.Libraries {
-		f := library.Downloads.Artifact
-		if _, err := hashForgeFile(ctx, libraries, f.Path, f.SHA1, f.Size); err != nil {
+		if library.Downloads.Artifact == nil {
+			return errors.New("运行库缺少文件身份")
+		}
+		if err := add(*library.Downloads.Artifact); err != nil {
 			return err
 		}
 	}
 	for _, output := range p.Outputs {
-		if _, err := hashForgeFile(ctx, libraries, output.Path, output.SHA1, output.Size); err != nil {
+		if err := add(output); err != nil {
 			return err
 		}
 	}
-	return ctx.Err()
+	return verifyProcessorDirectory(ctx, generation, known, "libraries")
 }
 
 func copyForgeInput(ctx context.Context, cache *os.Root, input download.File, stage *os.Root, target string) error {

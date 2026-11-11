@@ -12,9 +12,13 @@ const (
 	ForgeFormatLegacy          = "install-version-info"
 	ForgeFormatEmbedded        = "embedded-maven-spec0"
 	ForgeFormatProcessors      = "client-processors-spec1"
-	ForgeAdapterPolicy         = "official-installer-v3"
-	previousForgeAdapterPolicy = "official-installer-v2"
+	ForgeAdapterPolicy         = "official-installer-v4"
+	previousForgeAdapterPolicy = "official-installer-v3"
 )
+
+func readableForgeAdapterPolicy(policy string) bool {
+	return policy == "" || policy == ForgeAdapterPolicy || policy == previousForgeAdapterPolicy || policy == "official-installer-v2"
+}
 
 func installerFormat(data []byte) (string, error) {
 	var fields map[string]json.RawMessage

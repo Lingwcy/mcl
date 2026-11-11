@@ -34,6 +34,7 @@ type preparedProcessor struct {
 	nativeTask       string
 	inputs           []string
 	nativeValues     []forgeValue
+	extraction       *processorExtraction
 }
 
 func forgeMaven(value string) (string, error) {

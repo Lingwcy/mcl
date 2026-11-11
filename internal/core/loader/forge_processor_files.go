@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
+	"io"
 	"os"
 	"path"
 	"slices"
 	"strings"
 
+	"mcl/internal/core/archive"
 	"mcl/internal/core/meta"
 )
 
@@ -45,32 +46,92 @@ func verifyProcessorDirectory(ctx context.Context, stage *os.Root, known map[str
 		return err
 	}
 	defer directory.Close()
-	count := 0
-	return fs.WalkDir(directory.FS(), ".", func(relative string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
+	opened, err := directory.Stat(".")
+	if err != nil || !os.SameFile(info, opened) {
+		return errors.New("处理器目录在打开时被替换")
+	}
+	remaining := make(map[string]bool)
+	for key := range known {
+		if strings.HasPrefix(key, name+"/") {
+			remaining[key] = true
 		}
+	}
+	count := 1
+	pending := []string{"."}
+	scan := func(relative string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		count++
-		if count > 50000 {
-			return errors.New("处理器目录输入超过5万项")
+		before, err := directory.Lstat(relative)
+		if err != nil {
+			return err
 		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return errors.New("处理器目录输入含链接")
+		if !before.IsDir() {
+			return errors.New("处理器子目录不是普通目录")
 		}
-		if entry.IsDir() {
-			return nil
+		dir, err := directory.Open(relative)
+		if err != nil {
+			return err
 		}
-		target := path.Join(name, relative)
-		fixed, ok := known[target]
-		if !ok {
-			return errors.New("处理器目录含未固定来源文件")
+		defer dir.Close()
+		opened, err := dir.Stat()
+		if err != nil || !opened.IsDir() || !os.SameFile(before, opened) {
+			return errors.New("处理器目录输入类型已改变")
 		}
-		_, err := hashForgeFile(ctx, stage, target, fixed.SHA1, fixed.Size)
-		return err
-	})
+		for {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			entries, readErr := dir.ReadDir(128)
+			for _, entry := range entries {
+				count++
+				if count > 50000 {
+					return errors.New("处理器目录输入超过5万项")
+				}
+				if entry.Type()&os.ModeSymlink != 0 {
+					return errors.New("处理器目录输入含链接")
+				}
+				child := path.Join(relative, entry.Name())
+				if !archive.SafePath(child) {
+					return errors.New("处理器目录输入含非受管路径")
+				}
+				if entry.IsDir() {
+					pending = append(pending, child)
+					continue
+				}
+				target := path.Join(name, child)
+				fixed, ok := known[target]
+				if !ok {
+					return errors.New("处理器目录含未固定来源文件")
+				}
+				if _, err := hashForgeFile(ctx, stage, target, fixed.SHA1, fixed.Size); err != nil {
+					return err
+				}
+				delete(remaining, target)
+			}
+			if errors.Is(readErr, io.EOF) {
+				return nil
+			}
+			if readErr != nil {
+				return readErr
+			}
+		}
+	}
+	for len(pending) > 0 {
+		relative := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if err := scan(relative); err != nil {
+			return err
+		}
+	}
+	if len(remaining) != 0 {
+		return errors.New("处理器目录缺少已固定的输入成员")
+	}
+	current, err := stage.Lstat(name)
+	if err != nil || !current.IsDir() || !os.SameFile(info, current) {
+		return errors.New("处理器目录在检查时被替换")
+	}
+	return ctx.Err()
 }
 
 // Reuse only complete declared outputs matching BOTH previous provenance and
@@ -86,13 +147,6 @@ func prepareProcessorOutputs(ctx context.Context, stage *os.Root, known map[stri
 		}
 		if err != nil {
 			return false, err
-		}
-		if info.IsDir() && p.nativeTask == "MCP_DATA" && expected == "" {
-			if err := verifyProcessorDirectory(ctx, stage, known, name); err != nil {
-				return false, err
-			}
-			complete = false
-			continue
 		}
 		previous, ok := known[name]
 		if !ok || !info.Mode().IsRegular() {
@@ -116,16 +170,6 @@ func prepareProcessorOutputs(ctx context.Context, stage *os.Root, known map[stri
 	for name := range p.outputs {
 		if err := ctx.Err(); err != nil {
 			return false, err
-		}
-		if info, err := stage.Lstat(name); err == nil && info.IsDir() && p.nativeTask == "MCP_DATA" {
-			if err := stage.RemoveAll(name); err != nil {
-				return false, err
-			}
-			for key := range known {
-				if strings.HasPrefix(key, name+"/") {
-					delete(known, key)
-				}
-			}
 		}
 		if _, exists := known[name]; exists && !slices.Contains(p.inputs, name) && !optionalProcessorOutput(p, name) {
 			if err := stage.Remove(name); err != nil {

@@ -142,6 +142,30 @@ func (z *Zip) Read(ctx context.Context, name string, limit int64) ([]byte, error
 	return data, ctx.Err()
 }
 
+// Copy streams one complete bounded entry, including CRC/length validation,
+// without allocating its expanded contents. The caller owns the destination.
+func (z *Zip) Copy(ctx context.Context, name string, dst io.Writer, limit int64) (int64, error) {
+	f, ok := z.files[name]
+	if !ok || f.FileInfo().IsDir() || limit <= 0 || f.UncompressedSize64 > uint64(limit) {
+		return 0, errors.New("归档流读取条目或大小无效")
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	r, err := f.Open()
+	if err != nil {
+		return 0, err
+	}
+	n, readErr := io.Copy(dst, io.LimitReader(&contextReader{ctx, r}, int64(f.UncompressedSize64)+1))
+	if err := errors.Join(readErr, r.Close(), ctx.Err()); err != nil {
+		return n, err
+	}
+	if uint64(n) != f.UncompressedSize64 {
+		return n, errors.New("归档流读取大小不匹配")
+	}
+	return n, nil
+}
+
 // ReadPrefix reads at most 64 KiB without allocating the whole entry. It does
 // not drain the entry to verify its CRC. Callers must first independently
 // authenticate the complete archive (for example, a pinned JAR digest).

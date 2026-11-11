@@ -24,7 +24,7 @@ type Request struct {
 }
 
 func (r Request) WithPlatform(target meta.Platform) (Request, error) {
-	if r.AdapterPolicy != "" && r.AdapterPolicy != ForgeAdapterPolicy && r.AdapterPolicy != previousForgeAdapterPolicy {
+	if !readableForgeAdapterPolicy(r.AdapterPolicy) {
 		return r, errors.New("加载器安装适配策略无效")
 	}
 	if UsesProcessors(r.Type) {
@@ -58,7 +58,7 @@ func (r Request) ValidateBase(base meta.Version) error {
 }
 
 func (r Request) Validate() error {
-	if r.AdapterPolicy != "" && ((r.AdapterPolicy != ForgeAdapterPolicy && r.AdapterPolicy != previousForgeAdapterPolicy) || !UsesProcessors(r.Type)) {
+	if r.AdapterPolicy != "" && (!readableForgeAdapterPolicy(r.AdapterPolicy) || !UsesProcessors(r.Type)) {
 		return errors.New("加载器安装适配策略无效")
 	}
 	if !Supported(r.Type) {

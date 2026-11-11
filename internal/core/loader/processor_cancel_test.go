@@ -63,22 +63,26 @@ func TestProcessorFailureClosesOnlyCurrentOriginalStep(t *testing.T) {
 		}
 	}
 }
-func TestV2RequestRemainsReadableButCannotSupplyV3Generation(t *testing.T) {
-	old := shortForgeRequest()
-	old.AdapterPolicy = previousForgeAdapterPolicy
-	if err := old.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	next, err := old.WithPlatform(meta.Platform{OS: old.TargetOS, Arch: old.TargetArch})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if next.AdapterPolicy != ForgeAdapterPolicy || next.Key() == old.Key() {
-		t.Fatal("execution policy cache collision")
-	}
-	canonical := next
-	canonical.Version += "-1.7.10"
-	if err := ValidateForgeAlias(old, canonical); err == nil {
-		t.Fatal("alias crossed execution policy")
+func TestPreviousRequestsRemainReadableButCannotSupplyConcretePlanGeneration(t *testing.T) {
+	for _, policy := range []string{"", "official-installer-v2", "official-installer-v3"} {
+		t.Run(policy, func(t *testing.T) {
+			old := shortForgeRequest()
+			old.AdapterPolicy = policy
+			if err := old.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			next, err := old.WithPlatform(meta.Platform{OS: old.TargetOS, Arch: old.TargetArch})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if next.AdapterPolicy != ForgeAdapterPolicy || next.Key() == old.Key() {
+				t.Fatal("execution policy cache collision")
+			}
+			canonical := next
+			canonical.Version += "-1.7.10"
+			if err := ValidateForgeAlias(old, canonical); err == nil {
+				t.Fatal("alias crossed exact-plan execution policy")
+			}
+		})
 	}
 }

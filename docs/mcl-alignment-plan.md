@@ -1035,3 +1035,11 @@ Profile.Merge原先在平台rules选择前拒绝同模块不同版本，且浅�
 新增固定原始官方1.7.10 JSON/来源摘要（14777字节，SHA1 ed5d8789ed29872ea2ef1c348302b0c55e3f3468），复用1.12.2/1.20.4及四份Forge投影，独立merge-library-evidence.json固定Guava/ASM/Scala预期顺序。1.7.10 Forge Guava17替换base15；1.12.2两样本未声明Guava，保留base21；不同ASM/Scala模块/classifier/extension不凭名字替换。覆盖三OS x64install计划及完整launch.Build/支持文件/exec参数纯值链。旧1.7.10省略文件身份与现代generated size为明确合成补位，不证明实际文件完整/安装成功。
 
 全量测试曾暴露既有辅助进程测试Stat/WriteFile就绪竞争，读取未写完的PID为空；仅改测试等待完整正PID，目标连续5次和后续全量通过。gofmt、diff --check、全量CGO_ENABLED=0 vet/test/build、MyGo vet和三平台x64主程序编译通过。未运行真实Java/Forge/游戏/UI，未操作用户实例/凭据/存档，无DMG/main合并/版本/Release。跨不同模块真实类重叠/ABI、特定Loader未声明冲突、其余PC4平台能力及PC3/PC5/PC6仍未收口，不能宣称三平台老Forge已可玩。
+
+## 45. PC3c：具体归档来源与完整运行库库存
+
+MCP目录输出不再隐含任意后代：既有固定声明预检之后，下载/校验/私有stage准备完成且所有工具Java解析/执行之前，从固定MCP归档流式推导每个真实成员的目标、SHA1和大小，重新检查整条处理器依赖与运行库来源。archive.Copy完整校验CRC/长度，限制512MiB单项、4GiB整组展开读取；实际计划8192文件/5万路径节点及附属收据4096项，未知Java输出大小仍执行后核验。父路径NFC/大小写/文件目录冲突拒绝，已解析源归档禁止被其他步骤改写；动态生成MCP归档明确不支持，不为未知来源先执行Java。
+
+提取只用固定映射，成员摘要/大小整组通过才提交known；旧目录通配删除/复用分支移除。目录输入按128项分批读取、总5万项，同时检查未记录和缺失成员，目录身份检查贯穿打开/遍历。发布前和缓存读取均完整扫描libraries，拒绝“声明输出正确但夹带未记录JAR”和“枚举看不见的已删除固定成员”。Forge策略升official-installer-v4，空/v2/v3请求继续可读，新请求不跨策略cache/alias复用；任务schema6不变，旧代际不删除。
+
+新增合成ZIP/模拟完整管线覆盖缺成员在所有Java工作前阻断、未知文件不发布、库存增删拒绝、同源归档变化、预算/CRC/取消/父路径别名/源重写等。全量CGO_ENABLED=0 vet/test/build、MyGo vet及三平台x64主程序编译通过，Windows loader测试目标只编译未执行。无真实Java/Forge/游戏/UI、用户实例/凭据/存档操作，无新DMG/main合并/版本/Release。具体工具官方Java/VM/JDK、期限实测、PC4平台ABI/编码和PC5/PC6真实观测/隔离验收仍需继续，本批不能当总体兼容完成。

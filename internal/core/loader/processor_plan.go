@@ -44,12 +44,8 @@ func (p preparedProcessor) failure(stage string, err error) error {
 // A directory MCP output is conditional until its fixed archive is read; actual
 // members and digests MUST still be established by the execution-time checks.
 func validateProcessorPlan(z *archive.Zip, libraries map[string]forgeLibrary, processors []preparedProcessor, resources []archive.Mapping, runtime []meta.Library) error {
-	available := map[string]bool{"work/installer.jar": true, "work/client.jar": true}
 	initial := map[string]bool{"work/installer.jar": true, "work/client.jar": true}
-	trees := make(map[string]bool)
-	directories := make(map[string]bool)
-	tools := make(map[string]bool)
-	addSource := func(name string) { available[name] = true; initial[name] = true }
+	addSource := func(name string) { initial[name] = true }
 	for key, library := range libraries {
 		if library.file.URL != "" || z.Has(path.Join("maven", key)) {
 			addSource(path.Join("libraries", key))
@@ -63,6 +59,25 @@ func validateProcessorPlan(z *archive.Zip, libraries map[string]forgeLibrary, pr
 			return identityError("安装器内嵌资源目标无效")
 		}
 		addSource(resource.Target)
+	}
+	return checkProcessorPlan(initial, libraries, processors, runtime, false)
+}
+
+func checkProcessorPlan(initial map[string]bool, libraries map[string]forgeLibrary, processors []preparedProcessor, runtime []meta.Library, exact bool) error {
+	available := make(map[string]bool, len(initial))
+	for name := range initial {
+		available[name] = true
+	}
+	trees := make(map[string]bool)
+	directories := make(map[string]bool)
+	tools := make(map[string]bool)
+	for _, p := range processors {
+		if p.extraction != nil {
+			tools[p.extraction.input] = true
+		}
+		if exact && p.nativeTask == "MCP_DATA" && p.extraction == nil {
+			return p.failure("归档计划", identityError("MCP目录尚未解析为固定成员"))
+		}
 	}
 	for _, p := range processors {
 		if p.nativeTask != "" || p.copyMappings != "" {
@@ -111,9 +126,12 @@ func validateProcessorPlan(z *archive.Zip, libraries map[string]forgeLibrary, pr
 				}
 			}
 		}
+		if p.extraction != nil && p.extraction.directory != "" {
+			directories[p.extraction.directory] = true
+		}
 		for target, expected := range p.outputs {
 			available[target] = true
-			if p.nativeTask == "MCP_DATA" && expected == "" {
+			if !exact && p.nativeTask == "MCP_DATA" && p.extraction == nil && expected == "" {
 				trees[target] = true
 			} else {
 				delete(trees, target)
@@ -140,7 +158,8 @@ func validateProcessorPlan(z *archive.Zip, libraries map[string]forgeLibrary, pr
 		if err != nil {
 			return identityError("运行库坐标无效")
 		}
-		if !present(path.Join("libraries", coordinate.Path())) {
+		name := path.Join("libraries", coordinate.Path())
+		if exact && !available[name] || !exact && !present(name) {
 			return identityError("运行库没有初始来源或处理器产物: " + coordinate.String())
 		}
 	}
