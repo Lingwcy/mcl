@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -27,7 +28,11 @@ func options(t *testing.T, id string) Options {
 	}
 	root := filepath.Join(t.TempDir(), "中文 空格")
 	instanceID := instance.NewID()
-	return Options{Root: root, InstanceID: instanceID, Version: v, Platform: meta.Platform{OS: "osx", Arch: "arm64"}, Java: java.Runtime{NativeEncoding: "UTF-8", Executable: filepath.Join(root, "Java Home/bin/java"), Version: fmt.Sprintf("%d.0.8", v.Java.Major), Major: v.Java.Major, Arch: "arm64"}, NativeDirectory: "instances/" + instanceID + "/natives/ready-" + strings.Repeat("A", 26), MaxMemoryMiB: 4096}
+	target := meta.Platform{OS: "osx", Arch: "arm64"}
+	if runtime.GOOS == "windows" {
+		target = meta.CurrentPlatform()
+	}
+	return Options{Root: root, InstanceID: instanceID, Version: v, Platform: target, Java: java.Runtime{NativeEncoding: "UTF-8", Executable: filepath.Join(root, "Java Home/bin/java"), Version: fmt.Sprintf("%d.0.8", v.Java.Major), Major: v.Java.Major, Arch: target.Arch}, NativeDirectory: "instances/" + instanceID + "/natives/ready-" + strings.Repeat("A", 26), MaxMemoryMiB: 4096}
 }
 
 func session(t *testing.T) Session {
@@ -49,14 +54,18 @@ func TestOfficialCommandsPathsRulesAndPrivacy(t *testing.T) {
 				t.Fatal(err)
 			}
 			preview := p.Preview()
-			if preview.Directory != filepath.Join(o.Root, "instances", o.InstanceID, "game") || preview.Executable != o.Java.Executable || !slices.Contains(preview.Arguments, "-XstartOnFirstThread") {
+			if preview.Directory != filepath.Join(o.Root, "instances", o.InstanceID, "game") || preview.Executable != o.Java.Executable || slices.Contains(preview.Arguments, "-XstartOnFirstThread") != (o.Platform.OS == "osx") {
 				t.Fatalf("paths/rules %+v", preview)
 			}
 			if !slices.Contains(preview.Arguments, "-Xmx4096m") || slices.Contains(preview.Arguments, "--demo") || slices.Contains(preview.Arguments, "--width") {
 				t.Fatal("unexpected features or memory")
 			}
 			cp := preview.Arguments[slices.Index(preview.Arguments, "-cp")+1]
-			if !strings.Contains(cp, "natives-macos-arm64.jar") || strings.Contains(cp, "natives-macos.jar") || strings.Contains(cp, "natives-windows") || !strings.HasSuffix(cp, filepath.Join(id, id+".jar")) {
+			wanted, unwanted := "natives-macos-arm64.jar", "natives-windows"
+			if o.Platform.OS == "windows" {
+				wanted, unwanted = "natives-windows.jar", "natives-macos"
+			}
+			if !strings.Contains(cp, wanted) || strings.Contains(cp, unwanted) || !strings.HasSuffix(cp, filepath.Join(id, id+".jar")) {
 				t.Fatalf("wrong classpath %s", cp)
 			}
 			for _, formatted := range []string{fmt.Sprint(p), fmt.Sprintf("%#v", p), fmt.Sprintf("%+v", p)} {

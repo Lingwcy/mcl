@@ -46,7 +46,7 @@ func TestCompletedSessionDiagnosticsUseOnlyRedactedCapturedFiles(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		rows := service.Sessions()
-		if len(rows) == 1 && !rows[0].Running {
+		if len(rows) == 1 && !rows[0].Running && rows[0].DiagnosticFileState == "captured" {
 			break
 		}
 		if time.Now().After(deadline) {

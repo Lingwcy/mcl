@@ -113,7 +113,14 @@ func TestShippedResourcesMatchTheResourcesDirectory(t *testing.T) {
 		}
 		names = append(names, e.Name())
 	}
-	if !slices.Equal(names, shippedResources) {
-		t.Fatalf("resources holds %v, shippedResources lists %v", names, shippedResources)
+	// This optional developer note is ignored by Git and absent in clean
+	// release checkouts. The cleanup whitelist still recognizes it if packed
+	// locally; its absence must not hide any missing required release asset.
+	expected := slices.Clone(shippedResources)
+	if !slices.Contains(names, "BRANDING.md") {
+		expected = slices.DeleteFunc(expected, func(name string) bool { return name == "BRANDING.md" })
+	}
+	if !slices.Equal(names, expected) {
+		t.Fatalf("resources holds %v, shippedResources lists %v", names, expected)
 	}
 }

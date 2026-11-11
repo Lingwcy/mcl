@@ -12,7 +12,10 @@ func inspectCompiler(r Runtime) string {
 	if !filepath.IsAbs(r.Executable) {
 		return "unknown"
 	}
-	base := filepath.Dir(filepath.Dir(r.Executable))
+	base, err := filepath.EvalSymlinks(filepath.Dir(filepath.Dir(r.Executable)))
+	if err != nil {
+		return "unknown"
+	}
 	home := base
 	reported := r.HomeDirectory
 	if reported != "" {

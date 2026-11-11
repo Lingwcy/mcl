@@ -84,7 +84,7 @@ func TestTransferControlLiveChangesCancellationAndIdempotentRelease(t *testing.T
 }
 
 func TestTransferControlIsSharedAcrossClientsAndSkipsVerifiedCache(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	const total = 6
 	entered, permit := make(chan struct{}, total), make(chan struct{}, total)

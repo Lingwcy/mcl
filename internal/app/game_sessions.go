@@ -119,6 +119,14 @@ func (s *LaunchService) manageSession(record launch.Record, game launch.Game, re
 				s.notify()
 			case <-game.Done():
 				exit, output := game.Wait(), game.Output()
+				s.gamesMu.Lock()
+				entry.snapshot.Running, entry.snapshot.Stopping = false, false
+				entry.snapshot.Exit, entry.snapshot.Output = exit, output
+				if files != nil {
+					entry.snapshot.DiagnosticFileState = "capturing"
+				}
+				s.gamesMu.Unlock()
+				s.notify()
 				var logs []launch.DiagnosticLog
 				fileState := fileCode
 				if files != nil {

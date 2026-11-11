@@ -1,0 +1,5 @@
+# Metadata digests identify the exact committed bytes on every platform.
+*.go text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+internal/core/**/testdata/** -text

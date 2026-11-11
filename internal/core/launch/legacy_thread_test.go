@@ -2,6 +2,7 @@ package launch
 
 import (
 	"path/filepath"
+	"runtime"
 	"slices"
 	"testing"
 
@@ -9,6 +10,9 @@ import (
 )
 
 func TestLegacyMacJava8TransportDoesNotRestoreFirstThread(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Mac absolute-path transport needs a Unix-host path; metadata OS/rules are independently tested on all hosts")
+	}
 	o := legacyOptions(t, "--username ${auth_player_name} --gameDir ${game_directory} --uuid ${auth_uuid} --accessToken ${auth_access_token}")
 	o.Platform = meta.Platform{OS: "osx", Arch: "amd64"}
 	o.Java.Arch = "amd64"

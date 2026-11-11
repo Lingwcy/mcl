@@ -50,9 +50,10 @@ func TestBuildValidatesSelectedTemplatesBeforeIdentitySubstitution(t *testing.T)
 	if err := json.Unmarshal([]byte("[{\"action\":\"allow\",\"os\":{\"name\":\"windows\"}}]"), &duplicate.Rules); err != nil {
 		t.Fatal(err)
 	}
+	duplicate.Rules[0].OS.Name = "inactive-test-platform"
 	o.Version.Arguments.Game = append(o.Version.Arguments.Game, duplicate)
-	o.Platform = meta.Platform{OS: "linux", Arch: "amd64"}
-	o.Java.Arch = "amd64"
+	o.Platform = meta.CurrentPlatform()
+	o.Java.Arch = o.Platform.Arch
 	s := session(t)
 	s.Name = "--tweakClass"
 	p, err := Build(o, s)
@@ -62,7 +63,7 @@ func TestBuildValidatesSelectedTemplatesBeforeIdentitySubstitution(t *testing.T)
 	if !slices.Contains(p.arguments, s.Name) {
 		t.Fatal("account value changed")
 	}
-	o.Platform.OS = "windows"
+	o.Version.Arguments.Game[len(o.Version.Arguments.Game)-1].Rules[0].OS.Name = o.Platform.OS
 	if _, err := Build(o, s); err == nil {
 		t.Fatal("active duplicate template accepted")
 	}

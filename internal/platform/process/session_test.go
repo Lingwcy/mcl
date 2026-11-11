@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -255,7 +256,7 @@ func TestDetachDoesNotTerminateSession(t *testing.T) {
 	if err != nil || strings.Contains(string(data), syntheticToken) {
 		t.Fatal("credential in JVM argument file")
 	}
-	if info, _ := os.Stat(argfile); info.Mode().Perm()&0o077 != 0 {
+	if info, _ := os.Stat(argfile); runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 		t.Fatal("argument file is not private")
 	}
 	s.Detach()
