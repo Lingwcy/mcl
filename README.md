@@ -26,3 +26,7 @@ git push origin main v0.0.1
 ```
 
 CI publishes a macOS universal DMG (Apple Silicon and Intel), a Windows x64 installer, and SHA-256 checksums. The `amd64` suffix means **x86-64 / x64** for 64-bit Intel and AMD Windows, not ARM64 or 32-bit x86. CI checks the actual PE architecture and hash of both the built app and the installer payload, rather than trusting the filename. The macOS app uses ad-hoc signing. Windows installers are unsigned. Manually running **Desktop release** builds downloadable artifacts.
+
+## License
+
+mcl is released under the [MIT License](LICENSE). Bundled third-party icons, fonts, and libraries keep their own licenses and notices next to them.
