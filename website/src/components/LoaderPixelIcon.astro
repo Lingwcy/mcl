@@ -1,0 +1,148 @@
+---
+interface Props {
+  kind: "grass" | "fabric" | "forge" | "neoforge" | "quilt";
+  size?: number;
+}
+
+const { kind, size = 32 } = Astro.props;
+
+const palette: Record<string, string> = {
+  h: "#afd47d",
+  H: "#659949",
+  G: "#80b854",
+  g: "#4c833a",
+  b: "#916241",
+  D: "#b98e5e",
+  d: "#704b34",
+  T: "#937141",
+  Y: "#e6c270",
+  C: "#ffefc6",
+  t: "#47a6aa",
+  k: "#2c7f8f",
+  S: "#8b9daf",
+  s: "#53687d",
+  f: "#35455a",
+  O: "#eb8939",
+  o: "#ac5627",
+  M: "#764234",
+  X: "#312e30",
+  v: "#715b97",
+  P: "#d991b7",
+  L: "#b1a2db",
+};
+
+const grids: Record<Props["kind"], string[]> = {
+  grass: [
+    "................",
+    "................",
+    "..hHHHHHHHHHHh..",
+    "..HGGgGGGGgGGH..",
+    "..HGGGGhhGGGGH..",
+    "..GggGGGGGGggG..",
+    "..bgGggGGggGgb..",
+    "..bbggbggbggbb..",
+    "..bDbDbbbbbbDb..",
+    "..bbbbbbbDbbbb..",
+    "..bbdbbbbDDbbb..",
+    "..bbbbDbbbbdbb..",
+    "..bdbbbbdbbbbb..",
+    "..dddddddddddd..",
+    "................",
+    "................",
+  ],
+  fabric: [
+    "................",
+    "................",
+    "....TTTTTTTT....",
+    "...TCCYYYYYCT...",
+    "...TCtttttCCT...",
+    "...TTttttttTT...",
+    "....ttkttktt....",
+    "....tkkttkkt....",
+    "....ttkttktt....",
+    "....tkkttkkt....",
+    "...TTttttttTT...",
+    "...TCtttttCCT...",
+    "...TCCYYYYYCT...",
+    "....TTTTTTTT....",
+    "................",
+    "................",
+  ],
+  forge: [
+    "................",
+    "................",
+    "................",
+    ".SSSSSSSSSSSSS..",
+    ".SsssssssssssS..",
+    "..SSssssssSSS...",
+    "....SssssS......",
+    ".....SssS.......",
+    ".....SssS.......",
+    ".....sffs.......",
+    "....SssssS......",
+    "...SssssssS.....",
+    "..SSSSSSSSSS....",
+    "..fffffffffff...",
+    "................",
+    "................",
+  ],
+  neoforge: [
+    "................",
+    "..oO........Oo..",
+    "..oOO......OOo..",
+    "..oMOO....OOMo..",
+    "..oOOOo..oOOOo..",
+    "...oOOOOOOOOo...",
+    "..oOOOOOOOOOOo..",
+    "..oOoOOOOOOoOo..",
+    "..oOXCOOOCXOOo..",
+    "...oCCOOOCCOo...",
+    "...oCCCCCCCCo...",
+    "....oCCXXCCo....",
+    ".....oCCCCo.....",
+    "......oooo......",
+    "................",
+    "................",
+  ],
+  quilt: [
+    "................",
+    "................",
+    "...vvvvvvvvvv...",
+    "..vPPCvvYYCCv...",
+    "..vPPPCvYYYvCv..",
+    "..vPPPPvYYYYCv..",
+    "..vCPPCvCYYCCv..",
+    "..vvvvvvvvvvvv..",
+    "..vttCvvLLCvvv..",
+    "..vtttCvLLLCvv..",
+    "..vttttvLLLLCv..",
+    "..vCttCvCLLCCv..",
+    "...vvvvvvvvvv...",
+    "................",
+    "................",
+    "................",
+  ],
+};
+
+const pixels: { x: number; y: number; fill: string }[] = [];
+grids[kind].forEach((row, y) => {
+  for (let x = 0; x < row.length; x++) {
+    const ch = row[x];
+    if (ch !== "." && palette[ch]) {
+      pixels.push({ x, y, fill: palette[ch] });
+    }
+  }
+});
+---
+
+<svg
+  width={size}
+  height={size}
+  viewBox="0 0 16 16"
+  shape-rendering="crispEdges"
+  aria-hidden="true"
+>
+  {pixels.map((p) => (
+    <rect x={p.x} y={p.y} width="1" height="1" fill={p.fill} />
+  ))}
+</svg>

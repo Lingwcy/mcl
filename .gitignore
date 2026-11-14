@@ -3,8 +3,8 @@
 .tools/
 
 # Private documentation, screenshots, and agent configuration
-docs/
-doc/
+/docs/
+/doc/
 /.agents/
 /.codex/
 *.md
@@ -18,6 +18,13 @@ doc/
 !/README.zh-CN.md
 # Release notes shown by the in-app updater; CI requires it.
 !/CHANGELOG.md
+
+# Website and public documentation
+!/website/**/*.md
+!/website/**/*.mdx
+/website/node_modules/
+/website/.astro/
+/website/dist/
 
 # Earlier cover drafts
 /media/readme-hero.jpg

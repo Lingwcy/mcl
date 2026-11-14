@@ -1,0 +1,93 @@
+---
+import Icon from "./Icon.astro";
+import { RELEASES_URL, REPO_URL, copy, type Locale } from "../content/site";
+
+interface Props {
+  locale: Locale;
+  isDocs?: boolean;
+  switchHref?: string;
+}
+
+const { locale, isDocs = false, switchHref } = Astro.props;
+const t = copy[locale];
+const homePrefix = isDocs ? t.homePath : "";
+const langSwitchHref = switchHref ?? t.otherHomePath;
+---
+
+<header class="site-header">
+  <div class="shell header-row">
+    <a class="brand-lockup" href={t.homePath} aria-label={t.brandFull}>
+      <img class="pixel-img" src="/favicon.png" alt="" width="24" height="24" />
+      <span>{t.brand}</span>
+    </a>
+
+    <nav class="desktop-nav" aria-label={t.railNavLabel}>
+      <a href={`${homePrefix}#about`}>{t.nav[0]?.label}</a>
+      <a href={`${homePrefix}#market`}>{t.nav[1]?.label}</a>
+      <a href={`${homePrefix}#opensource`}>{t.nav[4]?.label}</a>
+      <a
+        href={t.docsPath}
+        class={isDocs ? "is-active" : undefined}
+        aria-current={isDocs ? "page" : undefined}
+      >
+        {t.hero.docsLabel}
+      </a>
+    </nav>
+
+    <div class="header-actions">
+      <a
+        class="text-pill-link mono"
+        href={langSwitchHref}
+        lang={locale === "zh" ? "en" : "zh-CN"}
+        aria-label={locale === "zh" ? "Switch to English" : "切换到中文"}
+      >
+        <Icon name="globe" size={14} />
+        {t.otherLocaleLabel}
+      </a>
+      <a
+        class="icon-btn"
+        href={REPO_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="GitHub"
+      >
+        <Icon name="github" size={18} />
+      </a>
+      <a class="btn btn-primary" style="height: 32px; padding: 0 12px; font-size: 13px;" href={RELEASES_URL} target="_blank" rel="noopener noreferrer">
+        {t.hero.downloadLabel}
+      </a>
+    </div>
+
+    <details class="mobile-menu">
+      <summary aria-label={t.menuOpenLabel}><Icon name="menu" size={20} /></summary>
+      <nav aria-label={t.railNavLabel}>
+        <a href={t.homePath}>{t.docs.homeLink}</a>
+        <a href={t.docsPath}>{t.hero.docsLabel}</a>
+        <a href={RELEASES_URL} target="_blank" rel="noopener noreferrer">{t.hero.downloadLabel}</a>
+        <a href={langSwitchHref}>{t.otherLocaleLabel}</a>
+      </nav>
+    </details>
+  </div>
+</header>
+
+<script>
+  const menu = document.querySelector<HTMLDetailsElement>(".mobile-menu");
+  if (menu) {
+    for (const link of menu.querySelectorAll("a")) {
+      link.addEventListener("click", () => {
+        menu.open = false;
+      });
+    }
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && menu.open) {
+        menu.open = false;
+        menu.querySelector("summary")?.focus();
+      }
+    });
+    document.addEventListener("click", (event) => {
+      if (event.target instanceof Node && !menu.contains(event.target)) {
+        menu.open = false;
+      }
+    });
+  }
+</script>

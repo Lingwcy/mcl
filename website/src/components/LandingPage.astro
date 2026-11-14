@@ -1,0 +1,783 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Icon from "./Icon.astro";
+import LoaderPixelIcon from "./LoaderPixelIcon.astro";
+import {
+  LATEST_TAG,
+  RELEASES_URL,
+  REPO_URL,
+  SCREENSHOT_HEIGHT,
+  SCREENSHOT_WIDTH,
+  copy,
+  type Locale,
+} from "../content/site";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = copy[locale];
+const buildDocsHref =
+  locale === "zh"
+    ? "/zh/docs/reference/building-from-source/"
+    : "/docs/reference/building-from-source/";
+const issuesUrl = `${REPO_URL}/issues`;
+const defaultDownload = t.downloads[0]!;
+---
+
+<Layout locale={locale}>
+<div class="landing-shell" data-landing>
+  <div class="landing-content">
+    {/* Sticky Mobile Header (< 1200px) */}
+    <header class="mobile-bar">
+      <div class="mobile-bar-inner">
+        <a class="brand-lockup" href="#top" aria-label={t.brandFull}>
+          <img class="pixel-img" src="/favicon.png" alt="" width="24" height="24" />
+          <span>{t.brand}</span>
+        </a>
+        <span class="mobile-bar-spacer"></span>
+        <a
+          class="text-pill-link mono"
+          href={t.docsPath}
+          aria-label={t.hero.docsLabel}
+        >
+          <Icon name="book" size={14} />
+          {t.hero.docsLabel}
+        </a>
+        <a
+          class="text-pill-link mono"
+          href={t.otherHomePath}
+          lang={locale === "zh" ? "en" : "zh-CN"}
+          aria-label={locale === "zh" ? "Switch to English" : "切换到中文"}
+        >
+          {locale === "zh" ? "EN" : "中文"}
+        </a>
+        <a
+          class="icon-btn"
+          href={REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="GitHub"
+        >
+          <Icon name="github" size={19} />
+        </a>
+        <button
+          type="button"
+          class="icon-btn"
+          data-drawer-open
+          aria-label={t.menuOpenLabel}
+          aria-controls="mobile-nav-drawer"
+          aria-expanded="false"
+        >
+          <Icon name="menu" size={20} />
+        </button>
+      </div>
+    </header>
+
+    {/* Mobile Slide-Over Drawer */}
+    <div
+      id="mobile-nav-drawer"
+      class="mobile-drawer"
+      data-drawer
+      aria-hidden="true"
+    >
+      <div class="mobile-drawer-backdrop" data-drawer-close></div>
+      <div class="mobile-drawer-panel" role="dialog" aria-label={t.railNavLabel}>
+        <div class="mobile-drawer-head">
+          <a class="brand-lockup" href="#top" data-drawer-close>
+            <img class="pixel-img" src="/favicon.png" alt="" width="24" height="24" />
+            <span>{t.brandFull}</span>
+          </a>
+          <button
+            type="button"
+            class="icon-btn"
+            data-drawer-close
+            aria-label={t.menuCloseLabel}
+          >
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+
+        <nav class="rail-nav" aria-label={t.railNavLabel}>
+          {t.nav.map((item) => (
+            <a class="rail-item" href={`#${item.id}`} data-nav-link={item.id}>
+              <span class="rail-item-icon"><Icon name={item.icon} size={15} /></span>
+              <span class="rail-item-label">{item.label}</span>
+            </a>
+          ))}
+        </nav>
+
+        <div class="side-rail-spacer"></div>
+        <hr class="hairline-divider side-rail-divider" />
+
+        <div class="rail-nav">
+          <a class="rail-item" href={t.docsPath}>
+            <span class="rail-item-icon"><Icon name="book" size={15} /></span>
+            <span class="rail-item-label">{t.hero.docsLabel}</span>
+          </a>
+          <a
+            class="rail-item"
+            href={REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span class="rail-item-icon"><Icon name="github" size={15} /></span>
+            <span class="rail-item-label">GitHub</span>
+            <span class="rail-item-ext"><Icon name="diagonal" size={11} /></span>
+          </a>
+          <a class="rail-item" href={t.otherHomePath}>
+            <span class="rail-item-icon"><Icon name="globe" size={15} /></span>
+            <span class="rail-item-label">{t.otherLocaleLabel}</span>
+          </a>
+        </div>
+
+        <p class="side-rail-caption">{t.footer.mitLine}</p>
+      </div>
+    </div>
+
+    {/* Main Column */}
+    <main id="main" class="landing-main">
+      {/* 1. Hero + Horizontal Screenshot Strip */}
+      <section class="hero-section" aria-label={t.brandFull}>
+        <h1 class="hero-headline">
+          {t.hero.prefix}
+          <img
+            class="hero-inline-logo pixel-img"
+            src="/favicon.png"
+            alt={t.brand}
+            width="52"
+            height="52"
+          />
+          {t.hero.suffix}
+        </h1>
+
+        <p class="hero-lead">{t.hero.body}</p>
+
+        <div class="hero-actions">
+          <div class="download-wrap" data-download-wrap>
+            <a
+              class="btn btn-primary btn-split-main"
+              href={defaultDownload.url}
+              data-primary-download
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span data-primary-download-icon style="display: inline-flex;">
+                <Icon name="apple" size={15} />
+              </span>
+              <span data-primary-download-label>{t.hero.downloadMacArm}</span>
+            </a>
+            <button
+              type="button"
+              class="btn btn-primary btn-split-toggle"
+              data-download-toggle
+              aria-label={t.hero.otherDownloadsLabel}
+              aria-expanded="false"
+            >
+              <Icon name="chevron" size={14} />
+            </button>
+
+            <div class="download-menu" data-download-menu role="menu">
+              {t.downloads.map((asset) => (
+                <a
+                  class={`download-menu-item${asset.id === defaultDownload.id ? " is-selected" : ""}`}
+                  href={asset.url}
+                  data-download-option={asset.id}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  role="menuitem"
+                >
+                  <span class="download-menu-item-icon">
+                    <Icon name={asset.platform === "macos" ? "apple" : "windows"} size={16} />
+                  </span>
+                  <span>
+                    <div class="download-menu-title">{asset.name}</div>
+                    <div class="download-menu-sub">{asset.meta}</div>
+                  </span>
+                </a>
+              ))}
+              <div class="download-menu-sep"></div>
+              <a
+                class="download-menu-item"
+                href={RELEASES_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                role="menuitem"
+              >
+                <span class="download-menu-item-icon">
+                  <Icon name="diagonal" size={14} />
+                </span>
+                <span>
+                  <div class="download-menu-title">{t.hero.allReleasesLabel}</div>
+                </span>
+              </a>
+              <a class="download-menu-item" href={buildDocsHref} role="menuitem">
+                <span class="download-menu-item-icon">
+                  <Icon name="terminal" size={14} />
+                </span>
+                <span>
+                  <div class="download-menu-title">{t.hero.buildFromSourceLabel}</div>
+                </span>
+              </a>
+            </div>
+          </div>
+
+          <a class="btn btn-outline" href={t.docsPath}>
+            <Icon name="book" size={15} />
+            {t.hero.docsLabel}
+          </a>
+
+          <a
+            class="btn btn-outline"
+            href={REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Icon name="star" size={15} />
+            <span>{t.hero.starLabel}</span>
+            <span class="btn-divider" data-gh-stars>v{LATEST_TAG}</span>
+          </a>
+        </div>
+
+        {/* Horizontal Screenshot Strip */}
+        <div class="strip-section" aria-label={locale === "zh" ? "界面预览" : "Interface previews"}>
+          <div class="strip-scroller" data-strip>
+            {t.screenshots.map((shot, idx) => (
+              <button
+                type="button"
+                class="strip-card"
+                data-shot-src={shot.src}
+                data-shot-caption={shot.caption}
+                aria-label={shot.alt}
+              >
+                <img
+                  src={shot.src}
+                  alt={shot.alt}
+                  width={SCREENSHOT_WIDTH}
+                  height={SCREENSHOT_HEIGHT}
+                  loading={idx < 3 ? "eager" : "lazy"}
+                  decoding="async"
+                />
+                <span class="strip-caption">{shot.caption}</span>
+              </button>
+            ))}
+          </div>
+          <div class="strip-controls">
+            <button
+              type="button"
+              class="strip-nav-btn"
+              data-strip-prev
+              aria-label={t.hero.prevShot}
+            >
+              <Icon name="chevron-left" size={16} />
+            </button>
+            <button
+              type="button"
+              class="strip-nav-btn"
+              data-strip-next
+              aria-label={t.hero.nextShot}
+            >
+              <Icon name="chevron-right" size={16} />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* 2. #about Feature Hairline Matrix */}
+      <section id={t.about.id} class="section-block" aria-labelledby="about-heading">
+        <hr class="hairline-divider" style="margin-bottom: 56px;" />
+        <h2 id="about-heading" class="section-h2">{t.about.title}</h2>
+        <p class="section-lead">{t.about.body}</p>
+
+        <div class="feature-grid" data-glow-grid>
+          {t.about.items.map((cell) => (
+            <article class="feature-cell" data-glow-cell>
+              <div class="feature-cell-icon">
+                <Icon name={cell.icon} size={17} />
+              </div>
+              <h3>{cell.title}</h3>
+              <p>{cell.body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* 3. Alternating Image + Text Showcase Sections (#market, #modpacks, #runtime) */}
+      {t.showcases.map((section) => (
+        <section id={section.id} class="section-block" aria-labelledby={`${section.id}-heading`}>
+          <hr class="hairline-divider" style="margin-bottom: 56px;" />
+          <h2 id={`${section.id}-heading`} class="section-h2">{section.title}</h2>
+          <p class="section-lead">{section.body}</p>
+
+          <div class="showcase-list">
+            {section.items.map((item, idx) => {
+              const flipped = idx % 2 === 1;
+              return (
+                <div class={`showcase-row${flipped ? " is-flipped" : ""}`}>
+                  <img
+                    class="showcase-backdrop"
+                    src={item.backdrop}
+                    alt=""
+                    width={SCREENSHOT_WIDTH}
+                    height={SCREENSHOT_HEIGHT}
+                    loading="lazy"
+                    decoding="async"
+                    aria-hidden="true"
+                  />
+
+                  <div class="showcase-media">
+                    <button
+                      type="button"
+                      class="showcase-frame"
+                      data-shot-src={item.image}
+                      data-shot-caption={item.title}
+                      aria-label={item.alt}
+                    >
+                      <img
+                        src={item.image}
+                        alt={item.alt}
+                        width={SCREENSHOT_WIDTH}
+                        height={SCREENSHOT_HEIGHT}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </button>
+                  </div>
+
+                  <div class="showcase-copy">
+                    <h3>{item.title}</h3>
+                    <p>{item.body}</p>
+
+                    <div
+                      class={`showcase-bullets${item.bullets.length > 3 ? " is-two-col" : ""}`}
+                    >
+                      {item.bullets.map((bullet) => (
+                        <div class="showcase-bullet">
+                          <span class="showcase-bullet-icon">
+                            {bullet.loader ? (
+                              <LoaderPixelIcon kind={bullet.loader} size={22} />
+                            ) : (
+                              <Icon name={bullet.icon ?? "check"} size={18} />
+                            )}
+                          </span>
+                          <span>{bullet.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+
+      {/* 4. #opensource Section */}
+      <section
+        id={t.opensource.id}
+        class="section-block"
+        aria-labelledby="opensource-heading"
+      >
+        <hr class="hairline-divider" style="margin-bottom: 56px;" />
+        <h2 id="opensource-heading" class="section-h2">{t.opensource.title}</h2>
+        <p class="section-lead">{t.opensource.body}</p>
+
+        <div class="oss-meta-row">
+          <div>
+            <div class="oss-stats">
+              <div>
+                <div class="oss-stat-val" data-gh-stars-large>MIT</div>
+                <div class="oss-stat-label" data-gh-stars-label>{t.opensource.licenseLabel}</div>
+              </div>
+              <div>
+                <div class="oss-stat-val" data-gh-forks-large>v{LATEST_TAG}</div>
+                <div class="oss-stat-label" data-gh-forks-label>{locale === "zh" ? "当前版本" : "Latest Release"}</div>
+              </div>
+              <div>
+                <div class="oss-stat-val">Go</div>
+                <div class="oss-stat-label">MyGo Native UI</div>
+              </div>
+            </div>
+
+            <div class="oss-actions">
+              <a
+                class="btn btn-primary"
+                href={REPO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Icon name="github" size={16} />
+                {t.opensource.viewRepoLabel}
+              </a>
+              <a
+                class="btn btn-outline"
+                href={issuesUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t.opensource.issuesLabel}
+                <Icon name="diagonal" size={13} />
+              </a>
+            </div>
+          </div>
+
+          <div style="font-size: 14.5px; color: var(--text-2); line-height: 1.75; max-width: 520px;">
+            <p class="mono" style="font-size: 12px; color: var(--accent); margin-bottom: 8px;">
+              github.com/Lingwcy/mcl
+            </p>
+            <p>
+              {locale === "zh"
+                ? "代码清晰分层：core/* 领域包零 UI 依赖，platform/* 与 storage/* 处理系统锁和原子落盘，所有网络下载及缓存键均可在仓库源码中逐行审查。"
+                : "Strict clean architecture: core/* domain packages carry zero UI dependencies, while platform/* and storage/* enforce OS file locks and atomic staging that you can audit line-by-line."}
+            </p>
+          </div>
+        </div>
+
+        <div class="oss-checklist-grid">
+          <div class="oss-col">
+            <div class="oss-col-head">
+              <span class="oss-col-badge is-allowed">
+                <Icon name="check" size={18} />
+              </span>
+              <h3>{t.opensource.can.label}</h3>
+            </div>
+            <ul class="oss-col-list is-allowed">
+              {t.opensource.can.items.map((line) => (
+                <li>
+                  <span class="oss-col-icon"><Icon name="check" size={15} /></span>
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div class="oss-col">
+            <div class="oss-col-head">
+              <span class="oss-col-badge">
+                <Icon name="x" size={17} />
+              </span>
+              <h3>{t.opensource.wont.label}</h3>
+            </div>
+            <ul class="oss-col-list">
+              {t.opensource.wont.items.map((line) => (
+                <li>
+                  <span class="oss-col-icon"><Icon name="x" size={14} /></span>
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. #faq Accordion */}
+      <section id={t.faq.id} class="section-block" aria-labelledby="faq-heading">
+        <hr class="hairline-divider" style="margin-bottom: 56px;" />
+        <h2 id="faq-heading" class="section-h2">{t.faq.title}</h2>
+
+        <div class="faq-list">
+          {t.faq.items.map((item) => (
+            <details class="faq-item">
+              <summary>
+                <span>{item.q}</span>
+                <span class="faq-chevron"><Icon name="chevron" size={15} /></span>
+              </summary>
+              <div class="faq-answer">{item.a}</div>
+            </details>
+          ))}
+        </div>
+      </section>
+    </main>
+
+    {/* Footer with Giant Translucent Wordmark */}
+    <footer class="landing-footer">
+      <hr class="hairline-divider" style="margin-bottom: 40px;" />
+      <div class="footer-watermark-wrap">
+        <p class="footer-watermark" aria-hidden="true">{t.footer.watermark}</p>
+      </div>
+      <div class="footer-meta-row">
+        <div>
+          <p>{t.footer.disclaimer}</p>
+          <p style="margin-top: 4px;">{t.footer.mitLine}</p>
+        </div>
+        <nav class="footer-links mono" aria-label="Footer">
+          <a href={t.docsPath}>{t.footer.docsLink}</a>
+          <a href={REPO_URL} target="_blank" rel="noopener noreferrer">{t.footer.githubLink}</a>
+          <a href={RELEASES_URL} target="_blank" rel="noopener noreferrer">{t.footer.releasesLink}</a>
+          <a href={t.otherHomePath}>{t.otherLocaleLabel}</a>
+        </nav>
+      </div>
+    </footer>
+  </div>
+
+  {/* Sticky Desktop Right Rail (>= 1200px) */}
+  <aside class="side-rail" aria-label={t.railNavLabel}>
+    <div class="side-rail-brand">
+      <a class="brand-lockup" href="#top" aria-label={t.brandFull}>
+        <img class="pixel-img" src="/favicon.png" alt="" width="26" height="26" />
+        <span>{t.brandFull}</span>
+      </a>
+    </div>
+
+    <nav class="rail-nav" data-rail-nav aria-label={t.railNavLabel}>
+      <div class="rail-indicator" data-rail-indicator aria-hidden="true"></div>
+      {t.nav.map((item) => (
+        <a class="rail-item" href={`#${item.id}`} data-nav-link={item.id}>
+          <span class="rail-item-icon"><Icon name={item.icon} size={15} /></span>
+          <span class="rail-item-label">{item.label}</span>
+        </a>
+      ))}
+    </nav>
+
+    <div class="side-rail-spacer"></div>
+    <hr class="hairline-divider side-rail-divider" />
+
+    <div class="rail-nav">
+      <a class="rail-item" href={t.docsPath}>
+        <span class="rail-item-icon"><Icon name="book" size={15} /></span>
+        <span class="rail-item-label">{t.hero.docsLabel}</span>
+      </a>
+      <a
+        class="rail-item"
+        href={REPO_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <span class="rail-item-icon"><Icon name="github" size={15} /></span>
+        <span class="rail-item-label">GitHub</span>
+        <span class="rail-item-ext"><Icon name="diagonal" size={11} /></span>
+      </a>
+      <a
+        class="rail-item"
+        href={RELEASES_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <span class="rail-item-icon"><Icon name="download" size={15} /></span>
+        <span class="rail-item-label">Releases · v{LATEST_TAG}</span>
+        <span class="rail-item-ext"><Icon name="diagonal" size={11} /></span>
+      </a>
+      <a class="rail-item" href={t.otherHomePath} lang={locale === "zh" ? "en" : "zh-CN"}>
+        <span class="rail-item-icon"><Icon name="globe" size={15} /></span>
+        <span class="rail-item-label">{t.otherLocaleLabel}</span>
+      </a>
+    </div>
+
+    <p class="side-rail-caption">{t.footer.mitLine}</p>
+  </aside>
+</div>
+
+{/* Lightbox Screenshot Modal */}
+<dialog class="shot-dialog" data-shot-dialog>
+  <div class="shot-dialog-bar">
+    <span data-shot-dialog-caption></span>
+    <button
+      type="button"
+      class="icon-btn"
+      data-shot-dialog-close
+      aria-label={t.hero.closeLightbox}
+    >
+      <Icon name="close" size={18} />
+    </button>
+  </div>
+  <img class="shot-dialog-img" data-shot-dialog-img src="" alt="" />
+</dialog>
+
+<script
+  define:vars={{
+    macArmLabel: t.hero.downloadMacArm,
+    winX64Label: t.hero.downloadWinX64,
+    starsLabelText: t.opensource.starsLabel,
+    forksLabelText: t.opensource.forksLabel,
+  }}
+>
+  (() => {
+    // 1. OS detection for default download CTA
+    const primaryBtn = document.querySelector("[data-primary-download]");
+    const primaryLabel = document.querySelector("[data-primary-download-label]");
+    const primaryIcon = document.querySelector("[data-primary-download-icon]");
+    const winOption = document.querySelector('[data-download-option="windows-amd64"]');
+    const macOption = document.querySelector('[data-download-option="darwin-arm64"]');
+    if (primaryBtn && primaryLabel && navigator.userAgent.includes("Windows") && winOption) {
+      primaryBtn.setAttribute("href", winOption.getAttribute("href") || "#");
+      primaryLabel.textContent = winX64Label;
+      macOption?.classList.remove("is-selected");
+      winOption.classList.add("is-selected");
+      if (primaryIcon) {
+        primaryIcon.innerHTML =
+          '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5 10.5 4.4v7H3Zm9-1.4L21 2.8v8.6h-9ZM3 13h7.5v7L3 18.9Zm9 0h9v8.5l-9-1.3Z"/></svg>';
+      }
+    }
+
+    // 2. Download split dropdown menu
+    const dlToggle = document.querySelector("[data-download-toggle]");
+    const dlMenu = document.querySelector("[data-download-menu]");
+    const dlWrap = document.querySelector("[data-download-wrap]");
+    const closeMenu = () => {
+      dlMenu?.classList.remove("is-open");
+      dlToggle?.setAttribute("aria-expanded", "false");
+    };
+    dlToggle?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = dlMenu?.classList.toggle("is-open");
+      dlToggle.setAttribute("aria-expanded", String(!!open));
+    });
+    document.addEventListener("click", (e) => {
+      if (dlWrap && e.target instanceof Node && !dlWrap.contains(e.target)) {
+        closeMenu();
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeMenu();
+    });
+
+    // 3. Mobile drawer
+    const drawer = document.querySelector("[data-drawer]");
+    const drawerOpenBtn = document.querySelector("[data-drawer-open]");
+    const setDrawer = (open) => {
+      if (!drawer) return;
+      drawer.classList.toggle("is-open", open);
+      drawer.setAttribute("aria-hidden", String(!open));
+      drawerOpenBtn?.setAttribute("aria-expanded", String(open));
+    };
+    drawerOpenBtn?.addEventListener("click", () => setDrawer(true));
+    document.querySelectorAll("[data-drawer-close]").forEach((el) => {
+      el.addEventListener("click", () => setDrawer(false));
+    });
+
+    // 4. Right rail smooth navigation + scroll-spy indicator
+    const railNav = document.querySelector("[data-rail-nav]");
+    const indicator = document.querySelector("[data-rail-indicator]");
+    const navLinks = Array.from(document.querySelectorAll("[data-nav-link]"));
+    const sectionIds = Array.from(new Set(navLinks.map((el) => el.getAttribute("data-nav-link"))));
+
+    const updateIndicator = (activeId) => {
+      navLinks.forEach((link) => {
+        const match = link.getAttribute("data-nav-link") === activeId;
+        link.classList.toggle("is-selected", match);
+        if (match) {
+          link.setAttribute("aria-current", "location");
+        } else {
+          link.removeAttribute("aria-current");
+        }
+      });
+      if (!railNav || !indicator) return;
+      const target = railNav.querySelector(`[data-nav-link="${activeId}"]`);
+      if (target instanceof HTMLElement) {
+        indicator.style.height = `${target.offsetHeight}px`;
+        indicator.style.transform = `translateY(${target.offsetTop}px)`;
+        indicator.classList.add("is-visible");
+      } else {
+        indicator.classList.remove("is-visible");
+      }
+    };
+
+    const syncScroll = () => {
+      const doc = document.documentElement;
+      if (window.scrollY > 0 && window.innerHeight + window.scrollY >= doc.scrollHeight - 4) {
+        updateIndicator(sectionIds[sectionIds.length - 1] || "");
+        return;
+      }
+      const line = window.innerHeight * 0.35;
+      let current = "";
+      for (const id of sectionIds) {
+        const el = id ? document.getElementById(id) : null;
+        if (el && el.getBoundingClientRect().top <= line) {
+          current = id;
+        }
+      }
+      updateIndicator(current);
+    };
+
+    let raf = 0;
+    const onScrollOrResize = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        syncScroll();
+      });
+    };
+    window.addEventListener("scroll", onScrollOrResize, { passive: true });
+    window.addEventListener("resize", onScrollOrResize);
+    syncScroll();
+
+    navLinks.forEach((link) => {
+      link.addEventListener("click", (e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        const id = link.getAttribute("data-nav-link");
+        const target = id ? document.getElementById(id) : null;
+        if (!target) return;
+        e.preventDefault();
+        setDrawer(false);
+        history.replaceState(null, "", `#${id}`);
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        updateIndicator(id);
+      });
+    });
+
+    // 5. Cursor tracking radial accent glow on #about hairline cells
+    document.querySelectorAll("[data-glow-cell]").forEach((cell) => {
+      cell.addEventListener("pointermove", (e) => {
+        const rect = cell.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const pct = ((e.clientX - rect.left) / rect.width) * 100;
+        cell.style.setProperty("--x", `${Math.max(0, Math.min(100, pct)).toFixed(1)}%`);
+      });
+    });
+
+    // 6. Hero screenshot strip nav buttons
+    const strip = document.querySelector("[data-strip]");
+    const scrollStrip = (dir) => {
+      if (!strip) return;
+      const step = Math.max(300, strip.clientWidth * 0.65);
+      strip.scrollBy({ left: dir * step, behavior: "smooth" });
+    };
+    document.querySelector("[data-strip-prev]")?.addEventListener("click", () => scrollStrip(-1));
+    document.querySelector("[data-strip-next]")?.addEventListener("click", () => scrollStrip(1));
+
+    // 7. Lightbox modal for screenshots
+    const dialog = document.querySelector("[data-shot-dialog]");
+    const dialogImg = document.querySelector("[data-shot-dialog-img]");
+    const dialogCaption = document.querySelector("[data-shot-dialog-caption]");
+    document.querySelectorAll("[data-shot-src]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (!(dialog instanceof HTMLDialogElement) || !(dialogImg instanceof HTMLImageElement)) return;
+        dialogImg.src = btn.getAttribute("data-shot-src") || "";
+        dialogImg.alt = btn.getAttribute("aria-label") || "";
+        if (dialogCaption) dialogCaption.textContent = btn.getAttribute("data-shot-caption") || "";
+        dialog.showModal();
+      });
+    });
+    document.querySelector("[data-shot-dialog-close]")?.addEventListener("click", () => {
+      if (dialog instanceof HTMLDialogElement) dialog.close();
+    });
+    dialog?.addEventListener("click", (e) => {
+      if (e.target === dialog && dialog instanceof HTMLDialogElement) dialog.close();
+    });
+
+    // 8. Optional progressive live GitHub Stars / Forks readout (non-blocking)
+    fetch("https://api.github.com/repos/Lingwcy/mcl")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data || typeof data.stargazers_count !== "number") return;
+        const fmt = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
+        const starPill = document.querySelector("[data-gh-stars]");
+        if (starPill) starPill.textContent = fmt(data.stargazers_count);
+        const starsVal = document.querySelector("[data-gh-stars-large]");
+        const starsLab = document.querySelector("[data-gh-stars-label]");
+        const forksVal = document.querySelector("[data-gh-forks-large]");
+        const forksLab = document.querySelector("[data-gh-forks-label]");
+        if (starsVal && starsLab) {
+          starsVal.textContent = fmt(data.stargazers_count);
+          starsLab.textContent = starsLabelText;
+        }
+        if (forksVal && forksLab && typeof data.forks_count === "number") {
+          forksVal.textContent = fmt(data.forks_count);
+          forksLab.textContent = forksLabelText;
+        }
+      })
+      .catch(() => {});
+  })();
+</script>
+</Layout>

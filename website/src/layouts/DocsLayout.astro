@@ -1,0 +1,237 @@
+---
+import type { MarkdownHeading } from "astro";
+import Layout from "./Layout.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import Icon from "../components/Icon.astro";
+import { copy, type Locale } from "../content/site";
+import {
+  docHref,
+  getDocNeighbors,
+  getDocsByLocale,
+  groupDocSections,
+  resolveAlternateDocHref,
+  type DocEntry,
+} from "../lib/docs";
+
+interface Props {
+  locale: Locale;
+  entry: DocEntry;
+  slug: string;
+  headings: MarkdownHeading[];
+}
+
+const { locale, entry, slug, headings } = Astro.props;
+const t = copy[locale];
+const items = await getDocsByLocale(locale);
+const sections = groupDocSections(items);
+const { prev, next } = await getDocNeighbors(locale, slug);
+const tocHeadings = headings.filter((h) => h.depth === 2 || h.depth === 3);
+
+const otherLocale: Locale = locale === "zh" ? "en" : "zh";
+const switchHref = await resolveAlternateDocHref(otherLocale, slug);
+const enHref = locale === "en" ? docHref(slug, "en") : switchHref;
+const zhHref = locale === "zh" ? docHref(slug, "zh") : switchHref;
+---
+
+<Layout
+  locale={locale}
+  title={`${entry.data.title} · ${t.docs.siteLabel}`}
+  description={entry.data.description}
+  alternateEn={enHref}
+  alternateZh={zhHref}
+>
+  <SiteHeader locale={locale} isDocs={true} switchHref={switchHref} />
+
+  <div class="docs-bar">
+    <div class="shell docs-bar-inner mono">
+      <nav class="docs-breadcrumb" aria-label="Breadcrumb">
+        <a href={t.docsPath}>{t.docs.siteLabel}</a>
+        <span aria-hidden="true">/</span>
+        <span>{entry.data.section}</span>
+        <span aria-hidden="true">/</span>
+        <span class="docs-crumb-current">{entry.data.title}</span>
+      </nav>
+      <button
+        type="button"
+        class="docs-mobile-toggle"
+        data-docs-toggle
+        aria-expanded="false"
+        aria-controls="docs-sidebar"
+      >
+        <Icon name="menu" size={14} />
+        {t.docs.browseMenu}
+      </button>
+    </div>
+  </div>
+
+  <main id="main" class="shell docs-shell">
+    <aside class="docs-sidebar" id="docs-sidebar" aria-label={t.docs.siteLabel}>
+      <div class="docs-search">
+        <Icon name="search" size={14} />
+        <input
+          type="search"
+          placeholder={t.docs.searchPlaceholder}
+          aria-label={t.docs.searchPlaceholder}
+          data-docs-filter
+        />
+        <kbd aria-hidden="true">{t.docs.searchHint}</kbd>
+      </div>
+
+      {sections.map((section) => (
+        <div class="docs-nav-group" data-docs-group>
+          <p class="docs-nav-group-title mono">{section.title}</p>
+          <ul class="docs-nav-list">
+            {section.items.map((item) => {
+              const current = item.slug === slug;
+              return (
+                <li
+                  data-docs-item
+                  data-search-text={`${item.entry.data.title} ${item.entry.data.section} ${item.entry.data.description}`.toLowerCase()}
+                >
+                  <a
+                    href={item.href}
+                    class={current ? "is-current" : undefined}
+                    aria-current={current ? "page" : undefined}
+                  >
+                    <span>{item.entry.data.title}</span>
+                    {item.entry.data.badge && (
+                      <span class="docs-nav-badge">{item.entry.data.badge}</span>
+                    )}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+
+      <p class="docs-empty-search" data-docs-empty>{t.docs.emptySearch}</p>
+    </aside>
+
+    <article class="docs-article">
+      <header class="docs-article-head">
+        <p class="eyebrow">{entry.data.section}</p>
+        <h1>{entry.data.title}</h1>
+        <p class="docs-article-lead">{entry.data.description}</p>
+      </header>
+
+      <div class="docs-prose" data-copy-label={t.docs.copyCode} data-copied-label={t.docs.copiedCode}>
+        <slot />
+      </div>
+
+      {(prev || next) && (
+        <nav class="docs-pager" aria-label={locale === "zh" ? "文档翻页" : "Documentation pagination"}>
+          {prev && (
+            <a class="docs-pager-link" href={prev.href}>
+              <span class="docs-pager-label mono">← {t.docs.previous}</span>
+              <span class="docs-pager-title">{prev.entry.data.title}</span>
+            </a>
+          )}
+          {next && (
+            <a class="docs-pager-link docs-pager-link--next" href={next.href}>
+              <span class="docs-pager-label mono">{t.docs.next} →</span>
+              <span class="docs-pager-title">{next.entry.data.title}</span>
+            </a>
+          )}
+        </nav>
+      )}
+    </article>
+
+    {tocHeadings.length > 0 && (
+      <aside class="docs-toc" aria-label={t.docs.onThisPage}>
+        <p class="docs-toc-title eyebrow">{t.docs.onThisPage}</p>
+        <ul>
+          {tocHeadings.map((heading) => (
+            <li data-depth={heading.depth}>
+              <a href={`#${heading.slug}`}>{heading.text}</a>
+            </li>
+          ))}
+        </ul>
+      </aside>
+    )}
+  </main>
+
+  <SiteFooter locale={locale} />
+</Layout>
+
+<script>
+  const toggleBtn = document.querySelector<HTMLButtonElement>("[data-docs-toggle]");
+  const sidebar = document.getElementById("docs-sidebar");
+  if (toggleBtn && sidebar) {
+    toggleBtn.addEventListener("click", () => {
+      const open = sidebar.classList.toggle("is-open");
+      toggleBtn.setAttribute("aria-expanded", String(open));
+    });
+  }
+
+  const filterInput = document.querySelector<HTMLInputElement>("[data-docs-filter]");
+  const groups = document.querySelectorAll<HTMLElement>("[data-docs-group]");
+  const emptyNote = document.querySelector<HTMLElement>("[data-docs-empty]");
+
+  if (filterInput) {
+    const applyFilter = () => {
+      const query = filterInput.value.trim().toLowerCase();
+      let totalVisible = 0;
+      for (const group of groups) {
+        let groupVisible = 0;
+        for (const item of group.querySelectorAll<HTMLElement>("[data-docs-item]")) {
+          const text = item.dataset.searchText ?? "";
+          const show = !query || text.includes(query);
+          item.hidden = !show;
+          if (show) {
+            groupVisible += 1;
+            totalVisible += 1;
+          }
+        }
+        group.hidden = groupVisible === 0;
+      }
+      if (emptyNote) {
+        emptyNote.classList.toggle("is-visible", totalVisible === 0);
+      }
+    };
+
+    filterInput.addEventListener("input", applyFilter);
+    document.addEventListener("keydown", (event) => {
+      if (
+        event.key === "/" &&
+        document.activeElement !== filterInput &&
+        !(document.activeElement instanceof HTMLInputElement) &&
+        !(document.activeElement instanceof HTMLTextAreaElement)
+      ) {
+        event.preventDefault();
+        if (sidebar && !sidebar.classList.contains("is-open")) {
+          sidebar.classList.add("is-open");
+          toggleBtn?.setAttribute("aria-expanded", "true");
+        }
+        filterInput.focus();
+      }
+    });
+  }
+
+  const prose = document.querySelector<HTMLElement>(".docs-prose");
+  if (prose) {
+    const copyLabel = prose.dataset.copyLabel ?? "Copy";
+    const copiedLabel = prose.dataset.copiedLabel ?? "Copied";
+    for (const pre of prose.querySelectorAll("pre")) {
+      const code = pre.querySelector("code");
+      if (!code) continue;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "docs-code-copy";
+      btn.textContent = copyLabel;
+      btn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(code.textContent ?? "");
+          btn.textContent = copiedLabel;
+          window.setTimeout(() => {
+            btn.textContent = copyLabel;
+          }, 1500);
+        } catch {
+          // Ignore clipboard permissions errors.
+        }
+      });
+      pre.appendChild(btn);
+    }
+  }
+</script>

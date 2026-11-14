@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#111111"/>
+  <path d="M56 122h1088M56 542h1088" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+  <rect x="56" y="48" width="44" height="44" rx="10" fill="#161616" stroke="rgba(255,255,255,0.16)"/>
+  <rect x="66" y="56" width="6" height="6" fill="#f58d33"/>
+  <rect x="84" y="56" width="6" height="6" fill="#f58d33"/>
+  <rect x="66" y="62" width="24" height="12" fill="#fce1bc"/>
+  <rect x="70" y="66" width="4" height="4" fill="#1e1715"/>
+  <rect x="82" y="66" width="4" height="4" fill="#1e1715"/>
+  <rect x="76" y="70" width="4" height="3" fill="#ea7a88"/>
+  <rect x="66" y="74" width="24" height="5" fill="#68b92e"/>
+  <rect x="66" y="79" width="24" height="6" fill="#5c3621"/>
+  <text x="116" y="78" font-family="monospace" font-weight="700" font-size="28" fill="#ebebeb">mcl</text>
+  <text x="936" y="76" font-family="monospace" font-size="13" letter-spacing="1.5" fill="rgba(255,255,255,0.5)">GO &amp; MYGO · MIT</text>
+  <text x="56" y="264" font-family="monospace" font-weight="700" font-size="72" letter-spacing="-2" fill="#ebebeb">Built for craft,</text>
+  <text x="56" y="354" font-family="monospace" font-weight="700" font-size="72" letter-spacing="-2" fill="#6cb4d9">made for Minecraft.</text>
+  <text x="58" y="428" font-family="sans-serif" font-size="23" fill="rgba(255,255,255,0.62)">Native Go &amp; MyGo launcher. Isolated instances, Modrinth &amp; CurseForge, auto Java.</text>
+  <text x="56" y="586" font-family="monospace" font-size="13" fill="rgba(255,255,255,0.45)">MEOW CRAFT LAUNCHER</text>
+  <text x="790" y="586" font-family="monospace" font-size="13" fill="rgba(255,255,255,0.45)">macOS / Windows · MIT Open Source</text>
+</svg>

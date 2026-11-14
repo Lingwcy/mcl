@@ -1,0 +1,22 @@
+---
+import { render } from "astro:content";
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { getDocsByLocale } from "../../lib/docs";
+
+export async function getStaticPaths() {
+  const items = await getDocsByLocale("en");
+  return items
+    .filter((item) => item.slug !== "")
+    .map((item) => ({
+      params: { slug: item.slug },
+      props: { item },
+    }));
+}
+
+const { item } = Astro.props;
+const { Content, headings } = await render(item.entry);
+---
+
+<DocsLayout locale="en" entry={item.entry} slug={item.slug} headings={headings}>
+  <Content />
+</DocsLayout>

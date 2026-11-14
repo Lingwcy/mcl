@@ -1,0 +1,26 @@
+---
+import { RELEASES_URL, REPO_URL, copy, type Locale } from "../content/site";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = copy[locale];
+---
+
+<footer class="site-footer">
+  <div class="shell footer-bottom">
+    <div>
+      <p>{t.footer.disclaimer}</p>
+      <p style="margin-top: 4px;">{t.footer.mitLine}</p>
+    </div>
+
+    <nav class="footer-links mono" aria-label={locale === "zh" ? "页脚导航" : "Footer navigation"}>
+      <a href={t.docsPath}>{t.footer.docsLink}</a>
+      <a href={REPO_URL} target="_blank" rel="noopener noreferrer">{t.footer.githubLink}</a>
+      <a href={RELEASES_URL} target="_blank" rel="noopener noreferrer">{t.footer.releasesLink}</a>
+      <a href="#top">↑</a>
+    </nav>
+  </div>
+</footer>
