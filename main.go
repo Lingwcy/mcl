@@ -207,7 +207,7 @@ func run() error {
 		window = mygo.NewWindow(mygo.WindowOptions{
 			Title: branding.Name + " — " + branding.FullName, Width: launcherui.DefaultWidth, Height: launcherui.DefaultHeight,
 			MinWidth: launcherui.MinWidth, MinHeight: launcherui.MinHeight,
-			TitleBarStyle: mygo.TitleBarHidden, TitleBarHeight: 44, HideWindowButtons: true,
+			TitleBarStyle: mygo.TitleBarHidden, TitleBarHeight: int(launcherui.TitlebarHeight), HideWindowButtons: true,
 			StateKey: "main-workspace-v2", Content: ui.View(shell.View),
 		})
 		shell.BindWindow(window)

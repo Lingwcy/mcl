@@ -12,36 +12,36 @@ import (
 
 func (s *Shell) titlebar(c *ui.Context) {
 	t := s.theme
-	ui.Row(c.Key("titlebar")).FillWidth().Height(titlebarHeight).Shrink(0).Padding(0, 12).Gap(8).DragWindow().Children(func() {
-		ui.Row(c.Key("product-brand")).Height(28).Children(func() {
-			logo := ui.Image(c.Key("product-logo"), brandLogo).Label(branding.FullName).Size(26, 26).Fit(ui.Contain)
+	ui.Row(c.Key("titlebar")).FillWidth().Height(TitlebarHeight).Shrink(0).Padding(0, 8, 0, 10).Gap(6).DragWindow().Children(func() {
+		ui.Row(c.Key("product-brand")).Height(20).Margin(0, 4, 0, 0).Children(func() {
+			logo := ui.Image(c.Key("product-logo"), brandLogo).Label(branding.FullName).Size(20, 20).Fit(ui.Contain)
 			if scale := logo.Keyframes("entrance", appLogoEntrance); scale != 1 {
 				logo.Scale(scale, scale)
 			}
 		})
 		if s.page != launchPage {
-			iconButton(c, "toggle-sidebar", "收起或展开侧栏", iconSidebar, func() { s.sidebarCollapsed = !s.sidebarCollapsed })
+			titlebarIconButton(c, "toggle-sidebar", "收起或展开侧栏", iconSidebar, func() { s.sidebarCollapsed = !s.sidebarCollapsed })
 			if s.page != libraryPage {
-				iconButton(c, "nav-library", "游戏库", iconBack, s.openHome)
+				titlebarIconButton(c, "nav-library", "游戏库", iconBack, s.openHome)
 			}
 		}
 		ui.Spacer(c)
-		iconButton(c, "nav-activity", "下载与任务", iconDownload, func() { s.page = activityPage })
+		titlebarIconButton(c, "nav-activity", "下载与任务", iconDownload, func() { s.page = activityPage })
 		icon := iconMoon
 		if t.Dark {
 			icon = iconSun
 		}
-		iconButton(c, "toggle-theme", "切换明暗主题", icon, s.toggleAppearance)
+		titlebarIconButton(c, "toggle-theme", "切换明暗主题", icon, s.toggleAppearance)
 		if w := s.window; w != nil {
-			ui.Box(c).Width(1).Height(16).Shrink(0).Background(colors(t).Divider)
-			ui.Row(c.Key("window-controls")).Shrink(0).Gap(4).Children(func() {
-				iconButton(c, "window-minimize", "最小化窗口", iconMinus, w.Minimize)
+			ui.Box(c).Width(1).Height(13).Shrink(0).Background(colors(t).Divider)
+			ui.Row(c.Key("window-controls")).Shrink(0).Gap(2).Children(func() {
+				titlebarIconButton(c, "window-minimize", "最小化窗口", iconMinus, w.Minimize)
 				label, icon := "最大化窗口", iconSquare
 				if w.IsMaximized() {
 					label, icon = "还原窗口", iconRestoreWindow
 				}
-				iconButton(c, "window-maximize", label, icon, w.ToggleMaximize).MaximizeButton()
-				iconButton(c, "window-close", "关闭窗口", iconClose, w.Close)
+				titlebarIconButton(c, "window-maximize", label, icon, w.ToggleMaximize).MaximizeButton()
+				titlebarIconButton(c, "window-close", "关闭窗口", iconClose, w.Close)
 			})
 		}
 	})
@@ -77,7 +77,7 @@ func (s *Shell) openMarket(kind app.AssetKind) {
 
 func (s *Shell) navigationRail(c *ui.Context) {
 	settings := s.page.inSettings()
-	ui.Column(c.Key("navigation-rail")).Label("主导航").Width(railWidth).Shrink(0).FillHeight().Padding(8, 8, 6).Gap(10).Children(func() {
+	ui.Column(c.Key("navigation-rail")).Label("主导航").Width(railWidth).Shrink(0).FillHeight().Padding(4, 5, 1).Gap(6).Children(func() {
 		s.railButton(c, "rail-home", "Home", iconHome, s.page != marketPage && !settings, s.openHome)
 		s.railButton(c, "rail-market", "市场", iconMarket, s.page == marketPage, func() { s.openMarket(s.market.kind) })
 		ui.Spacer(c)
@@ -89,14 +89,14 @@ func (s *Shell) navigationRail(c *ui.Context) {
 func (s *Shell) railButton(c *ui.Context, key, label string, icon *ui.SVG, selected bool, action func()) {
 	t := s.theme
 	fill, color := ui.Transparent, colors(t).Icon
-	button := ui.ButtonBase(c.Key(key)).Label(label).Tooltip(label).Size(36, 36).Shrink(0).Radius(10).Center()
+	button := ui.ButtonBase(c.Key(key)).Label(label).Tooltip(label).Size(30, 30).Shrink(0).Radius(8).Center()
 	if selected {
 		fill, color = colors(t).Selected, t.Text
 		if t.Dark {
 			color = colors(t).AccentInk
 		}
 	}
-	controlMotion(c, button, fill, true).OnClick(action).Children(func() { ui.Icon(c, icon).Size(19, 19).TextColor(color) })
+	controlMotion(c, button, fill, true).OnClick(action).Children(func() { ui.Icon(c, icon).Size(16, 16).TextColor(color) })
 }
 
 func secondarySidebarWidth(c *ui.Context) float32 {
@@ -115,7 +115,7 @@ func (s *Shell) sidebar(c *ui.Context) ui.Element {
 		group = "settings"
 	}
 	panel := ui.Column(c.Key("secondary-sidebar")).Label("副侧栏").Width(secondarySidebarWidth(c)).Shrink(0).FillHeight().
-		Background(sidebarColor(t)).BorderWidth(0, 1, 0, 0).BorderColor(colors(t).Divider)
+		Background(sidebarColor(t)).BorderWidth(0, 0.5, 0, 0).BorderColor(colors(t).Divider)
 	return panel.Children(func() {
 		ui.Column(c.Key(group)).Grow(1).MinHeight(0).FillWidth().Transition(motionReveal).Children(func() {
 			switch group {

@@ -161,7 +161,7 @@ func (s *Shell) feedbackToasts(c *ui.Context) {
 func toastViewport(c *ui.Context) {
 	t, p := c.Theme(), colors(c.Theme())
 	ui.ToastViewportBase(c, func(viewport ui.Element, toasts []ui.Toast) {
-		viewport.Top(titlebarHeight+10).Padding(0, 12, 12).Justify(ui.Start).AlignItems(ui.End).Gap(8)
+		viewport.Top(TitlebarHeight+8).Padding(0, 12, 12).Justify(ui.Start).AlignItems(ui.End).Gap(8)
 		for _, toast := range toasts {
 			parts := ui.ToastBase(c, toast)
 			icon, color := iconInfo, p.Icon

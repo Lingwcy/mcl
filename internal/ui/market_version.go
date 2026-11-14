@@ -19,6 +19,7 @@ type marketVersionState struct {
 	err             string
 	cancel          func()
 	markdown        markdown.Options
+	mediaCache      *marketMediaCache
 }
 
 func (s *Shell) closeMarketVersion() {
@@ -30,7 +31,7 @@ func (s *Shell) closeMarketVersion() {
 
 func (s *Shell) openMarketVersion(project market.Project, version market.Version) {
 	s.closeMarketVersion()
-	state := &marketVersionState{project: project, version: version}
+	state := &marketVersionState{project: project, version: version, mediaCache: newMarketMediaCache()}
 	state.changelog, state.truncated = marketDisplayText(version.Changelog)
 	state.version.Changelog = ""
 	s.market.version = state
@@ -58,11 +59,7 @@ func (s *Shell) marketVersionView(c *ui.Context) {
 	state, t := s.market.version, s.theme
 	p, v := state.project, state.version
 	services := c.Services()
-	state.markdown.OnLink = func(address string) {
-		if market.SafeURL(address) {
-			services.OpenURL(address)
-		}
-	}
+	s.configureMarketMarkdown(c, &state.markdown, state.mediaCache)
 	_, installErr := v.PrimaryFileMetadata()
 	ui.Row(c).FillWidth().Height(28).Shrink(0).Gap(8).Children(func() {
 		iconButton(c, "version-back", "返回版本列表", iconBack, func() { s.closeMarketVersion(); s.market.tab = 1 })

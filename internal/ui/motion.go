@@ -11,6 +11,7 @@ import (
 // animation goroutines; MyGo also applies the system Reduce Motion preference.
 var (
 	motionPress  = ui.Animation{Spring: ui.SpringOptions{Duration: 260 * time.Millisecond, Bounce: 0.20}}
+	motionTab    = ui.Animation{Spring: ui.SpringOptions{Duration: 320 * time.Millisecond, Bounce: 0.22}}
 	motionLaunch = ui.Animation{Spring: ui.SpringOptions{Duration: 460 * time.Millisecond, Bounce: 0.16}}
 	motionPanel  = ui.Animation{Spring: ui.SpringOptions{Duration: 300 * time.Millisecond}}
 	motionColor  = ui.Animation{Duration: 140 * time.Millisecond, Ease: ui.EaseOut}
