@@ -1,0 +1,16 @@
+---
+import { render } from "astro:content";
+import DocsLayout from "../../../layouts/DocsLayout.astro";
+import { getDocsByLocale } from "../../../lib/docs";
+
+const items = await getDocsByLocale("zh");
+const current = items.find((item) => item.slug === "") ?? items[0];
+if (!current) {
+  throw new Error("No Chinese documentation entries found.");
+}
+const { Content, headings } = await render(current.entry);
+---
+
+<DocsLayout locale="zh" entry={current.entry} slug={current.slug} headings={headings}>
+  <Content />
+</DocsLayout>

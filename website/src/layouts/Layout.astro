@@ -1,0 +1,67 @@
+---
+import "@fontsource-variable/space-grotesk";
+import "@fontsource-variable/manrope";
+import "@fontsource/space-mono/latin-400.css";
+import "@fontsource/space-mono/latin-700.css";
+import "../styles/global.css";
+import { copy, type Locale } from "../content/site";
+
+interface Props {
+  locale: Locale;
+  title?: string;
+  description?: string;
+  alternateEn?: string;
+  alternateZh?: string;
+}
+
+const {
+  locale,
+  title,
+  description,
+  alternateEn = "/",
+  alternateZh = "/zh/",
+} = Astro.props;
+const t = copy[locale];
+const pageTitle = title ? `${title} — ${t.brandFull}` : t.title;
+const pageDescription = description ?? t.description;
+const siteUrl = Astro.site;
+const canonical = siteUrl ? new URL(Astro.url.pathname, siteUrl).href : undefined;
+---
+
+<!doctype html>
+<html lang={t.lang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={pageDescription} />
+    <meta name="theme-color" content="#111111" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Meow Craft Launcher" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={pageDescription} />
+    <meta property="og:locale" content={locale === "zh" ? "zh_CN" : "en_US"} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={pageDescription} />
+    {siteUrl && (
+      <>
+        <link rel="canonical" href={canonical} />
+        <meta property="og:url" content={canonical} />
+        <meta property="og:image" content={new URL("/social.svg", siteUrl).href} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="mcl — Meow Craft Launcher." />
+        <link rel="alternate" hreflang="en" href={new URL(alternateEn, siteUrl).href} />
+        <link rel="alternate" hreflang="zh-CN" href={new URL(alternateZh, siteUrl).href} />
+        <link rel="alternate" hreflang="x-default" href={new URL(alternateEn, siteUrl).href} />
+      </>
+    )}
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{pageTitle}</title>
+  </head>
+  <body id="top">
+    <a class="skip-link" href="#main">{t.skip}</a>
+    <slot />
+  </body>
+</html>
