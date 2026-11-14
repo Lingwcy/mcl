@@ -182,6 +182,13 @@ func SafeURL(value string) bool {
 	u, err := url.Parse(value)
 	return err == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && u.Port() == "" && u.Fragment == ""
 }
+
+// SafeLinkURL validates external HTTPS links and image sources, permitting
+// URL fragments such as section anchors used in project documentation.
+func SafeLinkURL(value string) bool {
+	u, err := url.Parse(value)
+	return err == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && u.Port() == ""
+}
 func projectType(kind Kind) string {
 	switch kind {
 	case ResourcePack:

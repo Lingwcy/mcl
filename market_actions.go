@@ -19,6 +19,7 @@ import (
 
 func connectMarket(ctx context.Context, workers *sync.WaitGroup, window *mygo.Window, shell *launcherui.Shell, service *app.MarketService, installer *app.MarketInstaller, archiveImporter *app.ArchiveImporter, packImports *app.PackImportService) {
 	icons := make(chan struct{}, 4)
+	media := make(chan struct{}, 4)
 	shell.ConnectMarket(launcherui.MarketActions{
 		CurseForgeAvailable: service.Client().CurseForgeAvailable(),
 		Search: func(query market.Query, done func(market.Results, error)) func() {
@@ -50,6 +51,15 @@ func connectMarket(ctx context.Context, workers *sync.WaitGroup, window *mygo.Wi
 				}
 				return platform.MarketImage(ctx, address)
 			}, done)
+		},
+		Media: func(address string) ([]byte, bool, error) {
+			select {
+			case media <- struct{}{}:
+				defer func() { <-media }()
+			case <-ctx.Done():
+				return nil, false, ctx.Err()
+			}
+			return platform.MarketMedia(ctx, address)
 		},
 		InstanceIcon: func(address string, done func([]byte, error)) func() {
 			return marketWork(ctx, workers, window, func(task context.Context) ([]byte, error) {

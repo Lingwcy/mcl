@@ -36,12 +36,20 @@ func section(c *ui.Context, title string, body func()) {
 }
 
 func iconButton(c *ui.Context, key, label string, icon *ui.SVG, action func()) ui.Element {
-	button := ui.ButtonBase(c.Key(key)).Label(label).Tooltip(label).Size(28, 28).Radius(5).Center().Disabled(action == nil)
+	return sizedIconButton(c, key, label, icon, 28, 16, 5, action)
+}
+
+func titlebarIconButton(c *ui.Context, key, label string, icon *ui.SVG, action func()) ui.Element {
+	return sizedIconButton(c, key, label, icon, 24, 14, 5, action)
+}
+
+func sizedIconButton(c *ui.Context, key, label string, icon *ui.SVG, buttonSize, iconSize, radius float32, action func()) ui.Element {
+	button := ui.ButtonBase(c.Key(key)).Label(label).Tooltip(label).Size(buttonSize, buttonSize).Radius(radius).Center().Disabled(action == nil)
 	fill := ui.Transparent
 	if action != nil && button.Hovered() {
 		fill = c.Theme().SurfaceHover
 	}
 	return controlMotion(c, button, fill, action != nil).OnClick(action).Children(func() {
-		ui.Icon(c, icon).Size(16, 16).TextColor(colors(c.Theme()).Icon).ContentTransition(ui.ContentTransition{Animation: &motionFade})
+		ui.Icon(c, icon).Size(iconSize, iconSize).TextColor(colors(c.Theme()).Icon).ContentTransition(ui.ContentTransition{Animation: &motionFade})
 	})
 }

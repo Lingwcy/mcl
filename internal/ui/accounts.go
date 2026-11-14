@@ -180,13 +180,13 @@ func (s *Shell) accountRailButton(c *ui.Context) {
 	if profile, ok := a.data.Active(); ok {
 		label = "账户 · " + profile.Name
 	}
-	button := ui.ButtonBase(c.Key("rail-accounts")).Label("账户").Tooltip(label).Size(36, 36).Shrink(0).Radius(10).Center()
+	button := ui.ButtonBase(c.Key("rail-accounts")).Label("账户").Tooltip(label).Size(30, 30).Shrink(0).Radius(8).Center()
 	fill := ui.Transparent
 	if s.page == accountsPage {
 		fill = colors(t).Selected
 	}
 	controlMotion(c, button, fill, true).OnClick(s.openAccounts).Children(func() {
-		s.accountAvatar(c, a.data.ActiveID, 22)
+		s.accountAvatar(c, a.data.ActiveID, 20)
 	})
 }
 

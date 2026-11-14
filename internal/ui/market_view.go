@@ -279,6 +279,13 @@ func marketTag(c *ui.Context, value string, accent bool) {
 	ui.Text(c, value).FontSize(10).TextColor(color).Padding(2, 5).Radius(4).Background(fill).MaxLines(1).Ellipsis("…")
 }
 
+const (
+	marketDetailTabWidth float32 = 72
+	marketDetailTabGap   float32 = 4
+	marketDetailTabStep  float32 = marketDetailTabWidth + marketDetailTabGap
+	marketDetailTabH     float32 = 28
+)
+
 func (s *Shell) marketDetailView(c *ui.Context) {
 	if s.market.version != nil {
 		s.marketVersionView(c)
@@ -289,12 +296,7 @@ func (s *Shell) marketDetailView(c *ui.Context) {
 	if m.detail != nil {
 		p = m.detail.Project
 	}
-	services := c.Services()
-	m.markdown.OnLink = func(address string) {
-		if market.SafeURL(address) {
-			services.OpenURL(address)
-		}
-	}
+	s.configureMarketMarkdown(c, &m.markdown, m.mediaCache)
 	ui.Row(c).FillWidth().Height(28).Shrink(0).Gap(8).Children(func() {
 		iconButton(c, "market-detail-back", "返回搜索", iconBack, s.backMarketResults)
 		ui.Spacer(c)
@@ -302,13 +304,6 @@ func (s *Shell) marketDetailView(c *ui.Context) {
 			ui.Button(c.Key("association-project"), "核对项目").Height(26).
 				Disabled(state.active || state.origin != nil || m.detail == nil).
 				OnClick(func() { s.startAssetAssociation(state, p.Source, p.ID, "") })
-		}
-		if market.SafeURL(p.PageURL) {
-			label := "项目主页"
-			if m.descriptionTruncated {
-				label = "完整说明"
-			}
-			ui.Button(c.Key("market-website"), label).Height(26).OnClick(func() { services.OpenURL(p.PageURL) })
 		}
 	})
 	if m.detailBusy {
@@ -323,15 +318,20 @@ func (s *Shell) marketDetailView(c *ui.Context) {
 		return
 	}
 	p = m.detail.Project
-	ui.Row(c).FillWidth().Height(66).Shrink(0).Gap(12).Children(func() {
-		s.marketProjectIcon(c, p, 44)
-		ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() {
+	ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Padding(2, 0, 4, 0).Gap(12).Children(func() {
+		s.marketProjectIcon(c, p, 48)
+		ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
 			ui.Text(c, p.Title).FontSize(19).FontWeight(600).MaxLines(1).Ellipsis("…")
-			ui.Text(c, p.Author).FontSize(11).TextColor(colors(t).Metadata)
+			ui.Text(c, p.Author).FontSize(12).TextColor(colors(t).Metadata).MaxLines(1).Ellipsis("…")
 		})
-		ui.Text(c, compactCount(p.Downloads)).FontSize(11).TextColor(colors(t).Metadata)
+		downloads := compactCount(p.Downloads)
+		ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(5).
+			Tooltip("下载量").Label("下载量 " + downloads).Children(func() {
+			ui.Icon(c, iconDownload).Size(12, 12).TextColor(colors(t).Metadata)
+			ui.Text(c, downloads).FontSize(12).TextColor(colors(t).Metadata).SingleLine()
+		})
 	})
-	ui.Segmented(c.Key("market-detail-tabs"), &m.tab, "简介", "版本").Height(28).Width(160)
+	s.marketDetailTabs(c, p.PageURL)
 	if m.tab == 0 {
 		ui.Scroll(c.Key("market-description")).Grow(1).MinHeight(0).FillWidth().Gap(12).Padding(4, 0).Transition(motionReveal).Children(func() {
 			ui.Text(c, p.Description).FontSize(12).FillWidth()
@@ -356,6 +356,141 @@ func (s *Shell) marketDetailView(c *ui.Context) {
 	m.versionsList.Key = func(index int) any { return versions[index].ID }
 	m.versionsList.Label = func(index int) string { return versions[index].Name }
 	ui.List(c.Key("market-versions"), &m.versionsList, len(versions), func(index int) { v := versions[index]; s.marketVersionRow(c, p, v) }).Grow(1).MinHeight(0).FillWidth().Transition(motionReveal)
+}
+
+func (s *Shell) marketDetailTabs(c *ui.Context, pageURL string) {
+	m, t := &s.market, s.theme
+	services := c.Services()
+	if m.tab != m.tabSynced {
+		m.tabDrag = ui.Point{X: float32(m.tab) * marketDetailTabStep}
+		m.tabSynced = m.tab
+	}
+	tabs := []struct {
+		label string
+		icon  *ui.SVG
+	}{
+		{label: "简介", icon: iconBook},
+		{label: "版本", icon: iconLayers},
+	}
+	trackW := marketDetailTabWidth*2 + marketDetailTabGap
+	ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).Children(func() {
+		seg := ui.SegmentedBase(c.Key("market-detail-tabs"), &m.tab, len(tabs))
+		seg.Track.Label("详情视图").Size(trackW, marketDetailTabH).AlignItems(ui.Center).Children(func() {
+			pill := ui.Box(c).Absolute().Left(0).Top(0).Size(marketDetailTabWidth, marketDetailTabH)
+			var segEls [2]ui.Element
+			var labelIcons [2]ui.Element
+			var labelTexts [2]ui.Element
+			for i, item := range tabs {
+				el := seg.Segment(i).Absolute().Left(float32(i)*marketDetailTabStep).Top(0).
+					Size(marketDetailTabWidth, marketDetailTabH).Radius(7).Center().Gap(5).FocusRing(false)
+				el.DrawOver(func(p *ui.Painter, r ui.Rect) {
+					if el.FocusVisible() {
+						p.FocusRing(r, [4]float32{7, 7, 7, 7})
+					}
+				})
+				if i != m.tab && el.Hovered() {
+					el.Background(colors(t).Hover)
+				}
+				el.Transition(ui.ElementTransition{Animation: &motionColor, Colors: true}).Children(func() {
+					labelIcons[i] = ui.Icon(c, item.icon).Size(12, 12)
+					labelTexts[i] = ui.Text(c, item.label).FontSize(12).SingleLine()
+				})
+				segEls[i] = el
+			}
+			handle := ui.Box(c.Key("market-tab-drag-handle")).Absolute().Left(0).Top(0).
+				Size(marketDetailTabWidth, marketDetailTabH).Background(ui.Transparent).
+				Draggable(&m.tabDrag, ui.DraggableOptions{
+					Axis:      ui.Horizontal,
+					Bounds:    &ui.Rect{W: marketDetailTabStep},
+					Snap:      ui.Nearest(ui.Point{}, ui.Point{X: marketDetailTabStep}),
+					Animation: motionTab,
+				})
+			dragPos := handle.DragOffset()
+			dragging := handle.Dragging()
+			if _, _, ended := handle.DragEnded(); ended {
+				next := 0
+				if m.tabDrag.X >= marketDetailTabStep/2 {
+					next = 1
+				}
+				if next != m.tab {
+					m.tab = next
+				}
+				m.tabSynced = m.tab
+			}
+			cursor := ui.CursorGrab
+			if dragging {
+				cursor = ui.CursorGrabbing
+			}
+			handle.Cursor(cursor)
+
+			pill.Translate(dragPos.X, 0).Children(func() {
+				lift := ui.Pose{Scale: 1}
+				pillFill := colors(t).Selected
+				if dragging {
+					lift = ui.Pose{Scale: 1.03}
+					pillFill = colors(t).SelectedHover
+				} else if handle.Pressed() {
+					lift = ui.Pose{Scale: 0.96}
+					pillFill = colors(t).SelectedHover
+				} else if handle.Hovered() {
+					pillFill = colors(t).SelectedHover
+				}
+				ui.Box(c).Fill().Radius(7).
+					Background(pillFill).
+					Transition(ui.ElementTransition{Animation: &motionColor, Colors: true}).
+					AnimatePose(lift, motionPress)
+			})
+
+			activeVisual := m.tab
+			if dragging {
+				if dragPos.X >= marketDetailTabStep/2 {
+					activeVisual = 1
+				} else {
+					activeVisual = 0
+				}
+			}
+			for i := range tabs {
+				ink := colors(t).Metadata
+				weight := 400
+				if i == activeVisual {
+					ink = t.Text
+					weight = 600
+				} else if segEls[i].Hovered() {
+					ink = t.Text
+				}
+				labelIcons[i].TextColor(ink).Transition(ui.ElementTransition{Animation: &motionColor, Colors: true})
+				labelTexts[i].TextColor(ink).FontWeight(weight).Transition(ui.ElementTransition{Animation: &motionColor, Colors: true})
+			}
+		})
+
+		if market.SafeURL(pageURL) {
+			label := "项目主页"
+			if m.descriptionTruncated {
+				label = "完整说明"
+			}
+			homeBtn := ui.ButtonBase(c.Key("market-website")).Label(label).Tooltip("在浏览器中打开项目主页").
+				Height(marketDetailTabH).Padding(0, 10).Radius(7).Center().Gap(5).FocusRing(false)
+			fill := ui.Transparent
+			ink := colors(t).Metadata
+			scale := float32(1)
+			if homeBtn.Pressed() {
+				fill = colors(t).Pressed
+				ink = t.Text
+				scale = 0.96
+			} else if homeBtn.Hovered() {
+				fill = colors(t).Hover
+				ink = t.Text
+			}
+			homeBtn.Background(fill).
+				Transition(ui.ElementTransition{Animation: &motionColor, Colors: true}).
+				AnimatePose(ui.Pose{Scale: scale}, motionPress).
+				OnClick(func() { services.OpenURL(pageURL) }).
+				Children(func() {
+					ui.Icon(c, iconCompass).Size(12, 12).TextColor(ink)
+					ui.Text(c, label).FontSize(12).TextColor(ink).SingleLine()
+				})
+		}
+	})
 }
 func (s *Shell) marketVersionRow(c *ui.Context, p market.Project, v market.Version) {
 	t := s.theme

@@ -176,7 +176,7 @@ func (c *Client) Project(ctx context.Context, source Source, id string, kind Kin
 		if err := c.get(ctx, source, "/mods/"+id+"/description", nil, &desc); err != nil {
 			return p, err
 		}
-		p.Body = descriptionText(desc.Data)
+		p.Body = DescriptionMarkdown(desc.Data)
 		return p, nil
 	}
 	return Project{}, errors.New("未知市场来源")
@@ -237,7 +237,7 @@ func (c *Client) VersionDetail(ctx context.Context, source Source, projectID, ve
 		if err := c.get(ctx, source, "/mods/"+projectID+"/files/"+versionID+"/changelog", nil, &raw); err != nil {
 			return Version{}, err
 		}
-		version.Changelog = descriptionText(raw.Data)
+		version.Changelog = DescriptionMarkdown(raw.Data)
 	}
 	return version, nil
 }

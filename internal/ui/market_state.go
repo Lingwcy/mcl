@@ -22,6 +22,7 @@ type MarketActions struct {
 	Detail              func(market.Project, string, string, func(app.MarketDetail, error)) func()
 	VersionDetail       func(market.Source, string, string, func(market.Version, error)) func()
 	Icon                func(string, func(image.Image, error)) func()
+	Media               func(string) ([]byte, bool, error)
 	SetKey              func(string) error
 	CurseForgeAvailable bool
 	Plan                func(market.InstallRequest, func(market.InstallPlan, error)) func()
@@ -59,7 +60,10 @@ type marketState struct {
 	detail                                           *app.MarketDetail
 	descriptionTruncated                             bool
 	tab                                              int
+	tabSynced                                        int
+	tabDrag                                          ui.Point
 	markdown                                         markdown.Options
+	mediaCache                                       *marketMediaCache
 	keyInput, keyError                               string
 	showKey                                          bool
 	install                                          *marketInstallState
@@ -112,6 +116,8 @@ func (s *Shell) searchMarket(reset bool) {
 	}
 	m.iconCancels = nil
 	m.icons = make(map[string]*ui.Bitmap)
+	m.mediaCache = nil
+	m.markdown = markdown.Options{}
 	m.generation++
 	generation := m.generation
 	m.busy, m.loaded, m.error, m.message = true, true, "", ""
@@ -204,6 +210,8 @@ func (s *Shell) openMarketProject(p market.Project) {
 	generation := m.detailGeneration
 	m.selected = &p
 	m.detail = nil
+	m.mediaCache = newMarketMediaCache()
+	m.markdown = markdown.Options{}
 	m.detailBusy = true
 	m.error = ""
 	m.message = ""
@@ -211,6 +219,8 @@ func (s *Shell) openMarketProject(p market.Project) {
 	if s.marketAssociation() != nil {
 		m.tab = 1
 	}
+	m.tabSynced = m.tab
+	m.tabDrag = ui.Point{X: float32(m.tab) * marketDetailTabStep}
 	m.versionsList = ui.ListState{}
 	loaders := slices.Clone(m.loaders)
 	environments := slices.Clone(m.environments)

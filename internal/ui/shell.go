@@ -39,8 +39,10 @@ const (
 	DefaultHeight           = 680
 	MinWidth                = 680
 	MinHeight               = 440
-	titlebarHeight  float32 = 44
-	railWidth       float32 = 52
+	TitlebarHeight  float32 = 34
+	railWidth       float32 = 40
+	chromeEdge      float32 = 4
+	workspaceRadius float32 = 10
 	sidebarWidth    float32 = 208
 	minSidebarWidth float32 = 156
 )
@@ -170,23 +172,23 @@ func (s *Shell) View(c *ui.Context) {
 		s.titlebar(c)
 		// Keep the host for the exit snapshot, but let input reach the
 		// workspace beneath it. The live launch page owns its own input.
-		ui.Column(c.Key("launch-layer")).Absolute().Top(titlebarHeight).Bottom(0).Left(0).Right(0).PassThrough().Children(func() {
+		ui.Column(c.Key("launch-layer")).Absolute().Top(TitlebarHeight).Bottom(0).Left(0).Right(0).PassThrough().Children(func() {
 			if s.page == launchPage {
-				ui.Column(c.Key("launch-workspace")).Fill().Radius(12).Clip().Background(t.Background).
+				ui.Column(c.Key("launch-workspace")).Fill().Radius(workspaceRadius).Clip().Background(t.Background).
 					Transition(motionLaunchExit).Children(func() { s.launchView(c) })
 			}
 		})
 		if s.page == launchPage {
 			return
 		}
-		content := ui.Row(c).Grow(1).MinHeight(0).FillWidth().Padding(0, 6, 6, 0).Gap(0)
+		content := ui.Row(c).Grow(1).MinHeight(0).FillWidth().Padding(0, chromeEdge, chromeEdge, 0).Gap(0)
 		if entrance < 1 {
 			content.Translate(0, 4*(1-entrance)).Opacity(0.78 + 0.22*entrance)
 		}
 		content.Children(func() {
 			s.navigationRail(c)
 			sidebarWidth := secondarySidebarWidth(c)
-			workspace := ui.Row(c.Key("workspace")).Grow(1).MinWidth(0).FillHeight().Radius(12).Clip().Background(t.Background)
+			workspace := ui.Row(c.Key("workspace")).Grow(1).MinWidth(0).FillHeight().Radius(workspaceRadius).Clip().Background(t.Background)
 			target := float32(1)
 			if s.sidebarCollapsed {
 				target = 0
@@ -196,7 +198,7 @@ func (s *Shell) View(c *ui.Context) {
 				if shown > 0.001 || !s.sidebarCollapsed {
 					// MyGo's stationary nested clips use the innermost radii.
 					// Keep the animation viewport's outside corners rounded too.
-					ui.Row(c.Key("sidebar-viewport")).Width(sidebarWidth*shown).Shrink(0).FillHeight().Radius(12, 0, 0, 12).Clip().Disabled(s.sidebarCollapsed).Children(func() {
+					ui.Row(c.Key("sidebar-viewport")).Width(sidebarWidth*shown).Shrink(0).FillHeight().Radius(workspaceRadius, 0, 0, workspaceRadius).Clip().Disabled(s.sidebarCollapsed).Children(func() {
 						s.sidebar(c).Margin(0, 0, 0, sidebarWidth*(shown-1))
 					})
 				}

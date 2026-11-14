@@ -42,7 +42,11 @@ func (raw mrProject) project(kind Kind) Project {
 	if id == "" {
 		id = raw.ProjectID
 	}
-	p := Project{Source: Modrinth, Kind: kind, ID: id, Slug: raw.Slug, Title: raw.Title, Description: raw.Description, Author: raw.Author, IconURL: raw.IconURL, Body: raw.Body, Downloads: raw.Downloads, Follows: raw.Follows, Loaders: raw.Loaders}
+	body := raw.Body
+	if body != "" {
+		body = NormalizeMarkdown(body)
+	}
+	p := Project{Source: Modrinth, Kind: kind, ID: id, Slug: raw.Slug, Title: raw.Title, Description: raw.Description, Author: raw.Author, IconURL: raw.IconURL, Body: body, Downloads: raw.Downloads, Follows: raw.Follows, Loaders: raw.Loaders}
 	tags := raw.DisplayCategories
 	if len(tags) == 0 {
 		tags = raw.Categories
@@ -191,7 +195,11 @@ type mrVersion struct {
 }
 
 func (raw mrVersion) version() Version {
-	v := Version{Source: Modrinth, ID: raw.ID, ProjectID: raw.ProjectID, Name: raw.Name, Number: raw.Number, Type: raw.Type, Changelog: raw.Changelog, GameVersions: raw.GameVersions, Loaders: raw.Loaders, Published: raw.Published, Downloads: raw.Downloads, Environment: raw.Environment}
+	changelog := raw.Changelog
+	if changelog != "" {
+		changelog = NormalizeMarkdown(changelog)
+	}
+	v := Version{Source: Modrinth, ID: raw.ID, ProjectID: raw.ProjectID, Name: raw.Name, Number: raw.Number, Type: raw.Type, Changelog: changelog, GameVersions: raw.GameVersions, Loaders: raw.Loaders, Published: raw.Published, Downloads: raw.Downloads, Environment: raw.Environment}
 	for _, f := range raw.Files {
 		v.Files = append(v.Files, File{URL: f.URL, Filename: f.Filename, SHA1: f.Hashes.SHA1, Size: f.Size, Primary: f.Primary})
 	}
