@@ -156,82 +156,139 @@ const zhHref = locale === "zh" ? docHref(slug, "zh") : switchHref;
 </Layout>
 
 <script>
-  const toggleBtn = document.querySelector<HTMLButtonElement>("[data-docs-toggle]");
-  const sidebar = document.getElementById("docs-sidebar");
-  if (toggleBtn && sidebar) {
-    toggleBtn.addEventListener("click", () => {
-      const open = sidebar.classList.toggle("is-open");
-      toggleBtn.setAttribute("aria-expanded", String(open));
-    });
-  }
+  let docsCleanup: AbortController | null = null;
+  let savedSidebarScroll = 0;
+  let savedFilterQuery = "";
 
-  const filterInput = document.querySelector<HTMLInputElement>("[data-docs-filter]");
-  const groups = document.querySelectorAll<HTMLElement>("[data-docs-group]");
-  const emptyNote = document.querySelector<HTMLElement>("[data-docs-empty]");
+  function initDocsPage() {
+    docsCleanup?.abort();
+    docsCleanup = new AbortController();
+    const { signal } = docsCleanup;
 
-  if (filterInput) {
-    const applyFilter = () => {
-      const query = filterInput.value.trim().toLowerCase();
-      let totalVisible = 0;
-      for (const group of groups) {
-        let groupVisible = 0;
-        for (const item of group.querySelectorAll<HTMLElement>("[data-docs-item]")) {
-          const text = item.dataset.searchText ?? "";
-          const show = !query || text.includes(query);
-          item.hidden = !show;
-          if (show) {
-            groupVisible += 1;
-            totalVisible += 1;
+    const toggleBtn = document.querySelector<HTMLButtonElement>("[data-docs-toggle]");
+    const sidebar = document.getElementById("docs-sidebar");
+    if (sidebar && savedSidebarScroll > 0) {
+      sidebar.scrollTop = savedSidebarScroll;
+    }
+
+    if (toggleBtn && sidebar) {
+      toggleBtn.addEventListener(
+        "click",
+        () => {
+          const open = sidebar.classList.toggle("is-open");
+          toggleBtn.setAttribute("aria-expanded", String(open));
+        },
+        { signal }
+      );
+    }
+
+    const filterInput = document.querySelector<HTMLInputElement>("[data-docs-filter]");
+    const groups = document.querySelectorAll<HTMLElement>("[data-docs-group]");
+    const emptyNote = document.querySelector<HTMLElement>("[data-docs-empty]");
+
+    if (filterInput) {
+      const applyFilter = () => {
+        savedFilterQuery = filterInput.value;
+        const query = filterInput.value.trim().toLowerCase();
+        let totalVisible = 0;
+        for (const group of groups) {
+          let groupVisible = 0;
+          for (const item of group.querySelectorAll<HTMLElement>("[data-docs-item]")) {
+            const text = item.dataset.searchText ?? "";
+            const show = !query || text.includes(query);
+            item.hidden = !show;
+            if (show) {
+              groupVisible += 1;
+              totalVisible += 1;
+            }
           }
+          group.hidden = groupVisible === 0;
         }
-        group.hidden = groupVisible === 0;
-      }
-      if (emptyNote) {
-        emptyNote.classList.toggle("is-visible", totalVisible === 0);
-      }
-    };
+        if (emptyNote) {
+          emptyNote.classList.toggle("is-visible", totalVisible === 0);
+        }
+      };
 
-    filterInput.addEventListener("input", applyFilter);
-    document.addEventListener("keydown", (event) => {
-      if (
-        event.key === "/" &&
-        document.activeElement !== filterInput &&
-        !(document.activeElement instanceof HTMLInputElement) &&
-        !(document.activeElement instanceof HTMLTextAreaElement)
-      ) {
-        event.preventDefault();
-        if (sidebar && !sidebar.classList.contains("is-open")) {
-          sidebar.classList.add("is-open");
-          toggleBtn?.setAttribute("aria-expanded", "true");
-        }
-        filterInput.focus();
+      if (savedFilterQuery && filterInput.value !== savedFilterQuery) {
+        filterInput.value = savedFilterQuery;
       }
-    });
-  }
+      if (filterInput.value) {
+        applyFilter();
+      }
 
-  const prose = document.querySelector<HTMLElement>(".docs-prose");
-  if (prose) {
-    const copyLabel = prose.dataset.copyLabel ?? "Copy";
-    const copiedLabel = prose.dataset.copiedLabel ?? "Copied";
-    for (const pre of prose.querySelectorAll("pre")) {
-      const code = pre.querySelector("code");
-      if (!code) continue;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "docs-code-copy";
-      btn.textContent = copyLabel;
-      btn.addEventListener("click", async () => {
-        try {
-          await navigator.clipboard.writeText(code.textContent ?? "");
-          btn.textContent = copiedLabel;
-          window.setTimeout(() => {
-            btn.textContent = copyLabel;
-          }, 1500);
-        } catch {
-          // Ignore clipboard permissions errors.
-        }
-      });
-      pre.appendChild(btn);
+      filterInput.addEventListener("input", applyFilter, { signal });
+      document.addEventListener(
+        "keydown",
+        (event) => {
+          if (
+            event.key === "/" &&
+            document.activeElement !== filterInput &&
+            !(document.activeElement instanceof HTMLInputElement) &&
+            !(document.activeElement instanceof HTMLTextAreaElement)
+          ) {
+            event.preventDefault();
+            if (sidebar && !sidebar.classList.contains("is-open")) {
+              sidebar.classList.add("is-open");
+              toggleBtn?.setAttribute("aria-expanded", "true");
+            }
+            filterInput.focus();
+          }
+        },
+        { signal }
+      );
+    }
+
+    const prose = document.querySelector<HTMLElement>(".docs-prose");
+    if (prose) {
+      const copyLabel = prose.dataset.copyLabel ?? "Copy";
+      const copiedLabel = prose.dataset.copiedLabel ?? "Copied";
+      for (const pre of prose.querySelectorAll("pre")) {
+        if (pre.querySelector(".docs-code-copy")) continue;
+        const code = pre.querySelector("code");
+        if (!code) continue;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "docs-code-copy";
+        btn.textContent = copyLabel;
+        btn.addEventListener(
+          "click",
+          async () => {
+            try {
+              await navigator.clipboard.writeText(code.textContent ?? "");
+              btn.textContent = copiedLabel;
+              window.setTimeout(() => {
+                btn.textContent = copyLabel;
+              }, 1500);
+            } catch {
+              // Ignore clipboard permissions errors.
+            }
+          },
+          { signal }
+        );
+        pre.appendChild(btn);
+      }
     }
   }
+
+  document.addEventListener("astro:before-swap", () => {
+    const sidebar = document.getElementById("docs-sidebar");
+    const filterInput = document.querySelector<HTMLInputElement>("[data-docs-filter]");
+    savedSidebarScroll = sidebar ? sidebar.scrollTop : 0;
+    savedFilterQuery = filterInput ? filterInput.value : "";
+    docsCleanup?.abort();
+    docsCleanup = null;
+  });
+
+  document.addEventListener("astro:after-swap", () => {
+    const sidebar = document.getElementById("docs-sidebar");
+    const filterInput = document.querySelector<HTMLInputElement>("[data-docs-filter]");
+    if (sidebar && savedSidebarScroll > 0) {
+      sidebar.scrollTop = savedSidebarScroll;
+    }
+    if (filterInput && savedFilterQuery) {
+      filterInput.value = savedFilterQuery;
+    }
+  });
+
+  document.addEventListener("astro:page-load", initDocsPage);
 </script>

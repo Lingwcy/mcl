@@ -136,25 +136,83 @@ const defaultDownload = t.downloads[0]!;
       </div>
     </div>
 
+    {/* Announcement Ribbon inside main content column */}
+    <div class="top-notice" role="region" aria-label={t.announcement.ariaLabel} data-top-notice>
+      <div class="top-notice-inner">
+        <span class="top-notice-text">{t.announcement.text}</span>
+        <button
+          type="button"
+          class="top-notice-code"
+          data-notice-copy="932894666"
+          data-copy-text={t.announcement.code}
+          data-copied-text={t.announcement.copiedLabel}
+          aria-label={t.announcement.copyLabel}
+          title={t.announcement.copyLabel}
+        >
+          <span data-notice-code-label>{t.announcement.code}</span>
+          <Icon name="copy" size={12} />
+        </button>
+      </div>
+      <button
+        type="button"
+        class="top-notice-close"
+        data-notice-close
+        aria-label={t.announcement.closeLabel}
+        title={t.announcement.closeLabel}
+      >
+        <Icon name="close" size={14} />
+      </button>
+    </div>
+
     {/* Main Column */}
     <main id="main" class="landing-main">
       {/* 1. Hero + Horizontal Screenshot Strip */}
       <section class="hero-section" aria-label={t.brandFull}>
-        <h1 class="hero-headline">
-          {t.hero.prefix}
-          <img
-            class="hero-inline-logo pixel-img"
-            src="/favicon.png"
-            alt={t.brand}
-            width="52"
-            height="52"
-          />
-          {t.hero.suffix}
-        </h1>
+        <div class="hero-stage" data-hero-stage>
+          <div class="hero-backdrop" aria-hidden="true">
+            <div class="hero-art-canvas">
+              <div class="hero-aurora-shimmer"></div>
+              <img
+                class="hero-art-img"
+                src="/hero-backdrop.webp"
+                alt=""
+                width="1376"
+                height="768"
+                loading="eager"
+                decoding="async"
+                fetchpriority="high"
+              />
+              <div class="hero-lantern-flicker"></div>
 
-        <p class="hero-lead">{t.hero.body}</p>
+              <span class="hero-mote hero-mote--1"></span>
+              <span class="hero-mote hero-mote--2"></span>
+              <span class="hero-mote hero-mote--3"></span>
+              <span class="hero-mote hero-mote--4"></span>
+              <span class="hero-mote hero-mote--5"></span>
+              <span class="hero-mote hero-mote--6"></span>
+              <span class="hero-mote hero-mote--7"></span>
+              <span class="hero-mote hero-mote--8"></span>
+              <span class="hero-mote hero-mote--9"></span>
+              <span class="hero-mote hero-mote--10"></span>
+            </div>
+          </div>
 
-        <div class="hero-actions">
+          <div class="hero-copy">
+            <h1 class="hero-headline">
+              {t.hero.prefix}
+              <img
+                class="hero-inline-logo pixel-img"
+                src="/favicon.png"
+                alt={t.brand}
+                width="52"
+                height="52"
+              />
+              {t.hero.suffix}
+            </h1>
+
+            <p class="hero-lead">{t.hero.body}</p>
+
+            <div class="hero-actions">
           <div class="download-wrap" data-download-wrap>
             <a
               class="btn btn-primary btn-split-main"
@@ -238,6 +296,8 @@ const defaultDownload = t.downloads[0]!;
             <span>{t.hero.starLabel}</span>
             <span class="btn-divider" data-gh-stars>v{LATEST_TAG}</span>
           </a>
+            </div>
+          </div>
         </div>
 
         {/* Horizontal Screenshot Strip */}
@@ -488,6 +548,30 @@ const defaultDownload = t.downloads[0]!;
           ))}
         </div>
       </section>
+
+      {/* 6. #credits Acknowledgements */}
+      <section id={t.credits.id} class="section-block" aria-labelledby="credits-heading">
+        <hr class="hairline-divider" style="margin-bottom: 56px;" />
+        <h2 id="credits-heading" class="section-h2">{t.credits.title}</h2>
+        <p class="section-lead">{t.credits.body}</p>
+
+        <div class="credits-grid">
+          {t.credits.items.map((person) => (
+            <div class="credit-card">
+              <img
+                class="credit-head pixel-img"
+                src={person.head}
+                alt={person.name}
+                width="44"
+                height="44"
+                loading="lazy"
+                decoding="async"
+              />
+              <span class="credit-name">{person.name}</span>
+            </div>
+          ))}
+        </div>
+      </section>
     </main>
 
     {/* Footer with Giant Translucent Wordmark */}
@@ -512,18 +596,39 @@ const defaultDownload = t.downloads[0]!;
   </div>
 
   {/* Sticky Desktop Right Rail (>= 1200px) */}
-  <aside class="side-rail" aria-label={t.railNavLabel}>
+  <aside id="desktop-side-rail" class="side-rail" aria-label={t.railNavLabel}>
     <div class="side-rail-brand">
-      <a class="brand-lockup" href="#top" aria-label={t.brandFull}>
-        <img class="pixel-img" src="/favicon.png" alt="" width="26" height="26" />
+      <a
+        class="brand-lockup"
+        href="#top"
+        aria-label={t.brandFull}
+        data-rail-title={t.brandFull}
+      >
+        <img class="pixel-img" src="/favicon.png" alt="" width="22" height="22" />
         <span>{t.brandFull}</span>
       </a>
+      <button
+        type="button"
+        class="rail-toggle-btn"
+        data-rail-toggle
+        aria-controls="desktop-side-rail"
+        aria-expanded="true"
+        aria-label={t.collapseRailLabel}
+        title={t.collapseRailLabel}
+      >
+        <Icon name="chevrons-right" size={15} />
+      </button>
     </div>
 
     <nav class="rail-nav" data-rail-nav aria-label={t.railNavLabel}>
       <div class="rail-indicator" data-rail-indicator aria-hidden="true"></div>
       {t.nav.map((item) => (
-        <a class="rail-item" href={`#${item.id}`} data-nav-link={item.id}>
+        <a
+          class="rail-item"
+          href={`#${item.id}`}
+          data-nav-link={item.id}
+          data-rail-title={item.label}
+        >
           <span class="rail-item-icon"><Icon name={item.icon} size={15} /></span>
           <span class="rail-item-label">{item.label}</span>
         </a>
@@ -534,7 +639,7 @@ const defaultDownload = t.downloads[0]!;
     <hr class="hairline-divider side-rail-divider" />
 
     <div class="rail-nav">
-      <a class="rail-item" href={t.docsPath}>
+      <a class="rail-item" href={t.docsPath} data-rail-title={t.hero.docsLabel}>
         <span class="rail-item-icon"><Icon name="book" size={15} /></span>
         <span class="rail-item-label">{t.hero.docsLabel}</span>
       </a>
@@ -543,6 +648,7 @@ const defaultDownload = t.downloads[0]!;
         href={REPO_URL}
         target="_blank"
         rel="noopener noreferrer"
+        data-rail-title="GitHub"
       >
         <span class="rail-item-icon"><Icon name="github" size={15} /></span>
         <span class="rail-item-label">GitHub</span>
@@ -553,12 +659,18 @@ const defaultDownload = t.downloads[0]!;
         href={RELEASES_URL}
         target="_blank"
         rel="noopener noreferrer"
+        data-rail-title={`Releases · v${LATEST_TAG}`}
       >
         <span class="rail-item-icon"><Icon name="download" size={15} /></span>
         <span class="rail-item-label">Releases · v{LATEST_TAG}</span>
         <span class="rail-item-ext"><Icon name="diagonal" size={11} /></span>
       </a>
-      <a class="rail-item" href={t.otherHomePath} lang={locale === "zh" ? "en" : "zh-CN"}>
+      <a
+        class="rail-item"
+        href={t.otherHomePath}
+        lang={locale === "zh" ? "en" : "zh-CN"}
+        data-rail-title={t.otherLocaleLabel}
+      >
         <span class="rail-item-icon"><Icon name="globe" size={15} /></span>
         <span class="rail-item-label">{t.otherLocaleLabel}</span>
       </a>
@@ -590,9 +702,120 @@ const defaultDownload = t.downloads[0]!;
     winX64Label: t.hero.downloadWinX64,
     starsLabelText: t.opensource.starsLabel,
     forksLabelText: t.opensource.forksLabel,
+    collapseRailLabel: t.collapseRailLabel,
+    expandRailLabel: t.expandRailLabel,
   }}
 >
   (() => {
+    window.__mclLandingAbort?.abort();
+    const controller = new AbortController();
+    window.__mclLandingAbort = controller;
+    const { signal } = controller;
+
+    document.addEventListener(
+      "astro:before-swap",
+      () => {
+        controller.abort();
+        if (window.__mclLandingAbort === controller) {
+          window.__mclLandingAbort = null;
+        }
+      },
+      { once: true, signal }
+    );
+
+    // 0. Top announcement ribbon (copy QQ + dismiss)
+    const noticeBar = document.querySelector("[data-top-notice]");
+    if (noticeBar instanceof HTMLElement) {
+      const NOTICE_STORAGE_KEY = "mcl:notice-dismissed-qq932894666";
+      try {
+        if (window.sessionStorage.getItem(NOTICE_STORAGE_KEY) === "1") {
+          noticeBar.hidden = true;
+        }
+      } catch {
+        // Ignore storage errors.
+      }
+
+      const noticeCopyBtn = noticeBar.querySelector("[data-notice-copy]");
+      const noticeCodeLabel = noticeBar.querySelector("[data-notice-code-label]");
+      let noticeCopyTimer = 0;
+
+      noticeCopyBtn?.addEventListener(
+        "click",
+        async () => {
+          const value = noticeCopyBtn.getAttribute("data-notice-copy") || "";
+          const defaultText = noticeCopyBtn.getAttribute("data-copy-text") || "QQ:932894666";
+          const copiedText = noticeCopyBtn.getAttribute("data-copied-text") || "Copied";
+          if (!value) return;
+          try {
+            await navigator.clipboard.writeText(value);
+            if (noticeCodeLabel) noticeCodeLabel.textContent = copiedText;
+            noticeCopyBtn.classList.add("is-copied");
+            window.clearTimeout(noticeCopyTimer);
+            noticeCopyTimer = window.setTimeout(() => {
+              if (noticeCodeLabel) noticeCodeLabel.textContent = defaultText;
+              noticeCopyBtn.classList.remove("is-copied");
+            }, 1600);
+          } catch {
+            // Ignore clipboard errors.
+          }
+        },
+        { signal }
+      );
+
+      noticeBar.querySelector("[data-notice-close]")?.addEventListener(
+        "click",
+        () => {
+          noticeBar.hidden = true;
+          try {
+            window.sessionStorage.setItem(NOTICE_STORAGE_KEY, "1");
+          } catch {
+            // Ignore storage errors.
+          }
+        },
+        { signal }
+      );
+    }
+
+    // 0b. Hero right-side visual pointer parallax (subtle GPU tilt)
+    const heroStage = document.querySelector("[data-hero-stage]");
+    if (
+      heroStage instanceof HTMLElement &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+      !window.matchMedia("(pointer: coarse)").matches
+    ) {
+      let heroRaf = 0;
+      let targetX = 0;
+      let targetY = 0;
+      heroStage.addEventListener(
+        "pointermove",
+        (e) => {
+          const rect = heroStage.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return;
+          targetX = Math.max(-1, Math.min(1, ((e.clientX - rect.left) / rect.width - 0.5) * 2));
+          targetY = Math.max(-1, Math.min(1, ((e.clientY - rect.top) / rect.height - 0.5) * 2));
+          if (heroRaf) return;
+          heroRaf = requestAnimationFrame(() => {
+            heroRaf = 0;
+            heroStage.style.setProperty("--hx", targetX.toFixed(3));
+            heroStage.style.setProperty("--hy", targetY.toFixed(3));
+          });
+        },
+        { passive: true, signal }
+      );
+      heroStage.addEventListener(
+        "pointerleave",
+        () => {
+          if (heroRaf) {
+            cancelAnimationFrame(heroRaf);
+            heroRaf = 0;
+          }
+          heroStage.style.setProperty("--hx", "0");
+          heroStage.style.setProperty("--hy", "0");
+        },
+        { signal }
+      );
+    }
+
     // 1. OS detection for default download CTA
     const primaryBtn = document.querySelector("[data-primary-download]");
     const primaryLabel = document.querySelector("[data-primary-download-label]");
@@ -623,14 +846,22 @@ const defaultDownload = t.downloads[0]!;
       const open = dlMenu?.classList.toggle("is-open");
       dlToggle.setAttribute("aria-expanded", String(!!open));
     });
-    document.addEventListener("click", (e) => {
-      if (dlWrap && e.target instanceof Node && !dlWrap.contains(e.target)) {
-        closeMenu();
-      }
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeMenu();
-    });
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (dlWrap && e.target instanceof Node && !dlWrap.contains(e.target)) {
+          closeMenu();
+        }
+      },
+      { signal }
+    );
+    document.addEventListener(
+      "keydown",
+      (e) => {
+        if (e.key === "Escape") closeMenu();
+      },
+      { signal }
+    );
 
     // 3. Mobile drawer
     const drawer = document.querySelector("[data-drawer]");
@@ -646,7 +877,66 @@ const defaultDownload = t.downloads[0]!;
       el.addEventListener("click", () => setDrawer(false));
     });
 
-    // 4. Right rail smooth navigation + scroll-spy indicator
+    // 4. Right rail collapse + smooth navigation + scroll-spy indicator
+    const landingShell = document.querySelector("[data-landing]");
+    const railToggle = document.querySelector("[data-rail-toggle]");
+    const sideRail = document.getElementById("desktop-side-rail");
+    const RAIL_STORAGE_KEY = "mcl:rail-collapsed";
+
+    const applyRailState = (collapsed, persist) => {
+      if (!landingShell) return;
+      landingShell.classList.toggle("is-rail-collapsed", collapsed);
+      if (railToggle) {
+        const label = collapsed ? expandRailLabel : collapseRailLabel;
+        railToggle.setAttribute("aria-expanded", String(!collapsed));
+        railToggle.setAttribute("aria-label", label);
+        railToggle.setAttribute("title", label);
+      }
+      if (sideRail) {
+        sideRail.querySelectorAll("[data-rail-title]").forEach((el) => {
+          const text = el.getAttribute("data-rail-title") || "";
+          if (collapsed && text) {
+            el.setAttribute("title", text);
+          } else {
+            el.removeAttribute("title");
+          }
+        });
+      }
+      if (persist) {
+        try {
+          window.localStorage.setItem(RAIL_STORAGE_KEY, collapsed ? "1" : "0");
+        } catch {
+          // Ignore storage quota / privacy mode errors.
+        }
+      }
+    };
+
+    try {
+      const saved = window.localStorage.getItem(RAIL_STORAGE_KEY);
+      if (saved === "1") applyRailState(true, false);
+    } catch {
+      // Ignore storage access errors.
+    }
+
+    railToggle?.addEventListener(
+      "click",
+      () => {
+        const next = !landingShell?.classList.contains("is-rail-collapsed");
+        applyRailState(next, true);
+        requestAnimationFrame(() => syncScroll());
+      },
+      { signal }
+    );
+    sideRail?.addEventListener(
+      "transitionend",
+      (e) => {
+        if (e.target === sideRail && e.propertyName === "width") {
+          syncScroll();
+        }
+      },
+      { signal }
+    );
+
     const railNav = document.querySelector("[data-rail-nav]");
     const indicator = document.querySelector("[data-rail-indicator]");
     const navLinks = Array.from(document.querySelectorAll("[data-nav-link]"));
@@ -698,8 +988,8 @@ const defaultDownload = t.downloads[0]!;
         syncScroll();
       });
     };
-    window.addEventListener("scroll", onScrollOrResize, { passive: true });
-    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("scroll", onScrollOrResize, { passive: true, signal });
+    window.addEventListener("resize", onScrollOrResize, { signal });
     syncScroll();
 
     navLinks.forEach((link) => {
@@ -757,7 +1047,7 @@ const defaultDownload = t.downloads[0]!;
     });
 
     // 8. Optional progressive live GitHub Stars / Forks readout (non-blocking)
-    fetch("https://api.github.com/repos/Lingwcy/mcl")
+    fetch("https://api.github.com/repos/Lingwcy/mcl", { signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data || typeof data.stargazers_count !== "number") return;

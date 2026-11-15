@@ -4,6 +4,10 @@ export default defineConfig({
   site: process.env.SITE_URL,
   output: "static",
   trailingSlash: "always",
+  prefetch: {
+    prefetchAll: false,
+    defaultStrategy: "hover",
+  },
   i18n: {
     defaultLocale: "en",
     locales: ["en", "zh"],

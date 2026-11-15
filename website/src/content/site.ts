@@ -63,8 +63,18 @@ export interface SiteCopy {
   otherLocaleLabel: string;
   otherHomePath: string;
   railNavLabel: string;
+  collapseRailLabel: string;
+  expandRailLabel: string;
   menuOpenLabel: string;
   menuCloseLabel: string;
+  announcement: {
+    ariaLabel: string;
+    text: string;
+    code: string;
+    copyLabel: string;
+    copiedLabel: string;
+    closeLabel: string;
+  };
   nav: Array<{
     id: string;
     label: string;
@@ -122,6 +132,15 @@ export interface SiteCopy {
       a: string;
     }>;
   };
+  credits: {
+    id: string;
+    title: string;
+    body: string;
+    items: Array<{
+      name: string;
+      head: string;
+    }>;
+  };
   footer: {
     watermark: string;
     disclaimer: string;
@@ -162,8 +181,18 @@ export const copy: Record<Locale, SiteCopy> = {
     otherLocaleLabel: "English",
     otherHomePath: "/",
     railNavLabel: "页面导航",
+    collapseRailLabel: "收起右侧导航",
+    expandRailLabel: "展开右侧导航",
     menuOpenLabel: "打开导航",
     menuCloseLabel: "关闭导航",
+    announcement: {
+      ariaLabel: "QQ 讨论群",
+      text: "欢迎加入讨论群",
+      code: "QQ:932894666",
+      copyLabel: "点击复制群号",
+      copiedLabel: "已复制 932894666",
+      closeLabel: "关闭横幅",
+    },
     nav: [
       { id: "about", label: "核心特性", icon: "layers" },
       { id: "market", label: "资源市场", icon: "package" },
@@ -171,11 +200,12 @@ export const copy: Record<Locale, SiteCopy> = {
       { id: "runtime", label: "运行与安全", icon: "cpu" },
       { id: "opensource", label: "开源承诺", icon: "code" },
       { id: "faq", label: "常见问题", icon: "help" },
+      { id: "credits", label: "致谢", icon: "heart" },
     ],
     hero: {
       prefix: "为实用而造的",
       suffix: "Minecraft 启动器",
-      body: "轻量、原生的 Minecraft: Java Edition 启动器。Go 与 MyGo 原生界面开发。没有 Electron，没有 Tauri，没有臃肿的浏览器壳。",
+      body: "轻量、原生的 Minecraft: Java Edition 启动器。三端体验高度统一，全版本与全 Loader 100% 真机实测通关。没有臃肿套壳，没有兼容玄学。",
       downloadMacArm: "下载 macOS (Apple Silicon)",
       downloadWinX64: "下载 Windows (x64)",
       downloadLabel: "下载体验",
@@ -498,6 +528,16 @@ export const copy: Record<Locale, SiteCopy> = {
         },
       ],
     },
+    credits: {
+      id: "credits",
+      title: "致谢",
+      body: "启动器的开发和发展离不开他们的辛苦付出。",
+      items: [
+        { name: "Ou_Takahiro", head: "/heads/Ou_Takahiro.png" },
+        { name: "XiaoMouzOvO", head: "/heads/XiaoMouzOvO.png" },
+        { name: "iskj", head: "/heads/iskj.png" },
+      ],
+    },
     footer: {
       watermark: "Meow Craft Launcher",
       disclaimer:
@@ -537,8 +577,18 @@ export const copy: Record<Locale, SiteCopy> = {
     otherLocaleLabel: "中文",
     otherHomePath: "/zh/",
     railNavLabel: "On this page",
+    collapseRailLabel: "Collapse navigation rail",
+    expandRailLabel: "Expand navigation rail",
     menuOpenLabel: "Open navigation",
     menuCloseLabel: "Close navigation",
+    announcement: {
+      ariaLabel: "QQ Community Group",
+      text: "Join our community QQ group",
+      code: "QQ:932894666",
+      copyLabel: "Copy group number",
+      copiedLabel: "Copied 932894666",
+      closeLabel: "Dismiss banner",
+    },
     nav: [
       { id: "about", label: "Overview", icon: "layers" },
       { id: "market", label: "Market", icon: "package" },
@@ -546,11 +596,12 @@ export const copy: Record<Locale, SiteCopy> = {
       { id: "runtime", label: "Runtime & Safety", icon: "cpu" },
       { id: "opensource", label: "Open Source", icon: "code" },
       { id: "faq", label: "FAQ", icon: "help" },
+      { id: "credits", label: "Credits", icon: "heart" },
     ],
     hero: {
       prefix: "Built for craft,",
       suffix: "made for Minecraft.",
-      body: "Lightweight native Minecraft: Java Edition launcher written in Go with MyGo native UI. No Electron, no Tauri, no bundled web runtime.",
+      body: "Lightweight, native Minecraft: Java Edition launcher. Unified experience across all three desktop platforms, 100% verified on real hardware across versions and loaders. No bloated web wrappers, no compatibility guesswork.",
       downloadMacArm: "Download for macOS (Apple Silicon)",
       downloadWinX64: "Download for Windows (x64)",
       downloadLabel: "Download",
@@ -871,6 +922,16 @@ export const copy: Record<Locale, SiteCopy> = {
           q: "How do I verify downloaded releases?",
           a: "Every GitHub Release includes a `SHA256SUMS` manifest, and macOS DMGs are code-signed and notarized with Apple Developer credentials.",
         },
+      ],
+    },
+    credits: {
+      id: "credits",
+      title: "Credits",
+      body: "The development and growth of mcl would not be possible without their dedicated work and support.",
+      items: [
+        { name: "Ou_Takahiro", head: "/heads/Ou_Takahiro.png" },
+        { name: "XiaoMouzOvO", head: "/heads/XiaoMouzOvO.png" },
+        { name: "iskj", head: "/heads/iskj.png" },
       ],
     },
     footer: {
