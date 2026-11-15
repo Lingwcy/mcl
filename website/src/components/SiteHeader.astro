@@ -71,23 +71,49 @@ const langSwitchHref = switchHref ?? t.otherHomePath;
 </header>
 
 <script>
-  const menu = document.querySelector<HTMLDetailsElement>(".mobile-menu");
-  if (menu) {
+  let headerCleanup: AbortController | null = null;
+
+  function initHeaderMenu() {
+    headerCleanup?.abort();
+    headerCleanup = new AbortController();
+    const { signal } = headerCleanup;
+
+    const menu = document.querySelector<HTMLDetailsElement>(".mobile-menu");
+    if (!menu) return;
+
     for (const link of menu.querySelectorAll("a")) {
-      link.addEventListener("click", () => {
-        menu.open = false;
-      });
+      link.addEventListener(
+        "click",
+        () => {
+          menu.open = false;
+        },
+        { signal }
+      );
     }
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && menu.open) {
-        menu.open = false;
-        menu.querySelector("summary")?.focus();
-      }
-    });
-    document.addEventListener("click", (event) => {
-      if (event.target instanceof Node && !menu.contains(event.target)) {
-        menu.open = false;
-      }
-    });
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key === "Escape" && menu.open) {
+          menu.open = false;
+          menu.querySelector("summary")?.focus();
+        }
+      },
+      { signal }
+    );
+    document.addEventListener(
+      "click",
+      (event) => {
+        if (event.target instanceof Node && !menu.contains(event.target)) {
+          menu.open = false;
+        }
+      },
+      { signal }
+    );
   }
+
+  document.addEventListener("astro:page-load", initHeaderMenu);
+  document.addEventListener("astro:before-swap", () => {
+    headerCleanup?.abort();
+    headerCleanup = null;
+  });
 </script>

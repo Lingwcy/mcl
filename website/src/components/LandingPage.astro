@@ -593,6 +593,22 @@ const defaultDownload = t.downloads[0]!;
   }}
 >
   (() => {
+    window.__mclLandingAbort?.abort();
+    const controller = new AbortController();
+    window.__mclLandingAbort = controller;
+    const { signal } = controller;
+
+    document.addEventListener(
+      "astro:before-swap",
+      () => {
+        controller.abort();
+        if (window.__mclLandingAbort === controller) {
+          window.__mclLandingAbort = null;
+        }
+      },
+      { once: true, signal }
+    );
+
     // 1. OS detection for default download CTA
     const primaryBtn = document.querySelector("[data-primary-download]");
     const primaryLabel = document.querySelector("[data-primary-download-label]");
@@ -623,14 +639,22 @@ const defaultDownload = t.downloads[0]!;
       const open = dlMenu?.classList.toggle("is-open");
       dlToggle.setAttribute("aria-expanded", String(!!open));
     });
-    document.addEventListener("click", (e) => {
-      if (dlWrap && e.target instanceof Node && !dlWrap.contains(e.target)) {
-        closeMenu();
-      }
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeMenu();
-    });
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (dlWrap && e.target instanceof Node && !dlWrap.contains(e.target)) {
+          closeMenu();
+        }
+      },
+      { signal }
+    );
+    document.addEventListener(
+      "keydown",
+      (e) => {
+        if (e.key === "Escape") closeMenu();
+      },
+      { signal }
+    );
 
     // 3. Mobile drawer
     const drawer = document.querySelector("[data-drawer]");
@@ -698,8 +722,8 @@ const defaultDownload = t.downloads[0]!;
         syncScroll();
       });
     };
-    window.addEventListener("scroll", onScrollOrResize, { passive: true });
-    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("scroll", onScrollOrResize, { passive: true, signal });
+    window.addEventListener("resize", onScrollOrResize, { signal });
     syncScroll();
 
     navLinks.forEach((link) => {
@@ -757,7 +781,7 @@ const defaultDownload = t.downloads[0]!;
     });
 
     // 8. Optional progressive live GitHub Stars / Forks readout (non-blocking)
-    fetch("https://api.github.com/repos/Lingwcy/mcl")
+    fetch("https://api.github.com/repos/Lingwcy/mcl", { signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data || typeof data.stargazers_count !== "number") return;

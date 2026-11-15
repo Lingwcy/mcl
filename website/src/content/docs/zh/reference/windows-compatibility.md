@@ -6,7 +6,7 @@ sectionOrder: 3
 order: 4
 ---
 
-> 本页面当前**仅记录 Windows 平台（Windows 11 AMD64）**的实机兼容情况。macOS 与 Linux 等其他桌面平台尚未开始实机兼容测试，待后续测试完成后补充。
+> 本页面当前 **仅记录 Windows 平台 (Windows 11 AMD64)** 的实机兼容情况。macOS 与 Linux 等其他桌面平台尚未开始实机兼容测试，待后续测试完成后补充。
 
 ## Loader × Minecraft 版本支持矩阵（Windows）
 

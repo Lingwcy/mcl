@@ -1483,23 +1483,27 @@ img {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 0 6px 14px;
+  padding: 6px 10px 6px 14px;
   margin-left: -1px;
   border-left: 2px solid transparent;
+  border-radius: 0 6px 6px 0;
   font-size: 13.5px;
   line-height: 1.45;
   color: var(--text-2);
   transition:
-    color 140ms var(--ease),
-    border-color 140ms var(--ease);
+    color 160ms var(--ease),
+    border-color 160ms var(--ease),
+    background-color 160ms var(--ease);
 }
 
 .docs-nav-list a:hover {
   color: var(--text);
+  background: var(--hover-bg);
 }
 
 .docs-nav-list a.is-current {
   color: var(--accent);
+  background: rgba(108, 180, 217, 0.08);
   font-weight: 600;
   border-left-color: var(--accent);
 }
@@ -1863,11 +1867,16 @@ img {
   border: 1px solid var(--divider);
   border-radius: 8px;
   background: var(--paper);
-  transition: border-color 150ms var(--ease);
+  transition:
+    border-color 180ms var(--ease),
+    background-color 180ms var(--ease),
+    transform 180ms var(--ease);
 }
 
 .docs-pager-link:hover {
   border-color: var(--divider-strong);
+  background: var(--paper-soft);
+  transform: translateY(-2px);
 }
 
 .docs-pager-link--next {
@@ -1916,6 +1925,7 @@ img {
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--text-2);
+  transition: color 140ms var(--ease);
 }
 
 .docs-toc a:hover {
@@ -1938,6 +1948,7 @@ img {
   }
   .docs-toc {
     display: none;
+    view-transition-name: none;
   }
 }
 
@@ -2010,6 +2021,7 @@ img {
     border: 1px solid var(--divider);
     background: var(--paper);
     display: none;
+    view-transition-name: none;
   }
   .docs-sidebar.is-open {
     display: block;
@@ -2023,9 +2035,116 @@ img {
   }
 }
 
+@view-transition {
+  navigation: auto;
+}
+
+.site-header {
+  view-transition-name: site-header;
+}
+
+.docs-bar {
+  view-transition-name: docs-bar;
+}
+
+.docs-sidebar {
+  view-transition-name: docs-sidebar;
+}
+
+.docs-article {
+  view-transition-name: docs-article;
+}
+
+.docs-toc {
+  view-transition-name: docs-toc;
+}
+
+@keyframes docsArticleOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes docsArticleIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes docsSoftFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes docsSoftFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+::view-transition-old(root) {
+  animation: 140ms var(--ease) both docsSoftFadeOut;
+}
+
+::view-transition-new(root) {
+  animation: 180ms var(--ease) both docsSoftFadeIn;
+}
+
+::view-transition-old(site-header):not(:only-child),
+::view-transition-old(docs-bar):not(:only-child),
+::view-transition-old(docs-sidebar):not(:only-child) {
+  display: none;
+}
+
+::view-transition-new(site-header):not(:only-child),
+::view-transition-new(docs-bar):not(:only-child),
+::view-transition-new(docs-sidebar):not(:only-child) {
+  animation: none;
+}
+
+::view-transition-old(docs-article) {
+  animation: 150ms var(--ease) both docsArticleOut;
+}
+
+::view-transition-new(docs-article) {
+  animation: 220ms var(--ease) 35ms both docsArticleIn;
+}
+
+::view-transition-old(docs-toc) {
+  animation: 120ms var(--ease) both docsSoftFadeOut;
+}
+
+::view-transition-new(docs-toc) {
+  animation: 180ms var(--ease) 35ms both docsSoftFadeIn;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
   html {
     scroll-behavior: auto;
+  }
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
   *,
   *::before,
