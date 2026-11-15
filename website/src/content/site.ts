@@ -67,6 +67,14 @@ export interface SiteCopy {
   expandRailLabel: string;
   menuOpenLabel: string;
   menuCloseLabel: string;
+  announcement: {
+    badge: string;
+    text: string;
+    code: string;
+    copyLabel: string;
+    copiedLabel: string;
+    closeLabel: string;
+  };
   nav: Array<{
     id: string;
     label: string;
@@ -168,6 +176,14 @@ export const copy: Record<Locale, SiteCopy> = {
     expandRailLabel: "展开右侧导航",
     menuOpenLabel: "打开导航",
     menuCloseLabel: "关闭导航",
+    announcement: {
+      badge: "公告",
+      text: "欢迎加入讨论群",
+      code: "QQ:932894666",
+      copyLabel: "点击复制群号",
+      copiedLabel: "已复制 932894666",
+      closeLabel: "关闭公告",
+    },
     nav: [
       { id: "about", label: "核心特性", icon: "layers" },
       { id: "market", label: "资源市场", icon: "package" },
@@ -545,6 +561,14 @@ export const copy: Record<Locale, SiteCopy> = {
     expandRailLabel: "Expand navigation rail",
     menuOpenLabel: "Open navigation",
     menuCloseLabel: "Close navigation",
+    announcement: {
+      badge: "NOTICE",
+      text: "Join our community QQ group",
+      code: "QQ:932894666",
+      copyLabel: "Copy group number",
+      copiedLabel: "Copied 932894666",
+      closeLabel: "Dismiss announcement",
+    },
     nav: [
       { id: "about", label: "Overview", icon: "layers" },
       { id: "market", label: "Market", icon: "package" },
