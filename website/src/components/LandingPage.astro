@@ -136,6 +136,35 @@ const defaultDownload = t.downloads[0]!;
       </div>
     </div>
 
+    {/* Announcement Ribbon inside main content column */}
+    <div class="top-notice" role="region" aria-label={t.announcement.badge} data-top-notice>
+      <div class="top-notice-inner">
+        <span class="top-notice-badge">{t.announcement.badge}</span>
+        <span class="top-notice-text">{t.announcement.text}</span>
+        <button
+          type="button"
+          class="top-notice-code"
+          data-notice-copy="932894666"
+          data-copy-text={t.announcement.code}
+          data-copied-text={t.announcement.copiedLabel}
+          aria-label={t.announcement.copyLabel}
+          title={t.announcement.copyLabel}
+        >
+          <span data-notice-code-label>{t.announcement.code}</span>
+          <Icon name="copy" size={12} />
+        </button>
+      </div>
+      <button
+        type="button"
+        class="top-notice-close"
+        data-notice-close
+        aria-label={t.announcement.closeLabel}
+        title={t.announcement.closeLabel}
+      >
+        <Icon name="close" size={14} />
+      </button>
+    </div>
+
     {/* Main Column */}
     <main id="main" class="landing-main">
       {/* 1. Hero + Horizontal Screenshot Strip */}
@@ -638,6 +667,59 @@ const defaultDownload = t.downloads[0]!;
       },
       { once: true, signal }
     );
+
+    // 0. Top announcement ribbon (copy QQ + dismiss)
+    const noticeBar = document.querySelector("[data-top-notice]");
+    if (noticeBar instanceof HTMLElement) {
+      const NOTICE_STORAGE_KEY = "mcl:notice-dismissed-qq932894666";
+      try {
+        if (window.sessionStorage.getItem(NOTICE_STORAGE_KEY) === "1") {
+          noticeBar.hidden = true;
+        }
+      } catch {
+        // Ignore storage errors.
+      }
+
+      const noticeCopyBtn = noticeBar.querySelector("[data-notice-copy]");
+      const noticeCodeLabel = noticeBar.querySelector("[data-notice-code-label]");
+      let noticeCopyTimer = 0;
+
+      noticeCopyBtn?.addEventListener(
+        "click",
+        async () => {
+          const value = noticeCopyBtn.getAttribute("data-notice-copy") || "";
+          const defaultText = noticeCopyBtn.getAttribute("data-copy-text") || "QQ:932894666";
+          const copiedText = noticeCopyBtn.getAttribute("data-copied-text") || "Copied";
+          if (!value) return;
+          try {
+            await navigator.clipboard.writeText(value);
+            if (noticeCodeLabel) noticeCodeLabel.textContent = copiedText;
+            noticeCopyBtn.classList.add("is-copied");
+            window.clearTimeout(noticeCopyTimer);
+            noticeCopyTimer = window.setTimeout(() => {
+              if (noticeCodeLabel) noticeCodeLabel.textContent = defaultText;
+              noticeCopyBtn.classList.remove("is-copied");
+            }, 1600);
+          } catch {
+            // Ignore clipboard errors.
+          }
+        },
+        { signal }
+      );
+
+      noticeBar.querySelector("[data-notice-close]")?.addEventListener(
+        "click",
+        () => {
+          noticeBar.hidden = true;
+          try {
+            window.sessionStorage.setItem(NOTICE_STORAGE_KEY, "1");
+          } catch {
+            // Ignore storage errors.
+          }
+        },
+        { signal }
+      );
+    }
 
     // 1. OS detection for default download CTA
     const primaryBtn = document.querySelector("[data-primary-download]");

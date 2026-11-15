@@ -119,10 +119,10 @@ img {
   transform: translateY(0);
 }
 
-/* Top Announcement Ribbon */
+/* Top Announcement Ribbon (inside landing-content, alongside side-rail) */
 .top-notice {
   position: relative;
-  z-index: 60;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -140,7 +140,15 @@ img {
   font-size: 13px;
   line-height: 1.4;
   color: var(--text);
-  view-transition-name: top-notice;
+}
+
+@media (min-width: 1200px) {
+  .top-notice {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+  }
 }
 
 .top-notice[hidden] {
@@ -290,6 +298,7 @@ img {
 }
 
 .landing-content {
+  position: relative;
   flex: 1;
   min-width: 0;
 }
@@ -2395,14 +2404,12 @@ img {
   animation: 180ms var(--ease) both docsSoftFadeIn;
 }
 
-::view-transition-old(top-notice):not(:only-child),
 ::view-transition-old(site-header):not(:only-child),
 ::view-transition-old(docs-bar):not(:only-child),
 ::view-transition-old(docs-sidebar):not(:only-child) {
   display: none;
 }
 
-::view-transition-new(top-notice):not(:only-child),
 ::view-transition-new(site-header):not(:only-child),
 ::view-transition-new(docs-bar):not(:only-child),
 ::view-transition-new(docs-sidebar):not(:only-child) {
