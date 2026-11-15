@@ -68,7 +68,7 @@ export interface SiteCopy {
   menuOpenLabel: string;
   menuCloseLabel: string;
   announcement: {
-    badge: string;
+    ariaLabel: string;
     text: string;
     code: string;
     copyLabel: string;
@@ -177,12 +177,12 @@ export const copy: Record<Locale, SiteCopy> = {
     menuOpenLabel: "打开导航",
     menuCloseLabel: "关闭导航",
     announcement: {
-      badge: "公告",
+      ariaLabel: "QQ 讨论群",
       text: "欢迎加入讨论群",
       code: "QQ:932894666",
       copyLabel: "点击复制群号",
       copiedLabel: "已复制 932894666",
-      closeLabel: "关闭公告",
+      closeLabel: "关闭横幅",
     },
     nav: [
       { id: "about", label: "核心特性", icon: "layers" },
@@ -562,12 +562,12 @@ export const copy: Record<Locale, SiteCopy> = {
     menuOpenLabel: "Open navigation",
     menuCloseLabel: "Close navigation",
     announcement: {
-      badge: "NOTICE",
+      ariaLabel: "QQ Community Group",
       text: "Join our community QQ group",
       code: "QQ:932894666",
       copyLabel: "Copy group number",
       copiedLabel: "Copied 932894666",
-      closeLabel: "Dismiss announcement",
+      closeLabel: "Dismiss banner",
     },
     nav: [
       { id: "about", label: "Overview", icon: "layers" },
