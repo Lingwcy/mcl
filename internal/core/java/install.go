@@ -92,7 +92,7 @@ func (i *Installer) Install(ctx context.Context, p Package, report func(Progress
 		}
 		defer cache.Close()
 	}
-	object := download.Object{SHA256: p.SHA256, Size: p.Size}
+	object := download.Object{SHA256: p.SHA256, Size: p.Size, SizeTolerance: zuluSizeTolerance(p)}
 	reused := false
 	if cache != nil {
 		reused, err = cache.Restore(task, object, archive)
@@ -234,7 +234,8 @@ func downloadPackage(ctx context.Context, file *os.File, p Package, report func(
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("Java 下载返回 HTTP %d", response.StatusCode)
 	}
-	if response.ContentLength > 0 && response.ContentLength != p.Size {
+	expected := download.Object{SHA256: p.SHA256, Size: p.Size, SizeTolerance: zuluSizeTolerance(p)}
+	if response.ContentLength > 0 && !expected.AcceptsSize(response.ContentLength) {
 		return errors.New("Java 下载大小与官方目录不一致")
 	}
 	hash := sha256.New()
@@ -242,11 +243,11 @@ func downloadPackage(ctx context.Context, file *os.File, p Package, report func(
 	if report != nil {
 		report(Progress{Stage: "下载 Java", Total: p.Size})
 	}
-	n, err := io.Copy(writer, io.LimitReader(response.Body, p.Size+1))
+	n, err := io.Copy(writer, io.LimitReader(response.Body, p.Size+expected.SizeTolerance+1))
 	if err != nil {
 		return err
 	}
-	if n != p.Size || hex.EncodeToString(hash.Sum(nil)) != p.SHA256 {
+	if !expected.AcceptsSize(n) || hex.EncodeToString(hash.Sum(nil)) != p.SHA256 {
 		return errors.New("Java 安装包大小或 SHA-256 校验失败")
 	}
 	if err := file.Sync(); err != nil {

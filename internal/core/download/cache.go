@@ -17,15 +17,37 @@ import (
 // digest/size. It does not represent transport, filesystem or cancellation errors.
 var ErrContentMismatch = diagnostics.Wrap("integrity", errors.New("下载副本摘要或大小不匹配"))
 
+const maxObjectSizeTolerance = 4096
+
 // Object identifies bytes, not a URL, local path or distribution permission.
 type Object struct {
 	SHA1, SHA256, SHA512 string
 	Size                 int64
+	// SizeTolerance bounds rare catalog/CDN size rounding (for example Azul Zulu)
+	// strictly under strong SHA-256/SHA-512 verification.
+	SizeTolerance int64
+}
+
+func (o Object) AcceptsSize(n int64) bool {
+	if n < 0 || n > MaxFileSize {
+		return false
+	}
+	if o.SizeTolerance <= 0 {
+		return n == o.Size
+	}
+	diff := n - o.Size
+	if diff < 0 {
+		diff = -diff
+	}
+	return n > 0 && diff <= o.SizeTolerance
 }
 
 func (o Object) Key() (string, error) {
-	if o.Size < 0 || o.Size > MaxFileSize {
+	if o.Size < 0 || o.SizeTolerance < 0 || o.SizeTolerance > maxObjectSizeTolerance || o.Size > MaxFileSize-o.SizeTolerance {
 		return "", errors.New("缓存大小无效")
+	}
+	if o.SizeTolerance > 0 && o.SHA256 == "" && o.SHA512 == "" {
+		return "", errors.New("弱摘要不允许大小容差")
 	}
 	valid := func(value string, size int) bool {
 		data, err := hex.DecodeString(value)
@@ -66,7 +88,7 @@ func (o Object) Copy(ctx context.Context, destination io.Writer, source io.Reade
 		writers = append(writers, h512)
 	}
 	writer := io.MultiWriter(writers...)
-	count, err := io.CopyBuffer(writer, io.LimitReader(&contextReader{ctx: ctx, reader: source}, o.Size+1), make([]byte, 64<<10))
+	count, err := io.CopyBuffer(writer, io.LimitReader(&contextReader{ctx: ctx, reader: source}, o.Size+o.SizeTolerance+1), make([]byte, 64<<10))
 	if err != nil {
 		return err
 	}
@@ -76,7 +98,7 @@ func (o Object) Copy(ctx context.Context, destination io.Writer, source io.Reade
 	equal := func(hash []byte, expected string) bool {
 		return expected == "" || strings.EqualFold(hex.EncodeToString(hash), expected)
 	}
-	if count != o.Size || !equal(h1.Sum(nil), o.SHA1) || !equal(h256.Sum(nil), o.SHA256) || !equal(h512.Sum(nil), o.SHA512) {
+	if !o.AcceptsSize(count) || !equal(h1.Sum(nil), o.SHA1) || !equal(h256.Sum(nil), o.SHA256) || !equal(h512.Sum(nil), o.SHA512) {
 		return ErrContentMismatch
 	}
 	return nil

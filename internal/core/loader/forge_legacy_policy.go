@@ -48,7 +48,7 @@ func validateLegacyRuntimeLibrary(request Request, library meta.Library, process
 	if err != nil {
 		return err
 	}
-	core := coordinate.Group == "net.minecraftforge" && coordinate.Artifact == "forge"
+	core := coordinate.Group == "net.minecraftforge" && (coordinate.Artifact == "forge" || coordinate.Artifact == "minecraftforge")
 	wrapper := coordinate.Group == "net.minecraft" && coordinate.Artifact == "launchwrapper"
 	coreAllowed := legacyForgeCore(request, library.Name)
 	if processed {

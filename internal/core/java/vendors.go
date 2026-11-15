@@ -214,7 +214,20 @@ func (c *CatalogClient) zuluGet(ctx context.Context, endpoint string, target any
 	return ctx.Err()
 }
 
+func zuluSizeTolerance(p Package) int64 {
+	if p.Vendor() == "zulu" {
+		return 1024
+	}
+	return 0
+}
+
 // DownloadFile binds every transport and task event to the same fixed archive.
 func (p Package) DownloadFile() download.File {
-	return download.File{Path: path.Join("cache", "java", p.SHA256+".archive"), SHA256: p.SHA256, Download: meta.Download{URL: p.URL, Size: p.Size}, AllowedHosts: []string{"github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com", "cdn.azul.com"}}
+	return download.File{
+		Path:          path.Join("cache", "java", p.SHA256+".archive"),
+		SHA256:        p.SHA256,
+		Download:      meta.Download{URL: p.URL, Size: p.Size},
+		AllowedHosts:  []string{"github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com", "cdn.azul.com"},
+		SizeTolerance: zuluSizeTolerance(p),
+	}
 }

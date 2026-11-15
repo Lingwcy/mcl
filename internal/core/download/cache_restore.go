@@ -10,7 +10,7 @@ import (
 )
 
 func objectForFile(f File) Object {
-	return Object{SHA1: f.SHA1, SHA256: f.SHA256, SHA512: f.SHA512, Size: f.Size}
+	return Object{SHA1: f.SHA1, SHA256: f.SHA256, SHA512: f.SHA512, Size: f.Size, SizeTolerance: f.SizeTolerance}
 }
 func restoreCachedFile(ctx context.Context, cache CacheLease, root *os.Root, f File) (bool, error) {
 	directory, err := targetDirectory(root, path.Dir(f.Path), true)

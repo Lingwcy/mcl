@@ -524,6 +524,9 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 				if err := s.run(runctx, runtime.Executable, filepath.Join(stagePath, "work"), args); err != nil {
 					return err
 				}
+				if err := cleanProcessorSidecars(stage, known, p); err != nil {
+					return err
+				}
 			}
 			phase = "输出核验"
 			if err := commitProcessorOutputs(ctx, stage, known, p); err != nil {
@@ -537,6 +540,36 @@ func (s *ForgeInstaller) runProcessors(ctx context.Context, cache, stage *os.Roo
 		}
 		progress.Files++
 		report(progress)
+	}
+	return nil
+}
+
+func cleanProcessorSidecars(stage *os.Root, known map[string]meta.Download, p preparedProcessor) error {
+	coordinate, err := meta.ParseCoordinate(p.coordinate)
+	if err != nil || coordinate.Artifact != "jarsplitter" {
+		return nil
+	}
+	for target := range p.outputs {
+		sidecar := target + ".cache"
+		if _, exists := known[sidecar]; exists || !archive.SafePath(sidecar) {
+			continue
+		}
+		if _, declared := p.outputs[sidecar]; declared || slices.Contains(p.inputs, sidecar) {
+			continue
+		}
+		info, err := stage.Lstat(sidecar)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return errors.New("处理器附带缓存不是普通文件")
+		}
+		if err := stage.Remove(sidecar); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	return nil
 }

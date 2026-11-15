@@ -8,13 +8,24 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"mcl/internal/core/diagnostics"
+	"mcl/internal/core/download"
 	"mcl/internal/core/meta"
+)
+
+const (
+	defaultFabricURL   = "https://meta.fabricmc.net/v2"
+	defaultQuiltURL    = "https://meta.quiltmc.org/v3"
+	defaultForgeURL    = "https://files.minecraftforge.net/net/minecraftforge/forge"
+	defaultNeoForgeURL = "https://maven.neoforged.net/releases/net/neoforged"
+	bmclapiFabricURL   = "https://bmclapi2.bangbang93.com/fabric-meta/v2"
+	bmclapiMavenURL    = "https://bmclapi2.bangbang93.com/maven"
 )
 
 type Release struct {
@@ -24,6 +35,7 @@ type Release struct {
 }
 type Client struct {
 	HTTP                  *http.Client
+	Transfers             *download.TransferControl
 	FabricURL, QuiltURL   string
 	ForgeURL, NeoForgeURL string
 }
@@ -34,8 +46,8 @@ func NewClient() *Client {
 			return errors.New("拒绝跨站加载器元数据重定向")
 		}
 		return nil
-	}}, FabricURL: "https://meta.fabricmc.net/v2", QuiltURL: "https://meta.quiltmc.org/v3",
-		ForgeURL: "https://files.minecraftforge.net/net/minecraftforge/forge", NeoForgeURL: "https://maven.neoforged.net/releases/net/neoforged"}
+	}}, FabricURL: defaultFabricURL, QuiltURL: defaultQuiltURL,
+		ForgeURL: defaultForgeURL, NeoForgeURL: defaultNeoForgeURL}
 }
 func (c *Client) base(kind string) (string, error) {
 	switch kind {
@@ -48,9 +60,13 @@ func (c *Client) base(kind string) (string, error) {
 	}
 }
 func (c *Client) bytes(ctx context.Context, address string, limit int64) ([]byte, error) {
+	return c.bytesWithRedirect(ctx, address, limit, false, 3)
+}
+
+func (c *Client) bytesWithRedirect(ctx context.Context, address string, limit int64, mirrored bool, maxAttempts int) ([]byte, error) {
 	ctx, evidence := diagnostics.Start(ctx, "metadata", "loader-response")
 	defer evidence.End()
-	response, err := c.request(ctx, http.MethodGet, address)
+	response, err := c.requestHeadersWithRedirect(ctx, http.MethodGet, address, nil, mirrored, maxAttempts)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +79,14 @@ func (c *Client) bytes(ctx context.Context, address string, limit int64) ([]byte
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
-		return nil, err
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		code := diagnostics.Code(err)
+		if code == "unknown" {
+			code = "network"
+		}
+		return nil, diagnostics.Wrap(code, errors.New("读取加载器响应失败，请检查网络连接"))
 	}
 	if int64(len(data)) > limit {
 		return nil, identityError("加载器响应超过限制")
@@ -72,18 +95,76 @@ func (c *Client) bytes(ctx context.Context, address string, limit int64) ([]byte
 	return data, ctx.Err()
 }
 
+func (c *Client) candidateOrder(official string, mirrors ...string) []string {
+	if c.Transfers == nil || len(mirrors) == 0 {
+		return []string{official}
+	}
+	return c.Transfers.OrderURLs(official, mirrors...)
+}
+
+func (c *Client) fetchDecoded(ctx context.Context, limit int64, decode func([]byte) error, official string, mirrors ...string) error {
+	candidates := c.candidateOrder(official, mirrors...)
+	var last error
+	for idx, address := range candidates {
+		attempts := 3
+		if idx+1 < len(candidates) {
+			attempts = 1
+		}
+		data, err := c.bytesWithRedirect(ctx, address, limit, address != official, attempts)
+		if err == nil {
+			err = decode(data)
+			if err == nil {
+				if c.Transfers != nil && len(mirrors) > 0 {
+					c.Transfers.RememberCandidate(official, address)
+				}
+				return nil
+			}
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		last = err
+	}
+	return last
+}
+
 // Only transient transport/status failures are retried. A long Retry-After is
 // returned to the user instead of sleeping indefinitely or retrying too early.
 func (c *Client) request(ctx context.Context, method, address string) (*http.Response, error) {
-	return c.requestHeaders(ctx, method, address, nil)
+	return c.requestHeadersWithRedirect(ctx, method, address, nil, false, 3)
 }
 
 func (c *Client) requestHeaders(ctx context.Context, method, address string, headers http.Header) (*http.Response, error) {
+	return c.requestHeadersWithRedirect(ctx, method, address, headers, false, 3)
+}
+
+func (c *Client) httpClient(mirrored bool) *http.Client {
+	if !mirrored || c.HTTP == nil {
+		return c.HTTP
+	}
+	client := *c.HTTP
+	client.Jar = nil
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 4 || !download.SafeMirrorRedirect(req.URL) {
+			return errors.New("镜像只能重定向到公开 HTTPS 节点")
+		}
+		for _, header := range []string{"Authorization", "Proxy-Authorization", "Cookie", "X-API-Key", "Referer"} {
+			req.Header.Del(header)
+		}
+		return nil
+	}
+	return &client
+}
+
+func (c *Client) requestHeadersWithRedirect(ctx context.Context, method, address string, headers http.Header, mirrored bool, maxAttempts int) (*http.Response, error) {
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
 	ctx = WithResolutionBudget(ctx)
 	budget := ctx.Value(resolutionBudgetKey{}).(*resolutionBudget)
 	ctx, evidence := diagnostics.Start(ctx, "network", "loader-metadata")
 	defer evidence.End()
-	for attempt := range 3 {
+	for attempt := range maxAttempts {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -110,7 +191,7 @@ func (c *Client) requestHeaders(ctx context.Context, method, address string, hea
 		if value := headers.Get("Range"); value != "" {
 			req.Header.Set("Range", value)
 		}
-		response, fetchErr := c.HTTP.Do(req)
+		response, fetchErr := c.httpClient(mirrored).Do(req)
 		if response != nil && response.Body != nil {
 			// The returned body owns the per-attempt deadline until it is closed.
 			// Every path that discards the body closes it, which releases cancel.
@@ -159,7 +240,7 @@ func (c *Client) requestHeaders(ctx context.Context, method, address string, hea
 				delay = max(delay, time.Until(deadline))
 			}
 		}
-		if attempt == 2 {
+		if attempt+1 == maxAttempts {
 			return nil, failure
 		}
 		_, waiting := diagnostics.Start(ctx, "backoff", "loader-metadata")
@@ -190,24 +271,38 @@ func (c *Client) Releases(ctx context.Context, kind, game string) ([]Release, er
 	if !meta.ValidID(game) {
 		return nil, errors.New("游戏版本无效")
 	}
-	data, err := c.bytes(ctx, base+"/versions/loader/"+url.PathEscape(game), 4<<20)
+	suffix := "/versions/loader/" + url.PathEscape(game)
+	var mirrors []string
+	if kind == "fabric" && base == defaultFabricURL {
+		mirrors = append(mirrors, bmclapiFabricURL+suffix)
+	}
+	var releases []Release
+	err = c.fetchDecoded(ctx, 4<<20, func(data []byte) error {
+		var raw []struct {
+			Loader Release `json:"loader"`
+		}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return errors.New("加载器版本列表无效")
+		}
+		if len(raw) > 10000 {
+			return errors.New("加载器版本数量过多")
+		}
+		releases = make([]Release, 0, len(raw))
+		for _, entry := range raw {
+			if meta.ValidID(entry.Loader.Version) {
+				releases = append(releases, entry.Loader)
+			}
+		}
+		return nil
+	}, base+suffix, mirrors...)
 	if err != nil {
 		return nil, err
 	}
-	var raw []struct {
-		Loader Release `json:"loader"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, errors.New("加载器版本列表无效")
-	}
-	if len(raw) > 10000 {
-		return nil, errors.New("加载器版本数量过多")
-	}
-	var releases []Release
-	for _, entry := range raw {
-		if meta.ValidID(entry.Loader.Version) {
-			releases = append(releases, entry.Loader)
+	if kind == "quilt" {
+		for i := range releases {
+			releases[i].Stable = releases[i].Stable || !strings.Contains(releases[i].Version, "-")
 		}
+		slices.SortStableFunc(releases, func(a, b Release) int { return -compareBuild(a.Version, b.Version) })
 	}
 	return releases, nil
 }
@@ -239,12 +334,20 @@ func (c *Client) Resolve(ctx context.Context, request Request) (Profile, error) 
 	if err != nil {
 		return Profile{}, err
 	}
-	data, err := c.bytes(ctx, base+"/versions/loader/"+url.PathEscape(request.GameVersion)+"/"+url.PathEscape(request.Version)+"/profile/json", 4<<20)
-	if err != nil {
-		return Profile{}, err
+	suffix := "/versions/loader/" + url.PathEscape(request.GameVersion) + "/" + url.PathEscape(request.Version) + "/profile/json"
+	var mirrors []string
+	if request.Type == "fabric" && base == defaultFabricURL {
+		mirrors = append(mirrors, bmclapiFabricURL+suffix)
 	}
-	raw, err := decodeLoaderProfile(data)
-	if err != nil {
+	var raw rawProfile
+	if err := c.fetchDecoded(ctx, 4<<20, func(data []byte) error {
+		decoded, err := decodeLoaderProfile(data)
+		if err != nil {
+			return err
+		}
+		raw = decoded
+		return nil
+	}, base+suffix, mirrors...); err != nil {
 		return Profile{}, err
 	}
 	if raw.InheritsFrom != request.GameVersion || len(raw.Libraries) == 0 || len(raw.Libraries) > 128 {
@@ -255,7 +358,7 @@ func (c *Client) Resolve(ctx context.Context, request Request) (Profile, error) 
 	defer cancel(nil)
 	jobs := make(chan int)
 	var workers sync.WaitGroup
-	for range 4 {
+	for range min(len(raw.Libraries), 8) {
 		workers.Go(func() {
 			for index := range jobs {
 				if work.Err() != nil {

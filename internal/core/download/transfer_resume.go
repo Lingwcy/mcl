@@ -56,6 +56,11 @@ func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address st
 			}
 		}
 		client := c.requestClient(f.URL, f.AllowedHosts, address != f.URL)
+		if budget := failoverTimeout(client.Timeout, f.Size-requested, alternate, c.Transfers != nil && c.Transfers.hasSpeedLimit()); budget != client.Timeout {
+			copy := *client
+			copy.Timeout = budget
+			client = &copy
+		}
 		var response *http.Response
 		if c.Transfers != nil {
 			response, err = c.Transfers.Do(client, request)
@@ -84,7 +89,9 @@ func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address st
 			p.reset = true
 			continue
 		}
-		length, start := f.Size, int64(0)
+		object := objectForFile(f)
+		length, expectedTotal, start := f.Size, f.Size, int64(0)
+		exactLength := true
 		if status == 206 {
 			var end, total int64
 			start, end, total, err = parseContentRange(response.Header.Get("Content-Range"))
@@ -92,7 +99,7 @@ func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address st
 			if p.state.ETag == "" && p.state.Modified != "" && response.Header.Get("Last-Modified") != "" && response.Header.Get("Last-Modified") != p.state.Modified {
 				changed = true
 			}
-			if err != nil || start != requested || total != f.Size || requested > 0 && changed {
+			if err != nil || start != requested || !object.AcceptsSize(total) || requested > 0 && changed {
 				response.Body.Close()
 				if requested == 0 {
 					return true, 0, errors.New("服务器返回了不匹配的续传范围")
@@ -101,6 +108,7 @@ func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address st
 				continue
 			}
 			length = end - start + 1
+			expectedTotal = total
 		} else if status != 200 {
 			response.Body.Close()
 			if requested > 0 && (status == 400 || status == 405 || status == 501) {
@@ -112,8 +120,21 @@ func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address st
 			failure := diagnostics.Wrap(diagnostics.HTTPCode(status), fmt.Errorf("服务器返回 HTTP %d", status))
 			evidence.Fail(failure)
 			return retry && allowed, delay, failure
+		} else if f.SizeTolerance > 0 {
+			if response.ContentLength >= 0 {
+				if !object.AcceptsSize(response.ContentLength) {
+					response.Body.Close()
+					return true, 0, errors.New("下载响应大小或编码与固定元数据不符")
+				}
+				length = response.ContentLength
+				expectedTotal = response.ContentLength
+			} else {
+				length = f.Size + f.SizeTolerance
+				expectedTotal = 0
+				exactLength = false
+			}
 		}
-		if response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity" || response.ContentLength >= 0 && response.ContentLength != length {
+		if response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity" || exactLength && response.ContentLength >= 0 && response.ContentLength != length {
 			response.Body.Close()
 			return true, 0, errors.New("下载响应大小或编码与固定元数据不符")
 		}
@@ -160,19 +181,34 @@ func (c *Client) transfer(ctx context.Context, root *os.Root, f File, address st
 			Observe(ctx, Event{State: "checkpoint-failed"})
 			return false, 0, err
 		}
-		if copyErr != nil || n != length {
+		incomplete := copyErr != nil || (exactLength && n != length) || (!exactLength && !object.AcceptsSize(start+n))
+		if incomplete {
 			if ctx.Err() != nil {
 				return false, 0, ctx.Err()
 			}
 			return true, 0, errors.New("下载中断，已保留可校验的分片")
 		}
 		p.offset = start + n
-		if p.offset < f.Size {
+		if expectedTotal > 0 && p.offset < expectedTotal {
 			return true, 0, errors.New("服务器返回部分区段，继续下载剩余内容")
 		}
 		return p.publish(ctx, root, f)
 	}
 	return true, 0, errors.New("服务器拒绝续传，已保留原分片，可重试完整下载")
+}
+
+// failoverTimeout caps how long a trickling primary transfer may hold a slot
+// while alternate candidates remain untried, unless user rate limiting is active.
+func failoverTimeout(base time.Duration, remaining int64, alternate, speedLimited bool) time.Duration {
+	if !alternate || speedLimited {
+		return base
+	}
+	budget := max(30*time.Second, time.Duration(max(remaining, 0)/(48*1024))*time.Second)
+	budget = min(budget, 115*time.Second)
+	if base > 0 && base < budget {
+		return base
+	}
+	return budget
 }
 func parseContentRange(value string) (int64, int64, int64, error) {
 	bad := errors.New("Content-Range无效")

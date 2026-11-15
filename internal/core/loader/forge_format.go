@@ -54,6 +54,12 @@ func installerFormat(data []byte) (string, error) {
 		return "", identityError("Forge安装spec不能为null或非整数")
 	}
 	if *spec == 0 {
+		if rawProcessors, ok := fields["processors"]; ok && strings.TrimSpace(string(rawProcessors)) != "null" {
+			var procs []json.RawMessage
+			if json.Unmarshal(rawProcessors, &procs) == nil && len(procs) > 0 {
+				return ForgeFormatProcessors, nil
+			}
+		}
 		return ForgeFormatEmbedded, nil
 	}
 	if *spec == 1 {

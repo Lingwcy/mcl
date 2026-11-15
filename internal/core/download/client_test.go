@@ -3,8 +3,10 @@ package download
 import (
 	"context"
 	"crypto/sha1"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -212,5 +214,61 @@ func TestConfinementAndConflicts(t *testing.T) {
 		if _, ok := retryDelay(value, time.Now()); ok {
 			t.Fatal("excessive Retry-After accepted")
 		}
+	}
+}
+
+func TestSizeToleranceAllowsSHA256CatalogRoundingOnly(t *testing.T) {
+	payload := strings.Repeat("zulu-archive-data-", 200) + "tail-37-bytes"
+	sum := sha256.Sum256([]byte(payload))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprint(len(payload)))
+		io.WriteString(w, payload)
+	}))
+	defer server.Close()
+
+	c := NewClient(t.TempDir())
+	c.Attempts = 1
+	roundedSize := int64((len(payload) / 100) * 100)
+	f := File{
+		Path:          "java.zip",
+		SHA256:        fmt.Sprintf("%x", sum[:]),
+		SizeTolerance: 1024,
+		Download:      meta.Download{URL: server.URL + "/java.zip", Size: roundedSize},
+	}
+	if err := c.Run(t.Context(), []File{f}, nil); err != nil {
+		t.Fatalf("tolerated SHA-256 download failed: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(c.Root, "java.zip"))
+	if err != nil || string(got) != payload {
+		t.Fatalf("downloaded bytes mismatch: %v", err)
+	}
+	weak := testFile(server.URL+"/weak.bin", "weak.bin", payload)
+	weak.SizeTolerance = 1024
+	if err := weak.Validate(); err == nil {
+		t.Fatal("SizeTolerance allowed with weak SHA-1")
+	}
+}
+
+func TestTransferControlUses15MinuteReadBudgetOnDefaultClient(t *testing.T) {
+	control, err := NewTransferControl(Preferences{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{
+		Timeout: 2 * time.Minute,
+		Transport: policyRoundTripper(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("ok")), Request: r}, nil
+		}),
+	}
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://example.invalid/item", nil)
+	resp, err := control.Do(client, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body := resp.Body.(*transferBody)
+	ir := body.reader.(*limitedReader).reader.(*idleReader)
+	if ir.remaining != 15*time.Minute || ir.idle != 45*time.Second {
+		t.Fatalf("unexpected budgets: remaining=%v idle=%v", ir.remaining, ir.idle)
 	}
 }

@@ -306,7 +306,7 @@ func (l *downloadCacheLease) Restore(ctx context.Context, o download.Object, dst
 	if err != nil {
 		return false, err
 	}
-	if !before.Mode().IsRegular() || before.Size() != o.Size {
+	if !before.Mode().IsRegular() || !o.AcceptsSize(before.Size()) {
 		return false, nil
 	}
 	f, err := l.root.Open(key)

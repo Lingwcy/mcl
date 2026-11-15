@@ -80,3 +80,35 @@ func TestPrivateProcessorOutputReuseAndConflicts(t *testing.T) {
 		t.Fatal("unknown pre-existing file was removed")
 	}
 }
+
+func TestCleanJarsplitterSidecarCache(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	slim := stageFixed(t, root, "libraries/net/minecraft/client/1.20.1/client-1.20.1-slim.jar", []byte("slim"))
+	sidecar := "libraries/net/minecraft/client/1.20.1/client-1.20.1-slim.jar.cache"
+	if err := root.WriteFile(sidecar, []byte("Input: abc\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	known := map[string]meta.Download{"libraries/net/minecraft/client/1.20.1/client-1.20.1-slim.jar": slim}
+	p := preparedProcessor{
+		coordinate: "net.minecraftforge:jarsplitter:1.1.4",
+		outputs:    map[string]string{"libraries/net/minecraft/client/1.20.1/client-1.20.1-slim.jar": slim.SHA1},
+	}
+	if err := cleanProcessorSidecars(root, known, p); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := root.Lstat(sidecar); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected sidecar .cache removed, got %v", err)
+	}
+	// Known/unrelated files and non-jarsplitter outputs must never be removed.
+	known[sidecar] = stageFixed(t, root, sidecar, []byte("fixed"))
+	if err := cleanProcessorSidecars(root, known, p); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := root.Lstat(sidecar); err != nil {
+		t.Fatalf("expected known file preserved, got %v", err)
+	}
+}

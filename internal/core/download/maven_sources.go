@@ -6,6 +6,8 @@ import (
 	"mcl/internal/core/meta"
 )
 
+const aliyunMavenOrigin = "https://maven.aliyun.com/repository/central"
+
 // Central's public endpoints share the same coordinate namespace. The selected
 // bytes still need the original independent digest, size and task identity.
 func centralAlternate(original string) string {
@@ -27,49 +29,46 @@ func centralAlternate(original string) string {
 	return location.URL()
 }
 
-// This intentionally covers only Forge's fixed installer/client/universal
-// distribution. It does not map an arbitrary repository, Maven metadata,
-// Fabric/Quilt catalogs, NeoForge, sidecars, processors or a mutable build URL.
-func forgeDistributionMirror(original string) string {
+// MavenMirrorURL returns a mainland mirror URL for fixed, coordinate-bound Maven
+// .jar/.zip artifacts from known official repositories, or empty when none applies.
+func MavenMirrorURL(original string) string {
+	return mavenMirrorURL(original)
+}
+
+// mavenMirrorURL maps fixed, coordinate-bound .jar/.zip artifacts from known
+// official Maven repositories to mainland mirrors. Callers still verify the
+// full representation against an independent pinned digest and exact size;
+// mutable metadata XML and .sha1 sidecars are always rejected by ParseMavenURL.
+func mavenMirrorURL(original string) string {
 	location, err := meta.ParseMavenURL(original)
-	if err != nil || location.Repository != "forge" {
+	if err != nil {
 		return ""
 	}
-	c := location.Coordinate
-	if c.Group != "net.minecraftforge" || c.Artifact != "forge" || c.Extension != "jar" {
+	if location.Coordinate.Extension != "jar" && location.Coordinate.Extension != "zip" {
 		return ""
 	}
-	switch c.Classifier {
-	case "installer", "client", "universal":
+	if mutableMavenVersion(location.Coordinate.Version) {
+		return ""
+	}
+	switch location.Repository {
+	case "forge", "neoforge", "fabric", "minecraft":
+		return mirrorOrigin + "/maven/" + location.Coordinate.Path()
+	case "central", "central-repo1":
+		return aliyunMavenOrigin + "/" + location.Coordinate.Path()
 	default:
 		return ""
 	}
-	// Fixed numeric game/build/branch components only; no latest, dynamic Maven
-	// versions, snapshots or qualifiers are silently routed to a mirror.
-	if c.Version == "" {
-		return ""
+}
+
+func mutableMavenVersion(version string) bool {
+	if version == "" {
+		return true
 	}
-	for _, r := range c.Version {
-		if r < '0' || r > '9' {
-			if r != '.' && r != '-' {
-				return ""
-			}
+	for _, token := range strings.FieldsFunc(strings.ToLower(version), func(r rune) bool { return r == '-' || r == '.' }) {
+		switch token {
+		case "latest", "release", "snapshot":
+			return true
 		}
 	}
-	segments := strings.Split(c.Version, "-")
-	if len(segments) < 2 || len(segments) > 3 || len(segments) == 3 && segments[0] != segments[2] {
-		return ""
-	}
-	for _, segment := range segments {
-		parts := strings.Split(segment, ".")
-		if len(parts) < 2 || len(parts) > 4 {
-			return ""
-		}
-		for _, part := range parts {
-			if part == "" {
-				return ""
-			}
-		}
-	}
-	return mirrorOrigin + "/maven/" + c.Path()
+	return false
 }

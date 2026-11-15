@@ -124,3 +124,22 @@ func TestQuiltFabricFallbackRetainsDependencyProtection(t *testing.T) {
 		t.Fatal("supported fallback lost dependency check", err)
 	}
 }
+
+func TestBuiltinMixinExtrasDoesNotRejectLoaderProvidedRequirement(t *testing.T) {
+	parent := descriptorFile("mods/asyncparticles.jar", "fabric", Mod{
+		ID:       "asyncparticles",
+		Version:  "3.4.0",
+		Requires: []Requirement{{ID: "mixinextras", Syntax: Fabric, Versions: Versions{Text: ">=0.4.1"}}},
+	})
+	olderNested := File{
+		Path:    "mods/other.jar",
+		Enabled: true,
+		Archive: Archive{Variants: []Variant{{Loader: "fabric", Mods: []Mod{{ID: "mixinextras", Version: "0.3.5", Nested: true}}}}},
+	}
+	for _, loaderName := range []string{"fabric", "quilt"} {
+		runtime := Runtime{GameVersion: "1.21.1", Loader: loaderName, LoaderVersion: "0.29.2"}
+		if err := GuardTransition(t.Context(), nil, []File{parent, olderNested}, runtime, nil); err != nil {
+			t.Fatalf("%s unexpectedly rejected loader-provided mixinextras: %v", loaderName, err)
+		}
+	}
+}
