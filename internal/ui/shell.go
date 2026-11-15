@@ -27,11 +27,12 @@ const (
 	directoryPage        page = "directory-transfer"
 	instanceSettingsPage page = "instance-settings"
 	marketPage           page = "market"
+	creditsPage          page = "credits"
 	aboutPage            page = "about"
 )
 
 func (p page) inSettings() bool {
-	return p == settingsPage || p == gameSettingsPage || p == downloadSettingsPage || p == accountsPage || p == settingsActivityPage || p == aboutPage
+	return p == settingsPage || p == gameSettingsPage || p == downloadSettingsPage || p == accountsPage || p == settingsActivityPage || p == creditsPage || p == aboutPage
 }
 
 const (
@@ -229,6 +230,8 @@ func (s *Shell) View(c *ui.Context) {
 							s.activityView(c)
 						case logsPage:
 							s.logView(c)
+						case creditsPage:
+							s.creditsView(c)
 						case aboutPage:
 							s.aboutView(c)
 						}
