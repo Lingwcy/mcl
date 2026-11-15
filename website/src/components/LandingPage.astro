@@ -168,21 +168,88 @@ const defaultDownload = t.downloads[0]!;
     <main id="main" class="landing-main">
       {/* 1. Hero + Horizontal Screenshot Strip */}
       <section class="hero-section" aria-label={t.brandFull}>
-        <h1 class="hero-headline">
-          {t.hero.prefix}
-          <img
-            class="hero-inline-logo pixel-img"
-            src="/favicon.png"
-            alt={t.brand}
-            width="52"
-            height="52"
-          />
-          {t.hero.suffix}
-        </h1>
+        <div class="hero-stage" data-hero-stage>
+          <div class="hero-backdrop" aria-hidden="true">
+            <div class="hero-bg-grid"></div>
+            <div class="hero-bg-aura"></div>
 
-        <p class="hero-lead">{t.hero.body}</p>
+            <div class="hero-art">
+              <div class="hero-orbit hero-orbit--outer">
+                <span class="hero-orbit-dot"></span>
+              </div>
+              <div class="hero-orbit hero-orbit--inner"></div>
 
-        <div class="hero-actions">
+              <span class="hero-voxel hero-voxel--1"></span>
+              <span class="hero-voxel hero-voxel--2"></span>
+              <span class="hero-voxel hero-voxel--3"></span>
+              <span class="hero-voxel hero-voxel--4"></span>
+              <span class="hero-voxel hero-voxel--5"></span>
+              <span class="hero-voxel hero-voxel--6"></span>
+
+              <div class="hero-core">
+                <div class="hero-core-glow"></div>
+                <div class="hero-core-card">
+                  <div class="hero-core-chip-bar">
+                    <span class="hero-chip-dot"></span>
+                    <span class="hero-chip-label mono">mcl · native</span>
+                    <span class="hero-chip-tag mono">v{LATEST_TAG}</span>
+                  </div>
+                  <div class="hero-core-emblem">
+                    <img
+                      class="pixel-img"
+                      src="/favicon.png"
+                      alt=""
+                      width="68"
+                      height="68"
+                      decoding="async"
+                    />
+                  </div>
+                  <div class="hero-core-bars">
+                    <span class="hero-core-bar" style="--bar-w: 80%;"></span>
+                    <span class="hero-core-bar hero-core-bar--sub" style="--bar-w: 54%;"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hero-loader-node hero-loader-node--grass">
+                <LoaderPixelIcon kind="grass" size={22} />
+                <span class="mono">Vanilla</span>
+              </div>
+              <div class="hero-loader-node hero-loader-node--fabric">
+                <LoaderPixelIcon kind="fabric" size={22} />
+                <span class="mono">Fabric</span>
+              </div>
+              <div class="hero-loader-node hero-loader-node--quilt">
+                <LoaderPixelIcon kind="quilt" size={22} />
+                <span class="mono">Quilt</span>
+              </div>
+              <div class="hero-loader-node hero-loader-node--forge">
+                <LoaderPixelIcon kind="forge" size={22} />
+                <span class="mono">Forge</span>
+              </div>
+              <div class="hero-loader-node hero-loader-node--neoforge">
+                <LoaderPixelIcon kind="neoforge" size={22} />
+                <span class="mono">NeoForge</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="hero-copy">
+            <h1 class="hero-headline">
+              {t.hero.prefix}
+              <img
+                class="hero-inline-logo pixel-img"
+                src="/favicon.png"
+                alt={t.brand}
+                width="52"
+                height="52"
+              />
+              {t.hero.suffix}
+            </h1>
+
+            <p class="hero-lead">{t.hero.body}</p>
+
+            <div class="hero-actions">
           <div class="download-wrap" data-download-wrap>
             <a
               class="btn btn-primary btn-split-main"
@@ -266,6 +333,8 @@ const defaultDownload = t.downloads[0]!;
             <span>{t.hero.starLabel}</span>
             <span class="btn-divider" data-gh-stars>v{LATEST_TAG}</span>
           </a>
+            </div>
+          </div>
         </div>
 
         {/* Horizontal Screenshot Strip */}
@@ -715,6 +784,46 @@ const defaultDownload = t.downloads[0]!;
           } catch {
             // Ignore storage errors.
           }
+        },
+        { signal }
+      );
+    }
+
+    // 0b. Hero right-side visual pointer parallax (subtle GPU tilt)
+    const heroStage = document.querySelector("[data-hero-stage]");
+    if (
+      heroStage instanceof HTMLElement &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+      !window.matchMedia("(pointer: coarse)").matches
+    ) {
+      let heroRaf = 0;
+      let targetX = 0;
+      let targetY = 0;
+      heroStage.addEventListener(
+        "pointermove",
+        (e) => {
+          const rect = heroStage.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return;
+          targetX = Math.max(-1, Math.min(1, ((e.clientX - rect.left) / rect.width - 0.5) * 2));
+          targetY = Math.max(-1, Math.min(1, ((e.clientY - rect.top) / rect.height - 0.5) * 2));
+          if (heroRaf) return;
+          heroRaf = requestAnimationFrame(() => {
+            heroRaf = 0;
+            heroStage.style.setProperty("--hx", targetX.toFixed(3));
+            heroStage.style.setProperty("--hy", targetY.toFixed(3));
+          });
+        },
+        { passive: true, signal }
+      );
+      heroStage.addEventListener(
+        "pointerleave",
+        () => {
+          if (heroRaf) {
+            cancelAnimationFrame(heroRaf);
+            heroRaf = 0;
+          }
+          heroStage.style.setProperty("--hx", "0");
+          heroStage.style.setProperty("--hy", "0");
         },
         { signal }
       );
