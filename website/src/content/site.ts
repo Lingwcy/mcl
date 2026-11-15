@@ -175,7 +175,7 @@ export const copy: Record<Locale, SiteCopy> = {
     hero: {
       prefix: "为实用而造的",
       suffix: "Minecraft 启动器",
-      body: "轻量、原生的 Minecraft: Java Edition 启动器。Go 与 MyGo 原生界面开发。没有 Electron，没有 Tauri，没有臃肿的浏览器壳。",
+      body: "轻量、原生的 Minecraft: Java Edition 启动器。三端体验高度统一，全版本与全 Loader 100% 真机实测通关。没有臃肿套壳，没有兼容玄学。",
       downloadMacArm: "下载 macOS (Apple Silicon)",
       downloadWinX64: "下载 Windows (x64)",
       downloadLabel: "下载体验",
@@ -550,7 +550,7 @@ export const copy: Record<Locale, SiteCopy> = {
     hero: {
       prefix: "Built for craft,",
       suffix: "made for Minecraft.",
-      body: "Lightweight native Minecraft: Java Edition launcher written in Go with MyGo native UI. No Electron, no Tauri, no bundled web runtime.",
+      body: "Lightweight, native Minecraft: Java Edition launcher. Unified experience across all three desktop platforms, 100% verified on real hardware across versions and loaders. No bloated web wrappers, no compatibility guesswork.",
       downloadMacArm: "Download for macOS (Apple Silicon)",
       downloadWinX64: "Download for Windows (x64)",
       downloadLabel: "Download",
