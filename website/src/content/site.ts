@@ -132,6 +132,15 @@ export interface SiteCopy {
       a: string;
     }>;
   };
+  credits: {
+    id: string;
+    title: string;
+    body: string;
+    items: Array<{
+      name: string;
+      head: string;
+    }>;
+  };
   footer: {
     watermark: string;
     disclaimer: string;
@@ -191,6 +200,7 @@ export const copy: Record<Locale, SiteCopy> = {
       { id: "runtime", label: "运行与安全", icon: "cpu" },
       { id: "opensource", label: "开源承诺", icon: "code" },
       { id: "faq", label: "常见问题", icon: "help" },
+      { id: "credits", label: "致谢", icon: "heart" },
     ],
     hero: {
       prefix: "为实用而造的",
@@ -518,6 +528,16 @@ export const copy: Record<Locale, SiteCopy> = {
         },
       ],
     },
+    credits: {
+      id: "credits",
+      title: "致谢",
+      body: "启动器的开发和发展离不开他们的辛苦付出。",
+      items: [
+        { name: "Ou_Takahiro", head: "/heads/Ou_Takahiro.png" },
+        { name: "XiaoMouzOvO", head: "/heads/XiaoMouzOvO.png" },
+        { name: "iskj", head: "/heads/iskj.png" },
+      ],
+    },
     footer: {
       watermark: "Meow Craft Launcher",
       disclaimer:
@@ -576,6 +596,7 @@ export const copy: Record<Locale, SiteCopy> = {
       { id: "runtime", label: "Runtime & Safety", icon: "cpu" },
       { id: "opensource", label: "Open Source", icon: "code" },
       { id: "faq", label: "FAQ", icon: "help" },
+      { id: "credits", label: "Credits", icon: "heart" },
     ],
     hero: {
       prefix: "Built for craft,",
@@ -901,6 +922,16 @@ export const copy: Record<Locale, SiteCopy> = {
           q: "How do I verify downloaded releases?",
           a: "Every GitHub Release includes a `SHA256SUMS` manifest, and macOS DMGs are code-signed and notarized with Apple Developer credentials.",
         },
+      ],
+    },
+    credits: {
+      id: "credits",
+      title: "Credits",
+      body: "The development and growth of mcl would not be possible without their dedicated work and support.",
+      items: [
+        { name: "Ou_Takahiro", head: "/heads/Ou_Takahiro.png" },
+        { name: "XiaoMouzOvO", head: "/heads/XiaoMouzOvO.png" },
+        { name: "iskj", head: "/heads/iskj.png" },
       ],
     },
     footer: {

@@ -548,6 +548,30 @@ const defaultDownload = t.downloads[0]!;
           ))}
         </div>
       </section>
+
+      {/* 6. #credits Acknowledgements */}
+      <section id={t.credits.id} class="section-block" aria-labelledby="credits-heading">
+        <hr class="hairline-divider" style="margin-bottom: 56px;" />
+        <h2 id="credits-heading" class="section-h2">{t.credits.title}</h2>
+        <p class="section-lead">{t.credits.body}</p>
+
+        <div class="credits-grid">
+          {t.credits.items.map((person) => (
+            <div class="credit-card">
+              <img
+                class="credit-head pixel-img"
+                src={person.head}
+                alt={person.name}
+                width="44"
+                height="44"
+                loading="lazy"
+                decoding="async"
+              />
+              <span class="credit-name">{person.name}</span>
+            </div>
+          ))}
+        </div>
+      </section>
     </main>
 
     {/* Footer with Giant Translucent Wordmark */}
