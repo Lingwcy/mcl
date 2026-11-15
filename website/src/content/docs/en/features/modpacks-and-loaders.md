@@ -16,6 +16,8 @@ order: 3
 - **Forge** (legacy `1.7.10` / `1.12.2` and modern client processors)
 - **NeoForge**
 
+> For verified Windows version coverage and known network boundaries, see [Windows Compatibility](/docs/reference/windows-compatibility/).
+
 ## Importing modpacks
 
 You can import `.mrpack` (Modrinth) and `.zip` (CurseForge manifest) archives either from the Market or from a local file on disk:

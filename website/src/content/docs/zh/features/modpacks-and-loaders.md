@@ -16,6 +16,8 @@ order: 3
 - **Forge**（同时兼容 `1.7.10` / `1.12.2` 旧版安装格式与现代客户端处理器）
 - **NeoForge**
 
+> 查看当前 Windows 平台的实测版本与边界说明，请参阅 [Windows 兼容性说明](/zh/docs/reference/windows-compatibility/)。
+
 ## 导入整合包
 
 支持从市场直接安装，或从本地导入 `.mrpack`（Modrinth）与 `.zip`（CurseForge）整合包归档：
