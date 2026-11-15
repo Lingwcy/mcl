@@ -23,11 +23,11 @@ order: 4
     <thead>
       <tr>
         <th scope="col">MC 版本</th>
-        <th scope="col">Vanilla</th>
-        <th scope="col">Fabric</th>
-        <th scope="col">Quilt</th>
-        <th scope="col">Forge</th>
-        <th scope="col">NeoForge</th>
+        <th scope="col"><span class="compat-th"><img src="/loaders/vanilla.svg" width="22" height="22" alt="" class="pixel-img" aria-hidden="true" /><span>Vanilla</span></span></th>
+        <th scope="col"><span class="compat-th"><img src="/loaders/fabric.svg" width="22" height="22" alt="" class="pixel-img" aria-hidden="true" /><span>Fabric</span></span></th>
+        <th scope="col"><span class="compat-th"><img src="/loaders/quilt.svg" width="22" height="22" alt="" class="pixel-img" aria-hidden="true" /><span>Quilt</span></span></th>
+        <th scope="col"><span class="compat-th"><img src="/loaders/forge.svg" width="22" height="22" alt="" class="pixel-img" aria-hidden="true" /><span>Forge</span></span></th>
+        <th scope="col"><span class="compat-th"><img src="/loaders/neoforge.svg" width="22" height="22" alt="" class="pixel-img" aria-hidden="true" /><span>NeoForge</span></span></th>
       </tr>
     </thead>
     <tbody>
