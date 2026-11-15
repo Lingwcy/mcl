@@ -117,11 +117,14 @@ func TestMirrorRedirectsDropSecretsAndRejectLocalOrPlaintextTargets(t *testing.T
 			t.Fatalf("redirect retained %s", key)
 		}
 	}
-	for _, address := range []string{"http://cdn.example.com/file", "https://localhost/file", "https://127.0.0.1/file", "https://[::1]/file", "https://10.0.0.1/file", "https://user:pass@cdn.example.com/file"} {
+	for _, address := range []string{"http://cdn.example.com/file", "https://localhost/file", "https://127.0.0.1/file", "https://[::1]/file", "https://10.0.0.1/file", "https://user:pass@cdn.example.com/file", "https://cdn.example.com:8443/file"} {
 		u, _ := url.Parse(address)
 		if safeMirrorRedirect(u) {
 			t.Errorf("accepted unsafe redirect %s", address)
 		}
+	}
+	if u, _ := url.Parse("https://bmclapi.hurtmc.com:443/download/abc"); !safeMirrorRedirect(u) {
+		t.Fatal("rejected explicit :443 HTTPS mirror redirect")
 	}
 }
 

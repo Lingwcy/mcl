@@ -22,7 +22,16 @@ type pgMember struct{ name, mapped, desc string }
 type pgClass struct {
 	name, mapped    string
 	fields, methods map[string]pgMember
+	methodOrder     []pgMember
 }
+
+type tsrgOrder uint8
+
+const (
+	tsrgMappedFieldOrder tsrgOrder = iota
+	tsrgOriginalLexicalOrder
+	tsrgSrgUtilsHashOrder
+)
 
 func prepareForgeMappings(ctx context.Context, cache, stage *os.Root, base meta.Version, p preparedProcessor) error {
 	fixed := forgeMappings(base)
@@ -65,11 +74,12 @@ func prepareForgeMappings(ctx context.Context, cache, stage *os.Root, base meta.
 		return err
 	}
 	expected := p.outputs[p.copyMappings]
-	// Different published mapping-library generations used different field order.
-	// Neither is accepted by guess: the installer's fixed output SHA1 chooses it.
+	// Different published mapping-library generations used different member orders
+	// (field mapped vs original order, or srgutils HashMap tie-breaking on overloads).
+	// None is accepted by guess: the installer's fixed output SHA1 chooses it.
 	var data []byte
-	for _, mappedOrder := range []bool{true, false} {
-		candidate, err := writeTSRG(ctx, classes, p.mappingFormat, mappedOrder)
+	for _, order := range []tsrgOrder{tsrgMappedFieldOrder, tsrgOriginalLexicalOrder, tsrgSrgUtilsHashOrder} {
+		candidate, err := writeTSRG(ctx, classes, p.mappingFormat, order)
 		if err != nil {
 			return err
 		}
@@ -180,10 +190,14 @@ func parseProguard(ctx context.Context, raw []byte) ([]*pgClass, error) {
 			descriptor.WriteString(desc)
 			key := name + descriptor.String()
 			value := pgMember{name, right, descriptor.String()}
-			if old, ok := current.methods[key]; ok && old.mapped != right {
-				return nil, errors.New("官方映射方法重名冲突")
+			if old, ok := current.methods[key]; ok {
+				if old.mapped != right {
+					return nil, errors.New("官方映射方法重名冲突")
+				}
+			} else {
+				current.methods[key] = value
+				current.methodOrder = append(current.methodOrder, value)
 			}
-			current.methods[key] = value
 		} else {
 			fields := strings.Fields(declaration)
 			if len(fields) != 2 || !mappingName(fields[1]) {
@@ -251,7 +265,72 @@ func javaLexical(a, b string) int {
 	}
 	return slices.Compare(utf16.Encode([]rune(a)), utf16.Encode([]rune(b)))
 }
-func writeTSRG(ctx context.Context, classes []*pgClass, format string, mappedOrder bool) ([]byte, error) {
+func javaStringHash(s string) uint32 {
+	var h uint32
+	for _, r := range utf16.Encode([]rune(s)) {
+		h = 31*h + uint32(r)
+	}
+	return h ^ (h >> 16)
+}
+
+// java8HashMapMethodOrder replays Java 8+ HashMap bucket iteration order for
+// srgutils methods keyed by name+desc so stable name-only sorting matches exact output digests.
+func java8HashMapMethodOrder(items []pgMember) []pgMember {
+	if len(items) <= 1 {
+		return slices.Clone(items)
+	}
+	type entry struct {
+		key  string
+		hash uint32
+		val  pgMember
+	}
+	capSize, threshold := 16, 12
+	table := make([][]entry, capSize)
+	size := 0
+	for _, m := range items {
+		key := m.name + m.desc
+		h := javaStringHash(key)
+		idx := int(h) & (capSize - 1)
+		updated := false
+		for i := range table[idx] {
+			if table[idx][i].hash == h && table[idx][i].key == key {
+				table[idx][i].val = m
+				updated = true
+				break
+			}
+		}
+		if updated {
+			continue
+		}
+		table[idx] = append(table[idx], entry{key: key, hash: h, val: m})
+		size++
+		if size > threshold {
+			oldCap := capSize
+			capSize <<= 1
+			threshold <<= 1
+			resized := make([][]entry, capSize)
+			for j := 0; j < oldCap; j++ {
+				for _, e := range table[j] {
+					if int(e.hash)&oldCap == 0 {
+						resized[j] = append(resized[j], e)
+					} else {
+						resized[j+oldCap] = append(resized[j+oldCap], e)
+					}
+				}
+			}
+			table = resized
+		}
+	}
+	out := make([]pgMember, 0, size)
+	for _, bucket := range table {
+		for _, e := range bucket {
+			out = append(out, e.val)
+		}
+	}
+	return out
+}
+
+func writeTSRG(ctx context.Context, classes []*pgClass, format string, order tsrgOrder) ([]byte, error) {
 	names := make(map[string]string, len(classes))
 	for _, class := range classes {
 		names[class.name] = class.mapped
@@ -295,7 +374,7 @@ func writeTSRG(ctx context.Context, classes []*pgClass, format string, mappedOrd
 			fields = append(fields, field)
 		}
 		slices.SortFunc(fields, func(a, b pgMember) int {
-			if !mappedOrder {
+			if order != tsrgMappedFieldOrder {
 				return javaLexical(a.name, b.name)
 			}
 			if cmp := javaLexical(a.mapped, b.mapped); cmp != 0 {
@@ -310,16 +389,26 @@ func writeTSRG(ctx context.Context, classes []*pgClass, format string, mappedOrd
 			}
 			line(string(byte(9)) + field.name + extra + " " + field.mapped)
 		}
-		methods := make([]pgMember, 0, len(class.methods))
-		for _, method := range class.methods {
-			methods = append(methods, method)
-		}
-		slices.SortFunc(methods, func(a, b pgMember) int {
-			if cmp := javaLexical(a.name, b.name); cmp != 0 {
-				return cmp
+		var methods []pgMember
+		if order == tsrgSrgUtilsHashOrder {
+			// NamedMappingFile$Cls populates its HashMap from input order, then
+			// MappingFile$Cls populates its own HashMap while iterating it.
+			methods = java8HashMapMethodOrder(java8HashMapMethodOrder(class.methodOrder))
+			slices.SortStableFunc(methods, func(a, b pgMember) int {
+				return javaLexical(a.name, b.name)
+			})
+		} else {
+			methods = make([]pgMember, 0, len(class.methods))
+			for _, method := range class.methods {
+				methods = append(methods, method)
 			}
-			return javaLexical(a.desc, b.desc)
-		})
+			slices.SortFunc(methods, func(a, b pgMember) int {
+				if cmp := javaLexical(a.name, b.name); cmp != 0 {
+					return cmp
+				}
+				return javaLexical(a.desc, b.desc)
+			})
+		}
 		for _, method := range methods {
 			line(string(byte(9)) + method.name + " " + method.desc + " " + method.mapped)
 		}

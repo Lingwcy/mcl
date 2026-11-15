@@ -155,8 +155,9 @@ func (p Plan) Target() meta.Platform { return p.target }
 
 // ProcessArguments is sensitive and must only be passed to os/exec. Keeping
 // game arguments on the command line avoids writing access tokens to disk.
-// Java 8 receives JVM options directly, with only its classpath replaced by a
-// manifest-only JAR. Java 9+ retains its JVM argument-file transport.
+// Java 8 receives JVM options directly, keeping direct -cp when the command line
+// fits within OS limits and falling back to a manifest-only JAR otherwise.
+// Java 9+ retains its JVM argument-file transport.
 func (p Plan) ProcessArguments(supportFile string) []string {
 	args, _ := p.ProcessCommand(supportFile)
 	return args
@@ -171,6 +172,9 @@ func (p Plan) ProcessCommand(supportFile string) ([]string, error) {
 	if !safeText(supportFile) || supportFile == "" {
 		return nil, errors.New("invalid JVM support path")
 	}
+	if err := java.ValidateNativeArguments([]string{supportFile}, p.target.OS, p.nativeEncoding); err != nil {
+		return nil, err
+	}
 	var args []string
 	if p.javaMajor == 8 {
 		index, err := p.classpathIndex()
@@ -178,7 +182,9 @@ func (p Plan) ProcessCommand(supportFile string) ([]string, error) {
 			return nil, err
 		}
 		args = slices.Clone(p.arguments)
-		args[index] = supportFile
+		if !java8DirectClasspathFits(p.executable, args, p.target.OS) {
+			args[index] = supportFile
+		}
 	} else {
 		args = append([]string{"@" + supportFile}, p.arguments[p.mainIndex:]...)
 	}
@@ -186,6 +192,71 @@ func (p Plan) ProcessCommand(supportFile string) ([]string, error) {
 		return nil, err
 	}
 	return args, nil
+}
+
+const (
+	java8WindowsDirectCommandLimit = 30000
+	java8POSIXDirectArgLimit       = 100000
+	java8POSIXDirectTotalLimit     = 256 << 10
+)
+
+func java8DirectClasspathFits(executable string, args []string, targetOS string) bool {
+	if targetOS == "windows" {
+		remaining := java8WindowsDirectCommandLimit - 1
+		if !consumeWindowsArgUnits(executable, &remaining) {
+			return false
+		}
+		for _, arg := range args {
+			remaining--
+			if !consumeWindowsArgUnits(arg, &remaining) {
+				return false
+			}
+		}
+		return true
+	}
+	total := len(executable) + 1
+	if len(executable) > java8POSIXDirectArgLimit || total > java8POSIXDirectTotalLimit {
+		return false
+	}
+	for _, arg := range args {
+		if len(arg) > java8POSIXDirectArgLimit {
+			return false
+		}
+		total += len(arg) + 1
+		if total > java8POSIXDirectTotalLimit {
+			return false
+		}
+	}
+	return true
+}
+
+func consumeWindowsArgUnits(value string, remaining *int) bool {
+	quoted := len(value) == 0 || strings.ContainsAny(value, " \t")
+	if quoted {
+		*remaining -= 2
+	}
+	backslashes := 0
+	for _, r := range value {
+		*remaining--
+		if r > 0xffff {
+			*remaining--
+		}
+		if r == '"' {
+			*remaining -= backslashes + 1
+		}
+		if r == '\\' {
+			backslashes++
+		} else {
+			backslashes = 0
+		}
+		if *remaining < 0 {
+			return false
+		}
+	}
+	if quoted {
+		*remaining -= backslashes
+	}
+	return *remaining >= 0
 }
 
 func (p Plan) JVMArgumentFile() ([]byte, error) {
@@ -341,6 +412,12 @@ func build(o Options, s *Session) (Preview, error) {
 		return Preview{}, err
 	}
 	args = append(args, collector...)
+	if isLegacyFML(o.Version.MainClass, game) {
+		args = appendMissingSystemProperties(args, o.JVMArguments,
+			"-Dfml.ignoreInvalidMinecraftCertificates=true",
+			"-Dfml.ignorePatchDiscrepancies=true",
+		)
+	}
 	args = append(args, o.JVMArguments...)
 	for _, arg := range jvm {
 		if strings.Contains(arg, "${auth_") || strings.Contains(arg, "${clientid}") {
@@ -427,4 +504,30 @@ func safeText(value string) bool {
 }
 func validMainClass(value string) bool {
 	return regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$`).MatchString(value)
+}
+
+func isLegacyFML(mainClass string, gameArgs []string) bool {
+	if mainClass != "net.minecraft.launchwrapper.Launch" {
+		return false
+	}
+	for _, arg := range gameArgs {
+		if arg == "cpw.mods.fml.common.launcher.FMLTweaker" || arg == "net.minecraftforge.fml.common.launcher.FMLTweaker" {
+			return true
+		}
+	}
+	return false
+}
+
+func appendMissingSystemProperties(dst, existing []string, defaults ...string) []string {
+	for _, prop := range defaults {
+		key, _, _ := strings.Cut(prop, "=")
+		prefix := key + "="
+		if slices.ContainsFunc(existing, func(arg string) bool {
+			return arg == key || strings.HasPrefix(arg, prefix)
+		}) {
+			continue
+		}
+		dst = append(dst, prop)
+	}
+	return dst
 }

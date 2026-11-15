@@ -152,8 +152,8 @@ func forgeArg(input string, values map[string]forgeValue) (forgeValue, error) {
 				if value.file || safeForgeLiteral(value.text) {
 					return value, nil
 				}
-			} else if (key == "ROOT" || key == "LIBRARY_DIR") && strings.HasPrefix(suffix, "/") && archive.SafePath(suffix[1:]) {
-				return forgeValue{path.Join(value.text, suffix[1:]), true}, nil
+			} else if (key == "ROOT" || key == "LIBRARY_DIR") && strings.HasPrefix(suffix, "/") && archive.SafePath(strings.TrimSuffix(suffix[1:], "/")) {
+				return forgeValue{path.Join(value.text, strings.TrimSuffix(suffix[1:], "/")), true}, nil
 			}
 		}
 		return forgeValue{}, errors.New("未知或不安全的安装处理器变量")
@@ -172,6 +172,7 @@ func knownForgeProcessor(c meta.Coordinate) bool {
 	switch c.Group + ":" + c.Artifact {
 	case "net.minecraftforge:installertools", "net.minecraftforge:jarsplitter",
 		"net.minecraftforge:ForgeAutoRenamingTool", "net.minecraftforge:binarypatcher",
+		"net.md-5:SpecialSource",
 		"net.neoforged.installertools:installertools", "net.neoforged.installertools:jarsplitter",
 		"net.neoforged.installertools:binarypatcher", "net.neoforged:AutoRenamingTool",
 		"net.neoforged:installertools", "net.neoforged:jarsplitter", "net.neoforged:binarypatcher":
@@ -266,7 +267,7 @@ func prepareForgeProcessor(spec forgeProcessor, values map[string]forgeValue, st
 			}
 		}
 		if arg.file {
-			writeFlag := index > 0 && slices.Contains([]string{"--output", "--out", "--slim", "--extra", "--out-jar", "--outJar", "--outputFile", "--to", "--optional"}, spec.Args[index-1])
+			writeFlag := index > 0 && slices.Contains([]string{"--output", "--out", "--slim", "--extra", "--out-jar", "--outJar", "--outputFile", "--to", "--optional", "--extract-libraries-to"}, spec.Args[index-1])
 			if !writeFlag {
 				result.inputs = append(result.inputs, arg.text)
 			}
@@ -280,6 +281,12 @@ func prepareForgeProcessor(spec forgeProcessor, values map[string]forgeValue, st
 			result.nativeTask = task
 			result.nativeValues = nativeValues
 		case "MERGE_MAPPING", "CHAIN_MAPPING", "EXTRACT_INHERITANCE", "SRG_TO_MCP", "MAPPINGS_CSV":
+		case "PROCESS_MINECRAFT_JAR":
+			for i := 0; i+1 < len(nativeValues); i++ {
+				if !nativeValues[i].file && nativeValues[i].text == "--extract-libraries-to" && (!nativeValues[i+1].file || nativeValues[i+1].text != "libraries") {
+					return result, errors.New("安装处理器库提取目录必须为私有库根目录")
+				}
+			}
 		case "DOWNLOAD_MOJMAPS":
 			if err := validateMappingTask(nativeValues); err != nil {
 				return result, err

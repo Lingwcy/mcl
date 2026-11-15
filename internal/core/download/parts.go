@@ -208,7 +208,7 @@ func openPartial(ctx context.Context, root *os.Root, f File, address string, coo
 	fail := func(err error) (*partial, error) { p.close(); return nil, err }
 	err = readPartial(parts, p.marker, &p.state)
 	if err == nil {
-		if p.state.Schema != 1 || p.state.Key != key || p.state.Path != f.Path || p.state.Object != objectForFile(f) || p.state.Offset < 0 || p.state.Offset > f.Size || len(p.state.Source) > 64 || len(p.state.ETag) > 256 || len(p.state.Modified) > 64 || strings.ContainsAny(p.state.ETag+p.state.Modified, "\r\n\x00") {
+		if p.state.Schema != 1 || p.state.Key != key || p.state.Path != f.Path || p.state.Object != objectForFile(f) || p.state.Offset < 0 || p.state.Offset > f.Size+f.SizeTolerance || len(p.state.Source) > 64 || len(p.state.ETag) > 256 || len(p.state.Modified) > 64 || strings.ContainsAny(p.state.ETag+p.state.Modified, "\r\n\x00") {
 			return fail(errors.New("下载分片身份不匹配，未接管"))
 		}
 	}
@@ -257,7 +257,7 @@ func openPartial(ctx context.Context, root *os.Root, f File, address string, coo
 		return fail(errors.New("下载分片打开时发生变化"))
 	}
 	p.offset = info.Size()
-	p.reset = p.offset > f.Size || p.state.Offset > p.offset || p.state.Source != "" && p.state.Source != shaText(address)
+	p.reset = p.offset > f.Size+f.SizeTolerance || p.state.Offset > p.offset || p.state.Source != "" && p.state.Source != shaText(address)
 	if p.state.Offset > 0 {
 		decoded, e := hex.DecodeString(p.state.PrefixSHA256)
 		if e != nil || len(decoded) != 32 {
@@ -310,7 +310,7 @@ func (p *partial) checkpoint(ctx context.Context) error {
 	if err != nil {
 		return errors.Join(ErrCheckpoint, err)
 	}
-	if info.Size() > p.state.Object.Size {
+	if info.Size() > p.state.Object.Size+p.state.Object.SizeTolerance {
 		return errors.Join(ErrCheckpoint, errors.New("下载分片超过固定大小"))
 	}
 	hash, err := prefix(context.WithoutCancel(ctx), p.file, info.Size())

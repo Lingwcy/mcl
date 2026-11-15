@@ -102,7 +102,7 @@ func verifyProcessorDirectory(ctx context.Context, stage *os.Root, known map[str
 				target := path.Join(name, child)
 				fixed, ok := known[target]
 				if !ok {
-					return errors.New("处理器目录含未固定来源文件")
+					return fmt.Errorf("处理器目录含未固定来源文件: %s", target)
 				}
 				if _, err := hashForgeFile(ctx, stage, target, fixed.SHA1, fixed.Size); err != nil {
 					return err

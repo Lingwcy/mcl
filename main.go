@@ -100,6 +100,7 @@ func run() error {
 	catalog.HTTP.Transport = network
 	catalog.VerifiedFetch = sharedDownloads.FetchMetadata
 	loaderCatalog.HTTP.Transport = network
+	loaderCatalog.Transfers = transfers
 	key := os.Getenv("MCL_CURSEFORGE_API_KEY")
 	if key == "" {
 		key = os.Getenv("GRUN_CURSEFORGE_API_KEY")

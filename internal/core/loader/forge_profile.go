@@ -104,7 +104,11 @@ func readForgeSpec(ctx context.Context, z *archive.Zip, request Request) (forgeS
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return spec, meta.Version{}, err
 	}
-	for _, key := range []string{"json", "processors", "data", "libraries", "path"} {
+	nullKeys := []string{"json", "processors", "data", "libraries"}
+	if format == ForgeFormatEmbedded {
+		nullKeys = append(nullKeys, "path")
+	}
+	for _, key := range nullKeys {
 		if raw, ok := fields[key]; ok && strings.TrimSpace(string(raw)) == "null" {
 			return spec, meta.Version{}, identityError("安装配置显式字段不能为null")
 		}
@@ -142,6 +146,9 @@ func readForgeSpec(ctx context.Context, z *archive.Zip, request Request) (forgeS
 		spec.LegacyGame = true
 	} else if version.Arguments == nil || version.LegacyArguments != "" || !forgeMainClass(version.MainClass) {
 		return spec, version, errors.New("启动配置与所选加载器或 Minecraft 版本不匹配")
+	}
+	if format == ForgeFormatProcessors && spec.Spec == 0 && spec.LegacyGame {
+		return spec, version, identityError("旧版本JSON分支与spec0处理器模式矛盾")
 	}
 	if format == ForgeFormatEmbedded {
 		if err := validateEmbeddedForgeSpec(spec, version, z.Has, request); err != nil {

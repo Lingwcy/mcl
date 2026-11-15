@@ -13,6 +13,7 @@ import (
 var (
 	windowUser32        = windows.NewLazySystemDLL("user32.dll")
 	windowGetClientRect = windowUser32.NewProc("GetClientRect")
+	windowGetClassName  = windowUser32.NewProc("GetClassNameW")
 	windowIsIconic      = windowUser32.NewProc("IsIconic")
 	windowMonitor       = windowUser32.NewProc("MonitorFromWindow")
 	windowDWM           = windows.NewLazySystemDLL("dwmapi.dll")
@@ -36,7 +37,7 @@ func GameWindowProbe() func(launch.ProcessIdentity) (bool, error) {
 }
 
 func windowsProcessWindow(pid int) (bool, error) {
-	for _, proc := range []*windows.LazyProc{windowGetClientRect, windowIsIconic, windowGetAttribute, windowMonitor} {
+	for _, proc := range []*windows.LazyProc{windowGetClientRect, windowGetClassName, windowIsIconic, windowGetAttribute, windowMonitor} {
 		if proc.Find() != nil {
 			return false, errors.New("当前桌面会话不支持窗口可见性观测")
 		}
@@ -89,6 +90,13 @@ func enumerateProcessWindow(hwnd windows.HWND, argument unsafe.Pointer) uintptr 
 	if ok == 0 {
 		state.failure = errors.New("无法读取游戏窗口客户区边界")
 		return 1
+	}
+	var classBuf [64]uint16
+	if n, _, _ := windowGetClassName.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&classBuf[0])), uintptr(len(classBuf))); n > 0 {
+		// Swing/AWT modal dialogs (for example Fabric's crash popup) are error prompts, not the game window.
+		if windows.UTF16ToString(classBuf[:n]) == "SunAwtDialog" {
+			return 1
+		}
 	}
 	if visibleClientWindow(state.pid, int(owner), true, false, cloaked != 0, int64(rect.right)-int64(rect.left), int64(rect.bottom)-int64(rect.top)) {
 		state.found = true

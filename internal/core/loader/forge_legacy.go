@@ -40,11 +40,21 @@ func legacyForgeID(request Request, id string) bool {
 	build := strings.TrimPrefix(request.Version, request.GameVersion+"-")
 	return id == request.GameVersion+"-Forge"+build || id == request.GameVersion+"-forge-"+build || id == request.GameVersion+"-forge"+request.GameVersion+"-"+build
 }
+func preInheritLegacyForge(gameVersion string) bool {
+	return gameVersion == "1.6.1" || gameVersion == "1.6.2" || gameVersion == "1.6.4"
+}
+
 func legacyForgeCore(request Request, name string) bool {
 	coordinate, err := meta.ParseCoordinate(name)
 	build := strings.TrimPrefix(request.Version, request.GameVersion+"-")
 	_, supported := legacyForgeTweakerFor(request)
-	return err == nil && supported && coordinate.Group == "net.minecraftforge" && coordinate.Artifact == "forge" && coordinate.Version == request.GameVersion+"-"+build && coordinate.Extension == "jar" && (coordinate.Classifier == "" || coordinate.Classifier == "universal")
+	if err != nil || !supported || coordinate.Group != "net.minecraftforge" || coordinate.Extension != "jar" || (coordinate.Classifier != "" && coordinate.Classifier != "universal") {
+		return false
+	}
+	if coordinate.Artifact == "forge" {
+		return coordinate.Version == request.GameVersion+"-"+build
+	}
+	return preInheritLegacyForge(request.GameVersion) && coordinate.Artifact == "minecraftforge" && (coordinate.Version == build || coordinate.Version == request.GameVersion+"-"+build)
 }
 
 func legacyForgeArguments(request Request, template string) (meta.Arguments, error) {
@@ -223,7 +233,7 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 	if target != version.ID {
 		return spec, true, errors.New("旧Forge安装目标与客户端版本ID不匹配")
 	}
-	if version.InheritsFrom != base.ID {
+	if version.InheritsFrom != base.ID && !(preInheritLegacyForge(request.GameVersion) && version.InheritsFrom == "") {
 		return spec, true, errors.New("旧Forge客户端父版本与官方基底不匹配")
 	}
 	if version.MainClass != legacyForgeMain {
@@ -245,6 +255,7 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 	if len(details.Libraries) == 0 || len(details.Libraries) > 128 {
 		return spec, true, errors.New("旧Forge运行库数量无效")
 	}
+	var filteredLibraries []legacyForgeLibrary
 	core, wrapper := 0, 0
 	for _, lib := range details.Libraries {
 		if len(lib.Checksums) > 16 {
@@ -271,8 +282,13 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 			core++
 		}
 		if len(lib.Natives) != 0 || len(lib.Downloads.Classifiers) != 0 {
+			// Standalone 1.6.x manifests repeat vanilla native entries; defer those to base.Libraries.
+			if preInheritLegacyForge(request.GameVersion) && matchesBaseNativeLibrary(base, lib) {
+				continue
+			}
 			return spec, true, errors.New("旧Forge加载器库不能替换官方native分类")
 		}
+		filteredLibraries = append(filteredLibraries, lib)
 	}
 	if core != 1 || wrapper != 1 {
 		return spec, true, errors.New("旧Forge运行库未唯一引用内嵌Universal和已支持LaunchWrapper")
@@ -284,8 +300,20 @@ func readLegacyForgeSpec(ctx context.Context, z *archive.Zip, request Request, b
 	version.Arguments = &args
 	version.LegacyArguments = ""
 	version.Java.Major = 8
-	spec.version, spec.libraries = version, details.Libraries
+	spec.version, spec.libraries = version, filteredLibraries
 	return spec, true, nil
+}
+
+func matchesBaseNativeLibrary(base meta.Version, lib legacyForgeLibrary) bool {
+	if len(lib.Downloads.Classifiers) != 0 || lib.URL != "" || len(lib.Checksums) != 0 || len(lib.Natives) == 0 {
+		return false
+	}
+	for _, baseLib := range base.Libraries {
+		if baseLib.Name == lib.Name && len(baseLib.Natives) != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // Exact historical public repository roots may upgrade to canonical HTTPS.

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"testing"
 
@@ -123,5 +124,95 @@ func TestProcessorVariablesAreBoundedAndTyped(t *testing.T) {
 	}
 	if _, err := forgeArg("{ROOT}/../outside", values); err == nil {
 		t.Fatal("private path escape accepted")
+	}
+}
+
+func TestOfflineSanitizedMappingsSupportSrgUtilsHashOverloadOrder(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	raw := []byte(strings.Join([]string{
+		"com.mojang.blaze3d.platform.DebugMemoryUntracker -> ezz:",
+		"    void untrack(long) -> a",
+		"    void untrack(org.lwjgl.system.Pointer) -> a",
+		"",
+	}, "\n"))
+	classes, err := parseProguard(t.Context(), raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTSRG, err := writeTSRG(t.Context(), classes, "TSRG", tsrgSrgUtilsHashOrder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(wantTSRG), "\tuntrack (Lorg/lwjgl/system/Pointer;)V a\n\tuntrack (J)V a\n") {
+		t.Fatalf("unexpected srgutils overload bucket order:\n%s", string(wantTSRG))
+	}
+	base := meta.Version{ID: "mapping-overload", Downloads: map[string]meta.Download{}}
+	fixed := meta.Download{URL: "https://piston-data.mojang.com/fixed.txt", SHA1: fmt.Sprintf("%x", sha1.Sum(raw)), Size: int64(len(raw))}
+	base.Downloads["client_mappings"] = fixed
+	stageFixed(t, root, forgeMappings(base).Path, raw)
+	if err := root.MkdirAll("libraries", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	processor := preparedProcessor{copyMappings: "libraries/clean.tsrg", sanitizeMappings: true, mappingFormat: "TSRG", outputs: map[string]string{"libraries/clean.tsrg": fmt.Sprintf("%x", sha1.Sum(wantTSRG))}}
+	if err := prepareForgeMappings(t.Context(), root, root, base, processor); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestForgeSpec0ProcessorsSpecialSourceNullPathAndProcessMinecraftJar(t *testing.T) {
+	spec0, _ := json.Marshal(map[string]any{
+		"spec":       0,
+		"minecraft":  "1.16.5",
+		"version":    "1.16.5-forge-36.2.42",
+		"path":       "net.minecraftforge:forge:1.16.5-36.2.42",
+		"processors": []any{map[string]any{"jar": "net.md-5:SpecialSource:1.8.5"}},
+	})
+	format, err := installerFormat(spec0)
+	if err != nil || format != ForgeFormatProcessors {
+		t.Fatalf("spec0 with processors format=%q err=%v", format, err)
+	}
+
+	request := Request{Type: "forge", GameVersion: "1.18.2", Version: "40.2.21", BaseSHA1: strings.Repeat("a", 40)}
+	spec1Null, _ := json.Marshal(map[string]any{
+		"spec": 1, "minecraft": "1.18.2", "version": "1.18.2-forge-40.2.21", "path": nil, "json": "/version.json",
+		"data": map[string]any{}, "libraries": []any{}, "processors": []any{},
+	})
+	verJSON, _ := json.Marshal(map[string]any{
+		"id": "1.18.2-forge-40.2.21", "inheritsFrom": "1.18.2", "mainClass": "cpw.mods.bootstraplauncher.BootstrapLauncher",
+		"arguments": map[string]any{"game": []any{}}, "libraries": []any{map[string]any{"name": "net.minecraftforge:forge:1.18.2-40.2.21"}},
+	})
+	z := officialMetadataArchive(t, map[string][]byte{"install_profile.json": spec1Null, "version.json": verJSON})
+	if _, _, err := readForgeSpec(t.Context(), z, request); err != nil {
+		t.Fatalf("spec1 path:null rejected: %v", err)
+	}
+
+	values := map[string]forgeValue{
+		"ROOT":          {".", true},
+		"MINECRAFT_JAR": {"work/client.jar", true},
+		"PATCHED":       {"libraries/net/neoforged/minecraft-client-patched/26.1.0.15-beta/minecraft-client-patched-26.1.0.15-beta.jar", true},
+		"BINPATCH":      {"work/client.lzma", true},
+	}
+	if !knownForgeProcessor(meta.Coordinate{Group: "net.md-5", Artifact: "SpecialSource", Version: "1.8.5", Extension: "jar"}) {
+		t.Fatal("SpecialSource processor rejected")
+	}
+	proc, err := prepareForgeProcessor(forgeProcessor{
+		Jar:  "net.neoforged.installertools:installertools:4.0.12:fatjar",
+		Args: []string{"--task", "PROCESS_MINECRAFT_JAR", "--no-mod-manifest", "--input", "{MINECRAFT_JAR}", "--output", "{PATCHED}", "--extract-libraries-to", "{ROOT}/libraries/", "--apply-patches", "{BINPATCH}"},
+	}, values, t.TempDir())
+	if err != nil {
+		t.Fatalf("PROCESS_MINECRAFT_JAR rejected: %v", err)
+	}
+	if _, ok := proc.outputs[values["PATCHED"].text]; !ok || slices.Contains(proc.inputs, "libraries") {
+		t.Fatalf("PROCESS_MINECRAFT_JAR inputs/outputs wrong: %+v", proc)
+	}
+	if _, err := prepareForgeProcessor(forgeProcessor{
+		Jar:  "net.neoforged.installertools:installertools:4.0.12:fatjar",
+		Args: []string{"--task", "PROCESS_MINECRAFT_JAR", "--input", "{MINECRAFT_JAR}", "--output", "{PATCHED}", "--extract-libraries-to", "{ROOT}/other/", "--apply-patches", "{BINPATCH}"},
+	}, values, t.TempDir()); err == nil {
+		t.Fatal("unsafe extract-libraries-to path accepted")
 	}
 }

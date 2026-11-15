@@ -51,3 +51,22 @@ func TestCachedLoaderProfileCannotBindAnotherCoordinateOnAllowedHost(t *testing.
 		t.Fatal("trusted hostname allowed another coordinate")
 	}
 }
+
+func TestLoaderAllowsIdenticalUnconditionalDuplicatesAndRejectsMixedRules(t *testing.T) {
+	_, base, _, _ := legacyFixture(t)
+	request := Request{Type: "fabric", Version: "0.16.0", GameVersion: base.ID, BaseSHA1: strings.Repeat("a", 40)}
+	core := meta.Library{Name: "net.fabricmc:fabric-loader:0.16.0"}
+	c, _ := meta.ParseCoordinate(core.Name)
+	core.Downloads.Artifact = &meta.Download{Path: c.Path(), URL: "https://maven.fabricmc.net/" + c.Path(), SHA1: strings.Repeat("b", 40), Size: 100}
+	dup := core
+	dup.Downloads.Artifact = &meta.Download{Path: c.Path(), URL: "https://maven.fabricmc.net/" + c.Path(), SHA1: strings.Repeat("b", 40), Size: 100}
+	profile := Profile{Request: request, ID: "fabric-fixture", MainClass: "net.fabricmc.loader.impl.launch.knot.KnotClient", JavaMajor: 8, Libraries: []meta.Library{core, dup}}
+	if _, err := profile.Merge(base); err != nil {
+		t.Fatalf("identical unconditional duplicate rejected: %v", err)
+	}
+	dup.Rules = []meta.Rule{{Action: "allow"}}
+	profile.Libraries[1] = dup
+	if err := profile.Validate(); err == nil {
+		t.Fatal("mixed ruled and unruled duplicate accepted")
+	}
+}

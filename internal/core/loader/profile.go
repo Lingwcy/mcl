@@ -186,7 +186,7 @@ func (p Profile) Validate() error {
 		}
 		if previous, duplicate := seen[library.Name]; duplicate {
 			a, b := previous.Downloads.Artifact, library.Downloads.Artifact
-			if len(previous.Rules) == 0 || len(library.Rules) == 0 || a == nil || b == nil || *a != *b {
+			if a == nil || b == nil || *a != *b || (len(previous.Rules) == 0) != (len(library.Rules) == 0) {
 				return errors.New("加载器重复库未绑定同一文件或缺少条件规则")
 			}
 		}

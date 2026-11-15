@@ -96,4 +96,11 @@ func TestTemurinPackageAcceptsOfficialEscapedReleaseTag(t *testing.T) {
 	if err := p.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	if p.DownloadFile().SizeTolerance != 0 {
+		t.Fatal("temurin unexpectedly received size tolerance")
+	}
+	zulu := Package{Provider: "zulu", Name: "Azul Zulu", Version: "8.0.442", Major: 8, Kind: "jre", OS: "windows", Arch: "amd64", URL: "https://cdn.azul.com/zulu/bin/zulu8-ca-jre8.0.442-win_x64.zip", SHA256: strings.Repeat("a", 64), Size: 38394400}
+	if zulu.DownloadFile().SizeTolerance != 1024 {
+		t.Fatalf("zulu DownloadFile SizeTolerance = %d, want 1024", zulu.DownloadFile().SizeTolerance)
+	}
 }

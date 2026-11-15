@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,10 +25,11 @@ import (
 const MaxFileSize int64 = 2 << 30
 
 type File struct {
-	Path         string
-	SHA512       string
-	SHA256       string
-	AllowedHosts []string
+	Path          string
+	SHA512        string
+	SHA256        string
+	AllowedHosts  []string
+	SizeTolerance int64
 	meta.Download
 }
 
@@ -132,7 +134,7 @@ func (c *Client) Run(ctx context.Context, files []File, report func(Progress)) e
 		}
 		key := strings.ToLower(norm.NFC.String(f.Path))
 		if previous, ok := seen[key]; ok {
-			if previous.Path != f.Path || previous.Size != f.Size || !strings.EqualFold(previous.SHA1, f.SHA1) || !strings.EqualFold(previous.SHA512, f.SHA512) || !strings.EqualFold(previous.SHA256, f.SHA256) {
+			if previous.Path != f.Path || previous.Size != f.Size || previous.SizeTolerance != f.SizeTolerance || !strings.EqualFold(previous.SHA1, f.SHA1) || !strings.EqualFold(previous.SHA512, f.SHA512) || !strings.EqualFold(previous.SHA256, f.SHA256) {
 				return fmt.Errorf("conflicting download target %s", f.Path)
 			}
 			continue
@@ -260,9 +262,16 @@ func (c *Client) get(ctx context.Context, root *os.Root, f File, cache CacheLeas
 		}
 	}
 	sources := c.Transfers.candidates(f.URL)
-	for attempt := range c.Attempts {
-		address := sources[attempt%len(sources)]
-		retry, delay, err := c.transfer(ctx, root, f, address, len(sources) > 1, attempt+1)
+	remaining := slices.Clone(sources)
+	sourceAttempts := make(map[string]int, len(sources))
+	maxSteps := len(sources) * max(c.Attempts, 1)
+	idx := 0
+	for step := 0; len(remaining) > 0 && step < maxSteps; step++ {
+		pos := idx % len(remaining)
+		address := remaining[pos]
+		attemptNum := sourceAttempts[address] + 1
+		sourceAttempts[address] = attemptNum
+		retry, delay, err := c.transfer(ctx, root, f, address, len(remaining) > 1, attemptNum)
 		if err == nil {
 			c.Transfers.rememberSource(f.URL, address)
 			if cache != nil {
@@ -281,11 +290,35 @@ func (c *Client) get(ctx context.Context, root *os.Root, f File, cache CacheLeas
 		if ctx.Err() != nil {
 			return false, ctx.Err()
 		}
-		if !retry || attempt+1 == c.Attempts {
+		if !retry {
 			return false, err
 		}
+		code := diagnostics.Code(err)
+		// Drop a source immediately if it definitively lacks the artifact (403/404)
+		// so remaining attempts focus on surviving candidates without sleeping.
+		if code == "forbidden" || code == "not-found" {
+			remaining = append(remaining[:pos], remaining[pos+1:]...)
+			if len(remaining) == 0 {
+				return false, err
+			}
+			idx = pos % len(remaining)
+			continue
+		}
+		if attemptNum >= c.Attempts {
+			remaining = append(remaining[:pos], remaining[pos+1:]...)
+			if len(remaining) == 0 {
+				return false, err
+			}
+			idx = pos % len(remaining)
+		} else {
+			idx = (pos + 1) % len(remaining)
+		}
+		// Skip backoff when failing over immediately to an untried candidate.
+		if delay == 0 && sourceAttempts[remaining[idx]] == 0 {
+			continue
+		}
 		if delay == 0 {
-			delay = (200 * time.Millisecond) << attempt
+			delay = (200 * time.Millisecond) << (sourceAttempts[remaining[idx]] - 1)
 		}
 		_, backoff := diagnostics.Start(ctx, "backoff", f.Path)
 		timer := time.NewTimer(delay)
@@ -330,7 +363,7 @@ func Verify(ctx context.Context, root *os.Root, f File) error {
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() || info.Size() != f.Size {
+	if !info.Mode().IsRegular() || !objectForFile(f).AcceptsSize(info.Size()) {
 		return errors.New("cached file size or type mismatch")
 	}
 	if !os.SameFile(before, info) {

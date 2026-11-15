@@ -28,7 +28,10 @@ type Settings struct {
 }
 
 func DefaultSettings() Settings {
-	return Settings{GCMode: launch.GCTunedG1}
+	return Settings{
+		GCMode:   launch.GCTunedG1,
+		Download: download.Preferences{Source: download.SourceAuto},
+	}
 }
 
 func (s Settings) Validate() error {

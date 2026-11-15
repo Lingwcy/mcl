@@ -165,9 +165,10 @@ func check(ctx context.Context, files []File, runtime Runtime, incomplete, captu
 	builtins := map[string]string{"minecraft": game, "java": runtime.JavaVersion}
 	switch runtime.Loader {
 	case "fabric":
-		builtins["fabricloader"] = runtime.LoaderVersion
+		// Modern Fabric/Quilt loader JARs bundle MixinExtras; keep version uncertain offline.
+		builtins["fabricloader"], builtins["mixinextras"] = runtime.LoaderVersion, ""
 	case "quilt":
-		builtins["quilt_loader"], builtins["fabricloader"] = runtime.LoaderVersion, ""
+		builtins["quilt_loader"], builtins["fabricloader"], builtins["mixinextras"] = runtime.LoaderVersion, "", ""
 	case "forge":
 		builtins["forge"], builtins["javafml"], builtins["lowcodefml"] = runtime.LoaderVersion, "", ""
 	case "neoforge":

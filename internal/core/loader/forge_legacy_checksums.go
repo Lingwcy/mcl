@@ -91,7 +91,25 @@ func (s *ForgeInstaller) legacyForgePinnedMetadata(ctx context.Context, address,
 	}
 	var checksum *mavenChecksumError
 	var status *metadataStatusError
-	if len(pins) == 0 || !errors.As(err, &checksum) || !errors.As(checksum.cause, &status) || (status.status != http.StatusNotFound && status.status != http.StatusGone) {
+	if !errors.As(err, &checksum) {
+		return meta.Download{}, err
+	}
+	if errors.As(checksum.cause, &status) && (status.status == http.StatusBadRequest || status.status == http.StatusUnauthorized || status.status == http.StatusForbidden) {
+		return meta.Download{}, err
+	}
+	if len(pins) == 0 {
+		if strings.HasPrefix(address, "https://maven.minecraftforge.net/") && !strings.HasPrefix(relative, "net/minecraftforge/") {
+			centralAddress := "https://repo.maven.apache.org/maven2/" + relative
+			if central, centralErr := s.catalog.mavenMetadata(ctx, centralAddress, relative); centralErr == nil {
+				if central.Size > maxSize {
+					return meta.Download{}, identityError("旧Forge依赖超过剩余安装资源边界")
+				}
+				return central, nil
+			}
+			if ctx.Err() != nil {
+				return meta.Download{}, ctx.Err()
+			}
+		}
 		return meta.Download{}, err
 	}
 	size, err := s.catalog.mavenSize(ctx, address)

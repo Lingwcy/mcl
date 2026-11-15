@@ -200,3 +200,35 @@ func TestHistoricalGameAssetsUsesCurrentInstanceGeneration(t *testing.T) {
 		t.Fatal("foreign asset generation accepted")
 	}
 }
+
+func TestLegacyFMLCertificateAndDiscrepancyFlags(t *testing.T) {
+	o := legacyOptions(t, "--username ${auth_player_name} --tweakClass cpw.mods.fml.common.launcher.FMLTweaker")
+	o.Version.MainClass = "net.minecraft.launchwrapper.Launch"
+	plan, err := Build(o, session(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := plan.ProcessArguments("support.jar")
+	if !slices.Contains(args, "-Dfml.ignoreInvalidMinecraftCertificates=true") || !slices.Contains(args, "-Dfml.ignorePatchDiscrepancies=true") {
+		t.Fatalf("expected legacy FML ignore flags, got %v", args)
+	}
+
+	o.JVMArguments = []string{"-Dfml.ignoreInvalidMinecraftCertificates=false"}
+	custom, err := Build(o, session(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	customArgs := custom.ProcessArguments("support.jar")
+	if slices.Contains(customArgs, "-Dfml.ignoreInvalidMinecraftCertificates=true") || !slices.Contains(customArgs, "-Dfml.ignoreInvalidMinecraftCertificates=false") {
+		t.Fatalf("user override should supersede default flag, got %v", customArgs)
+	}
+
+	vanilla := legacyOptions(t, "--username ${auth_player_name}")
+	vp, err := Build(vanilla, session(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(vp.ProcessArguments("support.jar"), "-Dfml.ignoreInvalidMinecraftCertificates=true") {
+		t.Fatal("vanilla launch should not emit FML flags")
+	}
+}

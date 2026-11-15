@@ -293,3 +293,42 @@ func TestLegacyProfileCannotOverrideRuntimeOrTweaker(t *testing.T) {
 		t.Fatal("legacy config impersonated NeoForge")
 	}
 }
+
+func TestLegacyForge164StandaloneAndMinecraftforgeCoordinate(t *testing.T) {
+	request, base, _, _ := legacyFixture(t)
+	base.ID = "1.6.4"
+	base.Libraries = append(base.Libraries, meta.Library{
+		Name:    "org.lwjgl.lwjgl:lwjgl-platform:2.9.0",
+		Natives: map[string]string{"windows": "natives-windows"},
+	})
+	request.GameVersion = "1.6.4"
+	request.Version = "9.11.1.1345"
+	if !legacyForgeCore(request, "net.minecraftforge:minecraftforge:9.11.1.1345") {
+		t.Fatal("1.6.4 minecraftforge coordinate rejected")
+	}
+	if legacyForgeCore(Request{Type: "forge", GameVersion: "1.7.10", Version: "10.13.4.1614"}, "net.minecraftforge:minecraftforge:10.13.4.1614") {
+		t.Fatal("1.7.10 minecraftforge coordinate erroneously accepted")
+	}
+	document := map[string]any{
+		"install": map[string]any{
+			"path": "net.minecraftforge:minecraftforge:9.11.1.1345", "version": "Forge 9.11.1.1345",
+			"target": "1.6.4-Forge9.11.1.1345", "filePath": "minecraftforge-universal.jar", "minecraft": "1.6.4",
+		},
+		"versionInfo": map[string]any{
+			"id": "1.6.4-Forge9.11.1.1345", "mainClass": legacyForgeMain,
+			"minecraftArguments": "--username ${auth_player_name} --session ${auth_session} --version ${version_name} --gameDir ${game_directory} --assetsDir ${game_assets} --tweakClass cpw.mods.fml.common.launcher.FMLTweaker",
+			"libraries": []any{
+				map[string]any{"name": "net.minecraftforge:minecraftforge:9.11.1.1345"},
+				map[string]any{"name": "net.minecraft:launchwrapper:1.8"},
+				map[string]any{"name": "org.lwjgl.lwjgl:lwjgl-platform:2.9.0", "natives": map[string]string{"windows": "natives-windows"}},
+			},
+		},
+	}
+	spec, legacy, err := readLegacyForgeSpec(t.Context(), legacyArchive(t, document, map[string][]byte{"minecraftforge-universal.jar": []byte("jar")}), request, base)
+	if err != nil || !legacy {
+		t.Fatalf("1.6.4 standalone legacy forge rejected: legacy=%v err=%v", legacy, err)
+	}
+	if len(spec.libraries) != 2 {
+		t.Fatalf("expected vanilla native library to defer to base.Libraries, got %d libs", len(spec.libraries))
+	}
+}

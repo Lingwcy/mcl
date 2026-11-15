@@ -80,8 +80,8 @@ func TestJava8AndModernTransportPrivacy(t *testing.T) {
 				t.Fatal("Java 8 exposed argfile")
 			}
 			index := slices.Index(args, "-cp") + 1
-			if index == 0 || args[index] != file || args[p.mainIndex] != o.Version.MainClass {
-				t.Fatal("Java 8 boundaries changed")
+			if index == 0 || args[index] != p.arguments[index] || args[p.mainIndex] != o.Version.MainClass {
+				t.Fatal("Java 8 short classpath should stay direct")
 			}
 			urls := manifestClasspath(t, data)
 			separator := ":"
@@ -103,8 +103,17 @@ func TestJava8AndModernTransportPrivacy(t *testing.T) {
 				}
 			}
 			args[index] = "mutated"
-			if p.ProcessArguments(file)[index] != file {
+			if p.ProcessArguments(file)[index] != p.arguments[index] {
 				t.Fatal("arguments alias plan")
+			}
+
+			// Oversized classpath must still fall back to the manifest JAR.
+			long := p
+			long.arguments = slices.Clone(p.arguments)
+			long.arguments[index] = strings.Repeat(original[0]+separator, 2000) + original[0]
+			longArgs := long.ProcessArguments(file)
+			if len(longArgs) <= index || longArgs[index] != file {
+				t.Fatalf("Java 8 oversized classpath did not fall back to manifest JAR")
 			}
 		})
 	}

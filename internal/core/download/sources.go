@@ -45,7 +45,7 @@ func mirrorURL(original string) string {
 	if u.RawPath != "" {
 		return ""
 	}
-	if fixed := forgeDistributionMirror(original); fixed != "" {
+	if fixed := mavenMirrorURL(original); fixed != "" {
 		return fixed
 	}
 	switch strings.ToLower(u.Hostname()) {
@@ -71,19 +71,34 @@ func (c *TransferControl) candidates(original string) []string {
 	if c == nil || mirror == "" {
 		return official
 	}
+	return c.orderCandidates(official, []string{mirror})
+}
+
+func (c *TransferControl) orderCandidates(official, mirrors []string) []string {
+	if c == nil || len(mirrors) == 0 || len(official) == 0 {
+		return official
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	switch c.preferences.Source {
 	case SourceMirrorFirst:
-		return []string{mirror, original}
+		out := make([]string, 0, len(mirrors)+len(official))
+		out = append(out, mirrors...)
+		return append(out, official...)
 	case SourceAuto:
-		u, _ := url.Parse(original)
+		u, _ := url.Parse(official[0])
 		if recent := c.preferred[strings.ToLower(u.Hostname())]; recent.mirror && time.Now().Before(recent.until) {
-			return []string{mirror, original}
+			out := make([]string, 0, len(mirrors)+len(official))
+			out = append(out, mirrors...)
+			return append(out, official...)
 		}
-		return []string{original, mirror}
+		out := make([]string, 0, len(official)+len(mirrors))
+		out = append(out, official...)
+		return append(out, mirrors...)
 	case SourceOfficialFirst:
-		return []string{original, mirror}
+		out := make([]string, 0, len(official)+len(mirrors))
+		out = append(out, official...)
+		return append(out, mirrors...)
 	default:
 		return official
 	}
@@ -94,18 +109,65 @@ func (c *TransferControl) rememberSource(original, successful string) {
 		return
 	}
 	u, _ := url.Parse(original)
+	mirrored := successful != original && successful != centralAlternate(original)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.preferences.Source == SourceAuto {
-		c.preferred[strings.ToLower(u.Hostname())] = sourceHealth{mirror: successful != original, until: time.Now().Add(10 * time.Minute)}
+		c.preferred[strings.ToLower(u.Hostname())] = sourceHealth{mirror: mirrored, until: time.Now().Add(10 * time.Minute)}
 	}
+}
+
+// SourceMode returns the active source selection policy.
+func (c *TransferControl) SourceMode() SourceMode {
+	if c == nil {
+		return SourceOfficial
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.preferences.Source
+}
+
+func (c *TransferControl) hasSpeedLimit() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.preferences.SpeedLimitKiB > 0
+}
+
+// OrderURLs orders official and mirror candidates according to the active source
+// policy while reusing recent automatic mirror health per official host.
+func (c *TransferControl) OrderURLs(official string, mirrors ...string) []string {
+	return c.orderCandidates([]string{official}, mirrors)
+}
+
+// RememberCandidate updates automatic source health after a metadata request.
+func (c *TransferControl) RememberCandidate(official, successful string) {
+	if c == nil || official == "" || successful == "" {
+		return
+	}
+	u, err := url.Parse(official)
+	if err != nil || u.Hostname() == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.preferences.Source == SourceAuto {
+		c.preferred[strings.ToLower(u.Hostname())] = sourceHealth{mirror: successful != official, until: time.Now().Add(10 * time.Minute)}
+	}
+}
+
+// SafeMirrorRedirect reports whether a mirror redirect target is a public HTTPS host.
+func SafeMirrorRedirect(u *url.URL) bool {
+	return safeMirrorRedirect(u)
 }
 
 // Mirror redirects may delegate to public HTTPS CDN nodes. They never receive
 // credentials and still have to satisfy the original size and digest. Literal
 // private/local targets and HTTPS downgrades are rejected before any request.
 func safeMirrorRedirect(u *url.URL) bool {
-	if u.Scheme != "https" || u.User != nil || u.Port() != "" || u.Hostname() == "" {
+	if u.Scheme != "https" || u.User != nil || (u.Port() != "" && u.Port() != "443") || u.Hostname() == "" {
 		return false
 	}
 	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))

@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 
+	"mcl/internal/core/download"
 	"mcl/internal/core/meta"
 )
 
@@ -40,20 +42,26 @@ func (c *Client) forgeReleases(ctx context.Context, kind, game string) ([]Releas
 		if game == "1.20.1" {
 			artifact = "forge"
 		}
-		data, err := c.bytes(ctx, c.NeoForgeURL+"/"+artifact+"/maven-metadata.xml", 4<<20)
-		if err != nil {
-			return nil, err
+		var mirrors []string
+		if c.NeoForgeURL == defaultNeoForgeURL {
+			mirrors = append(mirrors, bmclapiMavenURL+"/net/neoforged/"+artifact+"/maven-metadata.xml")
 		}
-		var catalog struct {
-			Versions []string `xml:"versioning>versions>version"`
-		}
-		if err := xml.Unmarshal(data, &catalog); err != nil {
-			return nil, errors.New("NeoForge 版本目录无效")
-		}
-		for _, version := range catalog.Versions {
-			if neoGame(version, game) {
-				versions = append(versions, version)
+		if err := c.fetchDecoded(ctx, 4<<20, func(data []byte) error {
+			var catalog struct {
+				Versions []string `xml:"versioning>versions>version"`
 			}
+			if err := xml.Unmarshal(data, &catalog); err != nil {
+				return errors.New("NeoForge 版本目录无效")
+			}
+			versions = versions[:0]
+			for _, version := range catalog.Versions {
+				if neoGame(version, game) {
+					versions = append(versions, version)
+				}
+			}
+			return nil
+		}, c.NeoForgeURL+"/"+artifact+"/maven-metadata.xml", mirrors...); err != nil {
+			return nil, err
 		}
 	}
 	if len(versions) > 10000 {
@@ -203,27 +211,63 @@ func (c *Client) forgeVersions(ctx context.Context, game string) ([]string, erro
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
-	data, err := c.bytes(ctx, "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml", 4<<20)
-	if err != nil {
-		return nil, errors.Join(primaryErr, err)
-	}
-	var catalog struct {
-		Versions []string `xml:"versioning>versions>version"`
-	}
-	if err := xml.Unmarshal(data, &catalog); err != nil {
-		return nil, errors.New("Forge 官方 Maven 目录无效")
-	}
-	if len(catalog.Versions) > 50000 {
-		return nil, errors.New("Forge 官方 Maven 版本数量过多")
+	var mirrors []string
+	if c.ForgeURL == defaultForgeURL {
+		mirrors = append(mirrors, bmclapiMavenURL+"/net/minecraftforge/forge/maven-metadata.xml")
 	}
 	var versions []string
-	for _, version := range catalog.Versions {
-		if strings.HasPrefix(version, game+"-") {
-			versions = append(versions, version)
+	if err := c.fetchDecoded(ctx, 4<<20, func(data []byte) error {
+		var catalog struct {
+			Versions []string `xml:"versioning>versions>version"`
 		}
+		if err := xml.Unmarshal(data, &catalog); err != nil {
+			return errors.New("Forge 官方 Maven 目录无效")
+		}
+		if len(catalog.Versions) > 50000 {
+			return errors.New("Forge 官方 Maven 版本数量过多")
+		}
+		versions = versions[:0]
+		for _, version := range catalog.Versions {
+			if strings.HasPrefix(version, game+"-") {
+				versions = append(versions, version)
+			}
+		}
+		if len(versions) > 10000 {
+			return errors.New("Forge 游戏版本数量过多")
+		}
+		return nil
+	}, "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml", mirrors...); err == nil {
+		return versions, ctx.Err()
+	} else {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if c.ForgeURL == defaultForgeURL && c.Transfers != nil && c.Transfers.SourceMode() != download.SourceOfficial {
+			mirrorData, mErr := c.bytesWithRedirect(ctx, "https://bmclapi2.bangbang93.com/forge/minecraft/"+url.PathEscape(game), 4<<20, true, 2)
+			if mErr == nil {
+				var entries []struct {
+					MCVersion string  `json:"mcversion"`
+					Version   string  `json:"version"`
+					Branch    *string `json:"branch"`
+				}
+				if json.Unmarshal(mirrorData, &entries) == nil {
+					versions = make([]string, 0, len(entries))
+					for _, entry := range entries {
+						if entry.MCVersion != game || entry.Version == "" {
+							continue
+						}
+						v := entry.Version
+						if entry.Branch != nil && *entry.Branch != "" {
+							v += "-" + *entry.Branch
+						}
+						versions = append(versions, game+"-"+v)
+					}
+					if len(versions) <= 10000 {
+						return versions, ctx.Err()
+					}
+				}
+			}
+		}
+		return nil, errors.Join(primaryErr, err)
 	}
-	if len(versions) > 10000 {
-		return nil, errors.New("Forge 游戏版本数量过多")
-	}
-	return versions, ctx.Err()
 }

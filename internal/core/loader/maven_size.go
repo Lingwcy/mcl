@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"mcl/internal/core/download"
 )
 
 const maxMavenArtifactSize = int64(512 << 20)
@@ -16,7 +18,34 @@ func (c *Client) mavenSize(ctx context.Context, address string) (int64, error) {
 	if !validMavenAddress(address) {
 		return 0, identityError("Maven长度来源不受支持")
 	}
-	response, err := c.request(ctx, http.MethodHead, address)
+	var mirrors []string
+	if mirror := download.MavenMirrorURL(address); mirror != "" {
+		mirrors = append(mirrors, mirror)
+	}
+	candidates := c.candidateOrder(address, mirrors...)
+	var last error
+	for idx, candidate := range candidates {
+		attempts := 3
+		if idx+1 < len(candidates) {
+			attempts = 1
+		}
+		size, err := c.mavenSizeCandidate(ctx, candidate, candidate != address, attempts)
+		if err == nil {
+			if c.Transfers != nil && len(mirrors) > 0 {
+				c.Transfers.RememberCandidate(address, candidate)
+			}
+			return size, nil
+		}
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
+		}
+		last = err
+	}
+	return 0, last
+}
+
+func (c *Client) mavenSizeCandidate(ctx context.Context, address string, mirrored bool, maxAttempts int) (int64, error) {
+	response, err := c.requestHeadersWithRedirect(ctx, http.MethodHead, address, nil, mirrored, maxAttempts)
 	if err != nil {
 		return 0, err
 	}
@@ -41,7 +70,7 @@ func (c *Client) mavenSize(ctx context.Context, address string) (int64, error) {
 	if status == http.StatusOK && !missing {
 		return size, ctx.Err()
 	}
-	return c.mavenRangeSize(ctx, address)
+	return c.mavenRangeSize(ctx, address, mirrored, maxAttempts)
 }
 func mavenLength(header http.Header) (int64, bool, error) {
 	values := header.Values("Content-Length")
@@ -68,9 +97,9 @@ func encodedMavenResponse(response *http.Response) bool {
 	value := response.Header.Get("Content-Encoding")
 	return response.Uncompressed || value != "" && !strings.EqualFold(value, "identity")
 }
-func (c *Client) mavenRangeSize(ctx context.Context, address string) (int64, error) {
+func (c *Client) mavenRangeSize(ctx context.Context, address string, mirrored bool, maxAttempts int) (int64, error) {
 	headers := http.Header{"Range": []string{"bytes=0-0"}}
-	response, err := c.requestHeaders(ctx, http.MethodGet, address, headers)
+	response, err := c.requestHeadersWithRedirect(ctx, http.MethodGet, address, headers, mirrored, maxAttempts)
 	if err != nil {
 		return 0, err
 	}

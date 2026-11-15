@@ -38,17 +38,21 @@ func (c *TransferControl) Do(client *http.Client, request *http.Request) (*http.
 		}
 		var urlError *url.Error
 		if errors.As(err, &urlError) {
+			if errors.Is(urlError.Err, context.DeadlineExceeded) {
+				return nil, ErrTransferStalled
+			}
 			return nil, urlError.Err
 		}
 		return nil, err
 	}
-	readBudget := client.Timeout
-	if readBudget <= 0 || readBudget > 15*time.Minute {
-		readBudget = 15 * time.Minute
+	readBudget := 15 * time.Minute
+	if client.Timeout > 0 && client.Timeout < 2*time.Minute {
+		readBudget = client.Timeout
 	}
+	idleBudget := min(45*time.Second, headerTimeout)
 	body := &transferBody{body: response.Body, timer: timer, cancel: cancel}
 	body.reader = &limitedReader{ctx: task, control: c, reader: &idleReader{
-		reader: response.Body, timer: timer, task: task, cancel: cancel, remaining: readBudget,
+		reader: response.Body, timer: timer, task: task, cancel: cancel, idle: idleBudget, remaining: readBudget,
 	}}
 	response.Body = body
 	return response, nil
@@ -73,6 +77,7 @@ type idleReader struct {
 	timer     *time.Timer
 	task      context.Context
 	cancel    context.CancelCauseFunc
+	idle      time.Duration
 	remaining time.Duration
 }
 
@@ -81,7 +86,11 @@ func (r *idleReader) Read(buffer []byte) (int, error) {
 		r.cancel(ErrTransferStalled)
 		return 0, ErrTransferStalled
 	}
-	r.timer.Reset(min(45*time.Second, r.remaining))
+	wait := r.remaining
+	if r.idle > 0 && r.idle < wait {
+		wait = r.idle
+	}
+	r.timer.Reset(wait)
 	started := time.Now()
 	n, err := r.reader.Read(buffer)
 	r.timer.Stop()
