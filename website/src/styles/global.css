@@ -1691,6 +1691,146 @@ img {
   border-bottom-color: var(--divider-strong);
 }
 
+.compat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin-top: 16px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.compat-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compat-table-wrap {
+  margin-block: 16px 26px;
+  max-inline-size: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--divider);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.compat-table-wrap:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.docs-prose .compat-table {
+  width: 100%;
+  min-width: 520px;
+  margin-block: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13.5px;
+}
+
+.docs-prose .compat-table thead th {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  background: var(--paper-soft);
+  padding: 12px 14px;
+  text-align: center;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--divider-strong);
+}
+
+.docs-prose .compat-table thead th:first-child {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 3;
+  text-align: left;
+  border-right: 1px solid var(--divider);
+}
+
+.docs-prose .compat-table tbody th,
+.docs-prose .compat-table tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--divider);
+  vertical-align: middle;
+}
+
+.docs-prose .compat-table tbody tr:last-child th,
+.docs-prose .compat-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.docs-prose .compat-table tbody th {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: var(--paper);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+  white-space: nowrap;
+  border-right: 1px solid var(--divider);
+}
+
+.docs-prose .compat-table tbody td {
+  text-align: center;
+}
+
+.docs-prose .compat-table tbody tr:hover th,
+.docs-prose .compat-table tbody tr:hover td {
+  background: var(--hover-bg);
+}
+
+.docs-prose .compat-table tbody tr:hover th {
+  background: var(--paper-soft);
+}
+
+.compat-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.compat-ok {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.14);
+  border: 1px solid rgba(74, 222, 128, 0.28);
+}
+
+.compat-no {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.24);
+}
+
+.compat-warn {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .docs-pager {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -10,20 +10,117 @@ order: 4
 
 ## Loader × Minecraft 版本支持矩阵（Windows）
 
-下表汇总在 Windows 11 桌面会话中完成安装、完整性校验、拉起游戏进程并检测到可见游戏窗口的验证结果：
+下表汇总 Windows 11 桌面会话下各版本节点与五大运行环境的实际支持情况：
 
-| MC 版本区间 | Vanilla（原版） | Fabric | Quilt | Forge | NeoForge | 其它旧 / 社区加载器 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `26.3` / `26.4-snap` | **支持**（标准原版链路） | **已实测通过**（`26.3`、`26.4-snapshot-8`） | **已实测通过**（`26.3` / `0.30.2`） | **已实测通过**（`26.3` / `66.1.8`） | **目录已通 / 安装受网限**（见下方说明） | 不支持 |
-| `26.1` | **支持** | **支持**（同 `26.3` 链路） | **已实测通过**（`0.30.0-beta.7`） | **已实测通过**（`62.0.9`） | **目录与整合包已通 / 安装受网限** | 不支持 |
-| `1.21.5` / `1.21.11` | **已实测通过**（`1.21.11`） | **支持**（Java 21 链路） | **支持**（Java 21 链路） | **已实测通过**（`1.21.5` / `55.1.0`） | **受网限未完成实机** | 不支持 |
-| `1.21.1` | **支持** | **已实测通过**（`0.16.7`） | **已实测通过**（`0.29.2`） | **已实测通过**（`52.1.10`） | **受网限未完成实机** | 不支持 |
-| `1.20.1` / `1.20.4` | **支持** | **已实测通过**（`1.20.1` / `0.15.10`） | **已实测通过**（`1.20.1` / `0.26.0`） | **已实测通过**（`1.20.1` / `47.4.29`） | **目录已通 / 安装受网限** | 不支持 |
-| `1.17.1 – 1.19.4` | **支持** | **支持**（Java 17 链路） | **支持**（Java 17 链路） | **已实测通过**（`1.18.2` / `40.2.21`） | 无此版本 | 不支持 |
-| `1.13 – 1.16.5` | **支持** | **已实测通过**（`1.16.5` / `0.18.5`） | **支持**（共享 Java 8 `-cp` 修复） | **已实测通过**（`1.16.5` / `36.2.42`） | 无此版本 | 不支持 |
-| `1.12.2` | **支持** | 不支持 | 不支持 | **已实测通过**（`14.23.5.2859`） | 无此版本 | 不支持 |
-| `1.7.10` / `1.8.9` | **支持**（历史资源目录隔离） | 不支持 | 不支持 | **已实测通过**（`1.7.10`、`1.8.9`） | 无此版本 | 不支持 |
-| `1.6.4` | **支持**（`legacy-assets` 就绪） | 无此版本 | 无此版本 | **纯净实例通过**（`9.11.1.1345`；旧包模组自崩见下文） | 无此版本 | 不支持 |
+<div class="compat-legend" aria-label="图例说明">
+  <span class="compat-legend-item"><span class="compat-mark compat-ok" aria-hidden="true">✓</span> 支持（已通过或同一标准链路可用）</span>
+  <span class="compat-legend-item"><span class="compat-mark compat-no" aria-hidden="true">✕</span> 不支持 / 无此版本</span>
+  <span class="compat-legend-item"><span class="compat-mark compat-warn" aria-hidden="true">!</span> 未知 / 受限于网络未完成实机验证</span>
+</div>
+
+<div tabindex="0" role="region" aria-label="Loader × Minecraft 版本支持矩阵（Windows）" class="compat-table-wrap">
+  <table class="compat-table">
+    <thead>
+      <tr>
+        <th scope="col">MC 版本</th>
+        <th scope="col">Vanilla</th>
+        <th scope="col">Fabric</th>
+        <th scope="col">Quilt</th>
+        <th scope="col">Forge</th>
+        <th scope="col">NeoForge</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th scope="row">26.3 / 26.4-snap</th>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（26.3、26.4-snapshot-8 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（26.3 / 0.30.2 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（26.3 / 66.1.8 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-warn" title="未知（目录已通，无代理无法读取官方 .sha1）"><span aria-hidden="true">!</span><span class="sr-only">未知</span></span></td>
+      </tr>
+      <tr>
+        <th scope="row">26.1</th>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（0.30.0-beta.7 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（62.0.9 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-warn" title="未知（目录与整合包文件已通，安装器官方 .sha1 受网限）"><span aria-hidden="true">!</span><span class="sr-only">未知</span></span></td>
+      </tr>
+      <tr>
+        <th scope="row">1.21.5 / 1.21.11</th>
+        <td><span class="compat-mark compat-ok" title="支持（1.21.11 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（1.21.5 / 55.1.0 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-warn" title="未知（未完成实机验证）"><span aria-hidden="true">!</span><span class="sr-only">未知</span></span></td>
+      </tr>
+      <tr>
+        <th scope="row">1.21.1</th>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（0.16.7 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（0.29.2 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（52.1.10 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-warn" title="未知（未完成实机验证）"><span aria-hidden="true">!</span><span class="sr-only">未知</span></span></td>
+      </tr>
+      <tr>
+        <th scope="row">1.20.1 / 1.20.4</th>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（1.20.1 / 0.15.10 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（1.20.1 / 0.26.0 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（1.20.1 / 47.4.29 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-warn" title="未知（目录已通，安装未完成实机验证）"><span aria-hidden="true">!</span><span class="sr-only">未知</span></span></td>
+      </tr>
+      <tr>
+        <th scope="row">1.17.1 – 1.19.4</th>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（1.18.2 / 40.2.21 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-no" title="不支持 / 无此版本"><span aria-hidden="true">✕</span><span class="sr-only">不支持</span></span></td>
+      </tr>
+      <tr>
+        <th scope="row">1.14 – 1.16.5</th>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（1.16.5 / 0.18.5 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（共享 Java 8 -cp 修复）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（1.16.5 / 36.2.42 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-no" title="不支持 / 无此版本"><span aria-hidden="true">✕</span><span class="sr-only">不支持</span></span></td>
+      </tr>
+      <tr>
+        <th scope="row">1.12.2</th>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-no" title="不支持"><span aria-hidden="true">✕</span><span class="sr-only">不支持</span></span></td>
+        <td><span class="compat-mark compat-no" title="不支持"><span aria-hidden="true">✕</span><span class="sr-only">不支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（14.23.5.2859 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-no" title="不支持 / 无此版本"><span aria-hidden="true">✕</span><span class="sr-only">不支持</span></span></td>
+      </tr>
+      <tr>
+        <th scope="row">1.7.10 / 1.8.9</th>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-no" title="不支持"><span aria-hidden="true">✕</span><span class="sr-only">不支持</span></span></td>
+        <td><span class="compat-mark compat-no" title="不支持"><span aria-hidden="true">✕</span><span class="sr-only">不支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（1.7.10、1.8.9 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-no" title="不支持 / 无此版本"><span aria-hidden="true">✕</span><span class="sr-only">不支持</span></span></td>
+      </tr>
+      <tr>
+        <th scope="row">1.6.4</th>
+        <td><span class="compat-mark compat-ok" title="支持"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-no" title="不支持 / 无此版本"><span aria-hidden="true">✕</span><span class="sr-only">不支持</span></span></td>
+        <td><span class="compat-mark compat-no" title="不支持 / 无此版本"><span aria-hidden="true">✕</span><span class="sr-only">不支持</span></span></td>
+        <td><span class="compat-mark compat-ok" title="支持（纯净 9.11.1.1345 实测通过）"><span aria-hidden="true">✓</span><span class="sr-only">支持</span></span></td>
+        <td><span class="compat-mark compat-no" title="不支持 / 无此版本"><span aria-hidden="true">✕</span><span class="sr-only">不支持</span></span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+## 关键实测版本明细
+
+- **Vanilla（原版）**：已实测 `1.21.11` 端到端安装与启动，历史版本（如 `1.6.4`、`1.7.10`、`1.8.9`、`1.12.2`）历史资源目录与原版链路均就绪。
+- **Fabric**：已实测 `1.16.5`（`0.18.5`，Java 8 直传 `-cp`）、`1.20.1`（`0.15.10`）、`1.21.1`（`0.16.7`）、`26.3`（`0.19.5`）及 `26.4-snapshot-8`（`0.20.1`）。
+- **Quilt**：已实测 `1.20.1`（`0.26.0`）、`1.21.1`（`0.29.2`，兼容内建 `mixinextras`）、`26.1`（`0.30.0-beta.7`）与 `26.3`（`0.30.2`）；`1.14 – 1.16.5` 共享 Java 8 `-cp` 修复。
+- **Forge**：已实测 `1.6.4`（纯净 `9.11.1.1345`）、`1.7.10`、`1.8.9`（`11.15.1.1902`）、`1.12.2`（`14.23.5.2859`）、`1.16.5`（`36.2.42`）、`1.18.2`（`40.2.21`）、`1.20.1`（`47.4.29`）、`1.21.1`（`52.1.10`）、`1.21.5`（`55.1.0`）、`26.1`（`62.0.9`）与 `26.3`（`66.1.8`）。
 
 ## Java 自动安装与网络镜像行为
 
@@ -47,6 +144,6 @@ order: 4
 
 ## 明确不支持的范围
 
-- **社区早期 / 非内置加载器**：`Legacy-Fabric`、`Babric`、`Ornithe`、`LiteLoader` 不在支持清单内；当前仅支持 Vanilla、Fabric、Quilt、Forge 与 NeoForge。
+- **其他旧版 / 社区加载器**：当前仅支持 Vanilla、Fabric、Quilt、Forge 与 NeoForge；不支持 Legacy-Fabric、Babric、Ornithe、LiteLoader 等未内置加载器。
 - **非白名单外链资产**：拒绝加载或下载指向任意第三方非可信域名的整合包依赖外链。
 - **注入与第三方认证**：按项目架构边界拒绝 `-javaagent:`、皮肤/披风补丁注入、`authlib-injector` 及第三方认证扩展。
