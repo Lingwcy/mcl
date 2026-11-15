@@ -63,6 +63,8 @@ export interface SiteCopy {
   otherLocaleLabel: string;
   otherHomePath: string;
   railNavLabel: string;
+  collapseRailLabel: string;
+  expandRailLabel: string;
   menuOpenLabel: string;
   menuCloseLabel: string;
   nav: Array<{
@@ -162,6 +164,8 @@ export const copy: Record<Locale, SiteCopy> = {
     otherLocaleLabel: "English",
     otherHomePath: "/",
     railNavLabel: "页面导航",
+    collapseRailLabel: "收起右侧导航",
+    expandRailLabel: "展开右侧导航",
     menuOpenLabel: "打开导航",
     menuCloseLabel: "关闭导航",
     nav: [
@@ -537,6 +541,8 @@ export const copy: Record<Locale, SiteCopy> = {
     otherLocaleLabel: "中文",
     otherHomePath: "/zh/",
     railNavLabel: "On this page",
+    collapseRailLabel: "Collapse navigation rail",
+    expandRailLabel: "Expand navigation rail",
     menuOpenLabel: "Open navigation",
     menuCloseLabel: "Close navigation",
     nav: [

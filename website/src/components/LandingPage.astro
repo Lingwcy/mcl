@@ -512,18 +512,39 @@ const defaultDownload = t.downloads[0]!;
   </div>
 
   {/* Sticky Desktop Right Rail (>= 1200px) */}
-  <aside class="side-rail" aria-label={t.railNavLabel}>
+  <aside id="desktop-side-rail" class="side-rail" aria-label={t.railNavLabel}>
     <div class="side-rail-brand">
-      <a class="brand-lockup" href="#top" aria-label={t.brandFull}>
-        <img class="pixel-img" src="/favicon.png" alt="" width="26" height="26" />
+      <a
+        class="brand-lockup"
+        href="#top"
+        aria-label={t.brandFull}
+        data-rail-title={t.brandFull}
+      >
+        <img class="pixel-img" src="/favicon.png" alt="" width="22" height="22" />
         <span>{t.brandFull}</span>
       </a>
+      <button
+        type="button"
+        class="rail-toggle-btn"
+        data-rail-toggle
+        aria-controls="desktop-side-rail"
+        aria-expanded="true"
+        aria-label={t.collapseRailLabel}
+        title={t.collapseRailLabel}
+      >
+        <Icon name="chevrons-right" size={15} />
+      </button>
     </div>
 
     <nav class="rail-nav" data-rail-nav aria-label={t.railNavLabel}>
       <div class="rail-indicator" data-rail-indicator aria-hidden="true"></div>
       {t.nav.map((item) => (
-        <a class="rail-item" href={`#${item.id}`} data-nav-link={item.id}>
+        <a
+          class="rail-item"
+          href={`#${item.id}`}
+          data-nav-link={item.id}
+          data-rail-title={item.label}
+        >
           <span class="rail-item-icon"><Icon name={item.icon} size={15} /></span>
           <span class="rail-item-label">{item.label}</span>
         </a>
@@ -534,7 +555,7 @@ const defaultDownload = t.downloads[0]!;
     <hr class="hairline-divider side-rail-divider" />
 
     <div class="rail-nav">
-      <a class="rail-item" href={t.docsPath}>
+      <a class="rail-item" href={t.docsPath} data-rail-title={t.hero.docsLabel}>
         <span class="rail-item-icon"><Icon name="book" size={15} /></span>
         <span class="rail-item-label">{t.hero.docsLabel}</span>
       </a>
@@ -543,6 +564,7 @@ const defaultDownload = t.downloads[0]!;
         href={REPO_URL}
         target="_blank"
         rel="noopener noreferrer"
+        data-rail-title="GitHub"
       >
         <span class="rail-item-icon"><Icon name="github" size={15} /></span>
         <span class="rail-item-label">GitHub</span>
@@ -553,12 +575,18 @@ const defaultDownload = t.downloads[0]!;
         href={RELEASES_URL}
         target="_blank"
         rel="noopener noreferrer"
+        data-rail-title={`Releases · v${LATEST_TAG}`}
       >
         <span class="rail-item-icon"><Icon name="download" size={15} /></span>
         <span class="rail-item-label">Releases · v{LATEST_TAG}</span>
         <span class="rail-item-ext"><Icon name="diagonal" size={11} /></span>
       </a>
-      <a class="rail-item" href={t.otherHomePath} lang={locale === "zh" ? "en" : "zh-CN"}>
+      <a
+        class="rail-item"
+        href={t.otherHomePath}
+        lang={locale === "zh" ? "en" : "zh-CN"}
+        data-rail-title={t.otherLocaleLabel}
+      >
         <span class="rail-item-icon"><Icon name="globe" size={15} /></span>
         <span class="rail-item-label">{t.otherLocaleLabel}</span>
       </a>
@@ -590,6 +618,8 @@ const defaultDownload = t.downloads[0]!;
     winX64Label: t.hero.downloadWinX64,
     starsLabelText: t.opensource.starsLabel,
     forksLabelText: t.opensource.forksLabel,
+    collapseRailLabel: t.collapseRailLabel,
+    expandRailLabel: t.expandRailLabel,
   }}
 >
   (() => {
@@ -670,7 +700,66 @@ const defaultDownload = t.downloads[0]!;
       el.addEventListener("click", () => setDrawer(false));
     });
 
-    // 4. Right rail smooth navigation + scroll-spy indicator
+    // 4. Right rail collapse + smooth navigation + scroll-spy indicator
+    const landingShell = document.querySelector("[data-landing]");
+    const railToggle = document.querySelector("[data-rail-toggle]");
+    const sideRail = document.getElementById("desktop-side-rail");
+    const RAIL_STORAGE_KEY = "mcl:rail-collapsed";
+
+    const applyRailState = (collapsed, persist) => {
+      if (!landingShell) return;
+      landingShell.classList.toggle("is-rail-collapsed", collapsed);
+      if (railToggle) {
+        const label = collapsed ? expandRailLabel : collapseRailLabel;
+        railToggle.setAttribute("aria-expanded", String(!collapsed));
+        railToggle.setAttribute("aria-label", label);
+        railToggle.setAttribute("title", label);
+      }
+      if (sideRail) {
+        sideRail.querySelectorAll("[data-rail-title]").forEach((el) => {
+          const text = el.getAttribute("data-rail-title") || "";
+          if (collapsed && text) {
+            el.setAttribute("title", text);
+          } else {
+            el.removeAttribute("title");
+          }
+        });
+      }
+      if (persist) {
+        try {
+          window.localStorage.setItem(RAIL_STORAGE_KEY, collapsed ? "1" : "0");
+        } catch {
+          // Ignore storage quota / privacy mode errors.
+        }
+      }
+    };
+
+    try {
+      const saved = window.localStorage.getItem(RAIL_STORAGE_KEY);
+      if (saved === "1") applyRailState(true, false);
+    } catch {
+      // Ignore storage access errors.
+    }
+
+    railToggle?.addEventListener(
+      "click",
+      () => {
+        const next = !landingShell?.classList.contains("is-rail-collapsed");
+        applyRailState(next, true);
+        requestAnimationFrame(() => syncScroll());
+      },
+      { signal }
+    );
+    sideRail?.addEventListener(
+      "transitionend",
+      (e) => {
+        if (e.target === sideRail && e.propertyName === "width") {
+          syncScroll();
+        }
+      },
+      { signal }
+    );
+
     const railNav = document.querySelector("[data-rail-nav]");
     const indicator = document.querySelector("[data-rail-indicator]");
     const navLinks = Array.from(document.querySelectorAll("[data-nav-link]"));

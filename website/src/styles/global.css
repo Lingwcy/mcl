@@ -27,15 +27,19 @@
     "Space Mono", ui-monospace, SFMono-Regular, "SF Mono", Consolas,
     "PingFang SC", "Microsoft YaHei", monospace;
 
-  --rail-w: 280px;
+  --rail-w: 236px;
   --main-max: 1140px;
   --bleed: 0px;
   --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.22, 1.28, 0.36, 1);
 }
 
 @media (min-width: 1200px) {
-  :root {
-    --bleed: min(max(0px, (100vw - 280px - 1140px) / 2), 250px);
+  .landing-shell {
+    --bleed: min(max(0px, (100vw - var(--rail-w) - 1140px) / 2), 250px);
+  }
+  .landing-shell.is-rail-collapsed {
+    --rail-w: 60px;
   }
 }
 
@@ -293,9 +297,13 @@ img {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    padding: 24px 16px;
+    padding: 20px 12px;
+    overflow-x: hidden;
     overflow-y: auto;
     border-left: 1px solid rgba(255, 255, 255, 0.05);
+    transition:
+      width 360ms var(--ease-spring),
+      padding 360ms var(--ease-spring);
   }
 }
 
@@ -311,7 +319,66 @@ img {
 }
 
 .side-rail-brand {
-  padding: 0 8px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px 20px;
+  transition: padding 300ms var(--ease-spring);
+}
+
+.side-rail .brand-lockup {
+  gap: 8px;
+  min-width: 0;
+  font-size: 12.5px;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+
+.side-rail .brand-lockup img {
+  flex-shrink: 0;
+}
+
+.side-rail .brand-lockup span {
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 168px;
+  opacity: 1;
+  transition:
+    max-width 280ms var(--ease),
+    opacity 180ms var(--ease);
+}
+
+.rail-toggle-btn {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-3);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    color 150ms var(--ease),
+    background-color 150ms var(--ease),
+    border-color 150ms var(--ease),
+    transform 150ms var(--ease);
+}
+
+.rail-toggle-btn:hover {
+  color: var(--text);
+  background: var(--hover-bg);
+  border-color: var(--divider);
+}
+
+.rail-toggle-btn:active {
+  transform: scale(0.92);
+}
+
+.rail-toggle-btn svg {
+  transition: transform 360ms var(--ease-spring);
 }
 
 .rail-nav {
@@ -325,13 +392,13 @@ img {
   left: 0;
   right: 0;
   top: 0;
-  height: 38px;
+  height: 36px;
   border-radius: 8px;
   background: var(--accent-soft);
   opacity: 0;
   pointer-events: none;
   transition:
-    transform 200ms var(--ease),
+    transform 240ms var(--ease-spring),
     height 200ms var(--ease),
     opacity 150ms var(--ease);
 }
@@ -344,23 +411,28 @@ img {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  min-height: 38px;
+  min-height: 36px;
   padding: 6px 10px;
   margin-bottom: 2px;
   border-radius: 8px;
   border: 0;
   background: transparent;
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--text-2);
   cursor: pointer;
   text-align: left;
-  transition: color 150ms var(--ease);
+  transition:
+    color 150ms var(--ease),
+    background-color 150ms var(--ease),
+    padding 320ms var(--ease-spring),
+    gap 320ms var(--ease-spring);
 }
 
 .rail-item:hover {
   color: var(--text);
+  background: var(--hover-bg);
 }
 
 .rail-item.is-selected {
@@ -370,6 +442,7 @@ img {
 .rail-item-icon {
   width: 16px;
   height: 16px;
+  flex-shrink: 0;
   display: grid;
   place-items: center;
   color: var(--text-2);
@@ -391,11 +464,26 @@ img {
 .rail-item-label {
   flex: 1;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 160px;
+  opacity: 1;
+  transition:
+    opacity 180ms var(--ease),
+    max-width 280ms var(--ease),
+    transform 260ms var(--ease-spring);
 }
 
 .rail-item-ext {
+  flex-shrink: 0;
   color: var(--text-3);
   display: inline-flex;
+  overflow: hidden;
+  max-width: 16px;
+  opacity: 1;
+  transition:
+    opacity 160ms var(--ease),
+    max-width 220ms var(--ease);
 }
 
 .side-rail-spacer {
@@ -405,14 +493,65 @@ img {
 
 .side-rail-divider {
   margin: 0 8px 8px;
+  transition: margin 260ms var(--ease);
 }
 
 .side-rail-caption {
-  padding: 16px 10px 0;
+  padding: 14px 8px 0;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--text-3);
+  max-height: 56px;
+  overflow: hidden;
+  transition:
+    opacity 180ms var(--ease),
+    max-height 280ms var(--ease),
+    padding-top 280ms var(--ease);
+}
+
+@media (min-width: 1200px) {
+  .landing-shell.is-rail-collapsed .side-rail {
+    padding: 20px 10px;
+  }
+  .landing-shell.is-rail-collapsed .side-rail-brand {
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 0 0 16px;
+  }
+  .landing-shell.is-rail-collapsed .side-rail .brand-lockup {
+    gap: 0;
+    justify-content: center;
+  }
+  .landing-shell.is-rail-collapsed .side-rail .brand-lockup span {
+    max-width: 0;
+    opacity: 0;
+  }
+  .landing-shell.is-rail-collapsed .rail-toggle-btn svg {
+    transform: rotate(180deg);
+  }
+  .landing-shell.is-rail-collapsed .side-rail .rail-item {
+    gap: 0;
+    justify-content: center;
+    padding: 6px 0;
+  }
+  .landing-shell.is-rail-collapsed .side-rail .rail-item-label,
+  .landing-shell.is-rail-collapsed .side-rail .rail-item-ext {
+    max-width: 0;
+    flex: 0 0 0;
+    opacity: 0;
+    transform: translateX(6px);
+  }
+  .landing-shell.is-rail-collapsed .side-rail-divider {
+    margin: 0 4px 8px;
+  }
+  .landing-shell.is-rail-collapsed .side-rail-caption {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+  }
 }
 
 /* ============================== */
