@@ -28,6 +28,7 @@ var (
 	iconSidebar          = bundledIcon("panel-left")
 	iconSearch           = bundledIcon("search")
 	iconBack             = bundledIcon("chevron-left")
+	iconSwitch           = bundledIcon("arrow-left-right")
 	iconMarket           = bundledIcon("shopping-bag")
 	iconPlay             = bundledIcon("play")
 	iconLog              = bundledIcon("terminal")

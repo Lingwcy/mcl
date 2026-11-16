@@ -20,8 +20,10 @@ func (s *Shell) titlebar(c *ui.Context) {
 			}
 		})
 		if s.page != launchPage {
-			titlebarIconButton(c, "toggle-sidebar", "收起或展开侧栏", iconSidebar, func() { s.sidebarCollapsed = !s.sidebarCollapsed })
-			if s.page != libraryPage {
+			if s.page != homePage {
+				titlebarIconButton(c, "toggle-sidebar", "收起或展开侧栏", iconSidebar, func() { s.sidebarCollapsed = !s.sidebarCollapsed })
+			}
+			if s.page != libraryPage && s.page != homePage {
 				titlebarIconButton(c, "nav-library", "游戏库", iconBack, s.openHome)
 			}
 		}
@@ -77,9 +79,12 @@ func (s *Shell) openMarket(kind app.AssetKind) {
 
 func (s *Shell) navigationRail(c *ui.Context) {
 	settings := s.page.inSettings()
+	instances := s.page != homePage && s.page != marketPage && s.page != serversPage && !settings
 	ui.Column(c.Key("navigation-rail")).Label("主导航").Width(railWidth).Shrink(0).FillHeight().Padding(4, 5, 1).Gap(6).Children(func() {
-		s.railButton(c, "rail-home", "Home", iconHome, s.page != marketPage && !settings, s.openHome)
+		s.railButton(c, "rail-home", "主页", iconHome, s.page == homePage, s.openHomePage)
+		s.railButton(c, "rail-instances", "实例", iconCube, instances, s.openHome)
 		s.railButton(c, "rail-market", "市场", iconMarket, s.page == marketPage, func() { s.openMarket(s.market.kind) })
+		s.railButton(c, "rail-servers", "服务器", iconServer, s.page == serversPage, s.openServers)
 		ui.Spacer(c)
 		s.accountRailButton(c)
 		s.railButton(c, "nav-settings", "设置", iconSettings, settings && s.page != accountsPage, func() { s.page, s.sidebarCollapsed = gameSettingsPage, false })
@@ -92,6 +97,12 @@ func (s *Shell) railButton(c *ui.Context, key, label string, icon *ui.SVG, selec
 	button := ui.ButtonBase(c.Key(key)).Label(label).Tooltip(label).Size(30, 30).Shrink(0).Radius(8).Center()
 	if selected {
 		fill, color = colors(t).Selected, t.Text
+		if s.page == homePage {
+			fill = colors(t).Raised.Alpha(0.55)
+			if t.Dark {
+				fill = colors(t).Selected.Alpha(0.72)
+			}
+		}
 		if t.Dark {
 			color = colors(t).AccentInk
 		}
@@ -111,6 +122,8 @@ func (s *Shell) sidebar(c *ui.Context) ui.Element {
 	group := "instances"
 	if s.page == marketPage {
 		group = "market"
+	} else if s.page == serversPage {
+		group = "servers"
 	} else if s.page.inSettings() {
 		group = "settings"
 	}
@@ -121,6 +134,8 @@ func (s *Shell) sidebar(c *ui.Context) ui.Element {
 			switch group {
 			case "market":
 				s.marketSidebar(c)
+			case "servers":
+				s.serversSidebar(c)
 			case "settings":
 				s.settingsSidebar(c)
 			default:
@@ -196,6 +211,7 @@ func (s *Shell) marketSidebar(c *ui.Context) {
 func (s *Shell) settingsSidebar(c *ui.Context) {
 	ui.Scroll(c.Key("settings-links")).Label("设置导航").Grow(1).MinHeight(0).FillWidth().Padding(12, 10, 8).Gap(2).Children(func() {
 		s.settingsEntry(c, "settings-game", "游戏设置", iconSettingsGame, gameSettingsPage)
+		s.settingsEntry(c, "settings-wallpaper", "个性化", iconPalette, wallpaperSettingsPage)
 		s.settingsEntry(c, "settings-download", "下载设置", iconSettingsDownload, downloadSettingsPage)
 		s.settingsEntry(c, "settings-runtime", "Java 管理", iconSettingsRuntime, settingsPage)
 		s.settingsEntry(c, "settings-accounts", "账户", iconSettingsAccount, accountsPage)

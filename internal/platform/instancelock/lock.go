@@ -84,6 +84,11 @@ func AcquireJava(directory string) (*Lock, error) {
 	return acquireDirectory(directory, "java.lock")
 }
 
+// AcquireServers serializes global server list updates across launcher processes.
+func AcquireServers(directory string) (*Lock, error) {
+	return acquireDirectory(directory, "servers.lock")
+}
+
 func acquireDirectory(directory, name string) (*Lock, error) {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return nil, err

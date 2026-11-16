@@ -13,26 +13,29 @@ import (
 type page string
 
 const (
-	libraryPage          page = "library"
-	accountsPage         page = "accounts"
-	activityPage         page = "activity"
-	settingsActivityPage page = "settings-activity"
-	logsPage             page = "logs"
-	launchPage           page = "launch"
-	settingsPage         page = "settings"
-	gameSettingsPage     page = "game-settings"
-	downloadSettingsPage page = "download-settings"
-	newInstancePage      page = "new-instance"
-	existingGamesPage    page = "existing-games"
-	directoryPage        page = "directory-transfer"
-	instanceSettingsPage page = "instance-settings"
-	marketPage           page = "market"
-	creditsPage          page = "credits"
-	aboutPage            page = "about"
+	homePage              page = "home"
+	libraryPage           page = "library"
+	accountsPage          page = "accounts"
+	activityPage          page = "activity"
+	settingsActivityPage  page = "settings-activity"
+	logsPage              page = "logs"
+	launchPage            page = "launch"
+	settingsPage          page = "settings"
+	gameSettingsPage      page = "game-settings"
+	wallpaperSettingsPage page = "wallpaper-settings"
+	downloadSettingsPage  page = "download-settings"
+	newInstancePage       page = "new-instance"
+	existingGamesPage     page = "existing-games"
+	directoryPage         page = "directory-transfer"
+	instanceSettingsPage  page = "instance-settings"
+	marketPage            page = "market"
+	serversPage           page = "servers"
+	creditsPage           page = "credits"
+	aboutPage             page = "about"
 )
 
 func (p page) inSettings() bool {
-	return p == settingsPage || p == gameSettingsPage || p == downloadSettingsPage || p == accountsPage || p == settingsActivityPage || p == creditsPage || p == aboutPage
+	return p == settingsPage || p == gameSettingsPage || p == wallpaperSettingsPage || p == downloadSettingsPage || p == accountsPage || p == settingsActivityPage || p == creditsPage || p == aboutPage
 }
 
 const (
@@ -81,6 +84,8 @@ type Shell struct {
 	games            gameState
 	assets           assetState
 	market           marketState
+	servers          serverState
+	wallpapers       wallpaperState
 	accounts         accountState
 	java             javaState
 	sidebarCollapsed bool
@@ -101,6 +106,7 @@ func NewShell(settings app.Settings, dataDir string, loadErr error, save SaveSet
 
 func (s *Shell) BindWindow(window *mygo.Window) {
 	s.window = window
+	s.page = homePage
 	window.OnFocus(func() { s.memory.blurred = false; s.syncMemoryObservation(); window.Invalidate() })
 	window.OnBlur(func() { s.memory.blurred = true; s.syncMemoryObservation(); window.Invalidate() })
 	window.OnClosed(func() {
@@ -113,6 +119,10 @@ func (s *Shell) BindWindow(window *mygo.Window) {
 		s.closeDownloadTask()
 		s.existing.closed = true
 		s.cancelExistingGames()
+		s.servers.closed = true
+		s.cancelServers()
+		s.wallpapers.closed = true
+		s.cancelWallpapers()
 		s.directories.closed = true
 		s.directories.generation++
 		if s.directories.cancel != nil {
@@ -166,8 +176,17 @@ func (s *Shell) View(c *ui.Context) {
 		t = &contrast
 	}
 	c.SetTheme(t)
-	c.Root().Background(chromeColor(t))
+	homeGlass := s.page == homePage
+	if homeGlass {
+		c.Root().Background(t.Background)
+		s.homeChromeBackdrop(c)
+	} else {
+		c.Root().Background(chromeColor(t))
+	}
 	shell := ui.Column(c.Key("app-shell")).Fill().Gap(0)
+	if homeGlass {
+		shell.Absolute().Top(0).Left(0).Right(0).Bottom(0)
+	}
 	entrance := shell.Keyframes("entrance", appEntrance)
 	shell.Children(func() {
 		s.titlebar(c)
@@ -189,27 +208,46 @@ func (s *Shell) View(c *ui.Context) {
 		content.Children(func() {
 			s.navigationRail(c)
 			sidebarWidth := secondarySidebarWidth(c)
-			workspace := ui.Row(c.Key("workspace")).Grow(1).MinWidth(0).FillHeight().Radius(workspaceRadius).Clip().Background(t.Background)
+			workspaceFill := t.Background
+			if homeGlass {
+				workspaceFill = ui.Transparent
+			}
+			workspace := ui.Row(c.Key("workspace")).Grow(1).MinWidth(0).FillHeight().Radius(workspaceRadius).Clip().Background(workspaceFill)
+			if homeGlass {
+				rim := ui.RGBA(255, 255, 255, 0.32)
+				if t.Dark {
+					rim = colors(t).Border.Alpha(0.45)
+				}
+				workspace.Border(0.5, rim)
+			}
 			target := float32(1)
 			if s.sidebarCollapsed {
 				target = 0
 			}
 			shown := max(0, min(workspace.AnimateTo("sidebar", target, motionPanel), 1))
 			workspace.Children(func() {
-				if shown > 0.001 || !s.sidebarCollapsed {
+				if !homeGlass && (shown > 0.001 || !s.sidebarCollapsed) {
 					// MyGo's stationary nested clips use the innermost radii.
 					// Keep the animation viewport's outside corners rounded too.
 					ui.Row(c.Key("sidebar-viewport")).Width(sidebarWidth*shown).Shrink(0).FillHeight().Radius(workspaceRadius, 0, 0, workspaceRadius).Clip().Disabled(s.sidebarCollapsed).Children(func() {
 						s.sidebar(c).Margin(0, 0, 0, sidebarWidth*(shown-1))
 					})
 				}
-				ui.Column(c.Key("main-panel")).Grow(1).MinWidth(0).FillHeight().Background(t.Background).Children(func() {
+				mainFill := t.Background
+				if homeGlass {
+					mainFill = ui.Transparent
+				}
+				ui.Column(c.Key("main-panel")).Grow(1).MinWidth(0).FillHeight().Background(mainFill).Children(func() {
 					ui.Column(c.Key(s.contentIdentity())).Grow(1).MinHeight(0).FillWidth().Transition(motionPage).Children(func() {
 						switch s.page {
+						case homePage:
+							s.homeView(c)
 						case libraryPage:
 							s.instanceView(c)
 						case marketPage:
 							s.marketView(c)
+						case serversPage:
+							s.serversView(c)
 						case existingGamesPage:
 							s.existingGamesView(c)
 						case directoryPage:
@@ -222,6 +260,8 @@ func (s *Shell) View(c *ui.Context) {
 							s.javaView(c)
 						case gameSettingsPage:
 							s.gameSettingsView(c)
+						case wallpaperSettingsPage:
+							s.wallpaperSettingsView(c)
 						case downloadSettingsPage:
 							s.downloadSettingsView(c)
 						case accountsPage:

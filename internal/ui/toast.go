@@ -105,6 +105,8 @@ func (s *Shell) feedbackToasts(c *ui.Context) {
 		return ToastWarning
 	}(), "", nil)
 	s.feedbackToast(c, "market-search", s.market.error, ToastError, "", nil)
+	s.feedbackToast(c, "servers", s.servers.error, ToastError, "", nil)
+	s.feedbackToast(c, "wallpapers", s.wallpapers.error, ToastError, "", nil)
 	s.feedbackToast(c, "market-key", s.market.keyError, ToastError, "", nil)
 	s.feedbackToast(c, "market-action", s.market.message, ToastInfo, "", nil)
 	s.feedbackToast(c, "creation", s.creation.err, ToastError, "", nil)

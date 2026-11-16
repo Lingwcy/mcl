@@ -30,11 +30,11 @@ func TestWorkspaceNavigationAndSecondarySidebar(t *testing.T) {
 	if _, found := tester.Find("副侧栏"); found {
 		t.Fatal("secondary sidebar should collapse independently of the navigation rail")
 	}
-	click(t, tester, "Home")
+	click(t, tester, "实例")
 	tester.Advance(2 * time.Second)
 	tester.Frame()
 	if !tester.HasText("实例") || shell.sidebarCollapsed {
-		t.Fatal("Home must reopen the instance sidebar")
+		t.Fatal("Instances must reopen the instance sidebar")
 	}
 	tester.SetSize(MinWidth, MinHeight)
 	click(t, tester, "设置")

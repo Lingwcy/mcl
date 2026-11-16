@@ -10,13 +10,15 @@ import (
 // Keep motion in the native frame scheduler. Idle views own no timers or
 // animation goroutines; MyGo also applies the system Reduce Motion preference.
 var (
-	motionPress  = ui.Animation{Spring: ui.SpringOptions{Duration: 260 * time.Millisecond, Bounce: 0.20}}
-	motionTab    = ui.Animation{Spring: ui.SpringOptions{Duration: 320 * time.Millisecond, Bounce: 0.22}}
-	motionLaunch = ui.Animation{Spring: ui.SpringOptions{Duration: 460 * time.Millisecond, Bounce: 0.16}}
-	motionPanel  = ui.Animation{Spring: ui.SpringOptions{Duration: 300 * time.Millisecond}}
-	motionColor  = ui.Animation{Duration: 140 * time.Millisecond, Ease: ui.EaseOut}
-	motionFade   = ui.Animation{Duration: 180 * time.Millisecond, Ease: ui.EaseOut}
-	motionPage   = ui.ElementTransition{
+	motionPress       = ui.Animation{Spring: ui.SpringOptions{Duration: 260 * time.Millisecond, Bounce: 0.20}}
+	motionTab         = ui.Animation{Spring: ui.SpringOptions{Duration: 320 * time.Millisecond, Bounce: 0.22}}
+	motionLaunch      = ui.Animation{Spring: ui.SpringOptions{Duration: 460 * time.Millisecond, Bounce: 0.16}}
+	motionPanel       = ui.Animation{Spring: ui.SpringOptions{Duration: 300 * time.Millisecond}}
+	motionDialogEnter = ui.Animation{Spring: ui.SpringOptions{Duration: 240 * time.Millisecond, Bounce: 0.14}}
+	motionDialogExit  = ui.Animation{Duration: 150 * time.Millisecond, Ease: ui.EaseOut}
+	motionColor       = ui.Animation{Duration: 140 * time.Millisecond, Ease: ui.EaseOut}
+	motionFade        = ui.Animation{Duration: 180 * time.Millisecond, Ease: ui.EaseOut}
+	motionPage        = ui.ElementTransition{
 		Duration: 200 * time.Millisecond, Ease: ui.EaseOut, Colors: true,
 		Enter: &ui.Motion{X: 8, Opacity: 0}, Exit: &ui.Motion{X: -4, Opacity: 0},
 	}
@@ -68,6 +70,32 @@ func rowMotion(c *ui.Context, button ui.Element, fill ui.Color) ui.Element {
 	return button.Background(controlFill(c.Theme(), button, fill)).
 		Transition(ui.ElementTransition{Animation: &motionColor, Colors: true}).
 		AnimatePose(ui.Pose{Scale: scale}, motionPress)
+}
+
+// animateDialog drives a 0..1 open/close progress on a persistent host element
+// because DialogBase mounts and unmounts its overlay nodes immediately with *open.
+func animateDialog(host ui.Element, key any, open bool) float32 {
+	target := float32(0)
+	anim := motionDialogExit
+	if open {
+		target = 1
+		anim = motionDialogEnter
+	}
+	return host.AnimateTo(key, target, anim)
+}
+
+// styleDialogMotion applies backdrop fade and panel scale/slide/fade from progress.
+// While closing, the overlay turns non-interactive so clicks pass through to the page.
+func styleDialogMotion(backdrop, panel ui.Element, p interfaceColors, progress float32, open bool) {
+	alpha := max(0, min(progress, 1))
+	scale := 0.93 + 0.07*progress
+	offsetY := 8 * (1 - progress)
+	backdrop.Background(p.Shadow.Alpha(alpha))
+	if !open {
+		backdrop.PassThrough()
+		panel.Disabled(true)
+	}
+	panel.Shadow(0, 12, 36, 0, p.Shadow.Alpha(alpha)).Opacity(alpha).Translate(0, offsetY).Scale(scale, scale)
 }
 
 // Progress follows actual reported work. It never advances on a timer and
@@ -232,6 +260,9 @@ func (s *Shell) contentIdentity() contentIdentity {
 				id.version = m.version.version.ID
 			}
 		}
+	case serversPage:
+		id.screen = s.servers.filter
+		id.instance = s.servers.instanceFilter
 	case activityPage, settingsActivityPage:
 		if s.downloadJobs.showLegacy {
 			id.screen = "other-tasks"

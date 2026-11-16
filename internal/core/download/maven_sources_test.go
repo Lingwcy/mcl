@@ -46,9 +46,9 @@ func TestMavenSourceCandidatesKeepFixedCoordinateAndExplicitMirrorPolicy(t *test
 		t.Fatal("mutable sidecar/catalog acquired alternate identity")
 	}
 	for address, wantMirror := range map[string]string{
-		"https://maven.minecraftforge.net/net/minecraftforge/binarypatcher/1/binarypatcher-1.jar":                     mirrorOrigin + "/maven/net/minecraftforge/binarypatcher/1/binarypatcher-1.jar",
-		"https://maven.neoforged.net/releases/net/neoforged/neoforge/21.1.1/neoforge-21.1.1-installer.jar":            mirrorOrigin + "/maven/net/neoforged/neoforge/21.1.1/neoforge-21.1.1-installer.jar",
-		"https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.16.0/fabric-loader-0.16.0.jar":                       mirrorOrigin + "/maven/net/fabricmc/fabric-loader/0.16.0/fabric-loader-0.16.0.jar",
+		"https://maven.minecraftforge.net/net/minecraftforge/binarypatcher/1/binarypatcher-1.jar":          mirrorOrigin + "/maven/net/minecraftforge/binarypatcher/1/binarypatcher-1.jar",
+		"https://maven.neoforged.net/releases/net/neoforged/neoforge/21.1.1/neoforge-21.1.1-installer.jar": mirrorOrigin + "/maven/net/neoforged/neoforge/21.1.1/neoforge-21.1.1-installer.jar",
+		"https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.16.0/fabric-loader-0.16.0.jar":            mirrorOrigin + "/maven/net/fabricmc/fabric-loader/0.16.0/fabric-loader-0.16.0.jar",
 		central: aliyunMavenOrigin + "/org/example/library/1/library-1.jar",
 	} {
 		if got := mirrorURL(address); got != wantMirror {
