@@ -2,7 +2,7 @@ export type Locale = "en" | "zh";
 
 export const REPO_URL = "https://github.com/Lingwcy/mcl";
 export const RELEASES_URL = `${REPO_URL}/releases`;
-export const LATEST_TAG = "0.0.10";
+export const LATEST_TAG = "0.0.11";
 
 export const SCREENSHOT_WIDTH = 1360;
 export const SCREENSHOT_HEIGHT = 1114;

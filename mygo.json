@@ -1,7 +1,7 @@
 {
   "name": "mcl",
   "identifier": "dev.mcl.launcher",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "out": "build",
   "slug": "mcl",
   "icon": "resources/icon.png",
