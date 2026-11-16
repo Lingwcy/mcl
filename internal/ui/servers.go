@@ -379,23 +379,23 @@ func (s *Shell) serversSidebar(c *ui.Context) {
 	const entryHeight = 28
 	sv, t := &s.servers, s.theme
 	ui.Row(c).FillWidth().Height(44).Shrink(0).Padding(0, 12, 0, 16).Gap(6).Children(func() {
-		ui.Text(c, "服务器").FontSize(12).FontWeight(600).Grow(1)
-		iconButton(c, "rescan-instance-servers", "重新收录实例服务器", iconScan, s.rescanServers).Disabled(sv.syncing || sv.actions.Sync == nil)
-		iconButton(c, "sidebar-add-server", "添加服务器", iconPlus, s.openAddServer)
+		ui.Text(c, s.tr("服务器")).FontSize(12).FontWeight(600).Grow(1)
+		iconButton(c, "rescan-instance-servers", s.tr("重新收录实例服务器"), iconScan, s.rescanServers).Disabled(sv.syncing || sv.actions.Sync == nil)
+		iconButton(c, "sidebar-add-server", s.tr("添加服务器"), iconPlus, s.openAddServer)
 	})
 	ui.Scroll(c.Key("servers-sidebar-scroll")).Grow(1).MinHeight(0).FillWidth().Padding(4, 0, 10).Gap(1).Children(func() {
-		s.secondaryEntry(c, "servers-all", "全部服务器", iconServer, entryHeight, sv.filter == "" && sv.instanceFilter == "", func() {
+		s.secondaryEntry(c, "servers-all", s.tr("全部服务器"), iconServer, entryHeight, sv.filter == "" && sv.instanceFilter == "", func() {
 			sv.filter, sv.instanceFilter = "", ""
 		})
-		s.secondaryEntry(c, "servers-online", "在线服务器", iconCheck, entryHeight, sv.filter == "online" && sv.instanceFilter == "", func() {
+		s.secondaryEntry(c, "servers-online", s.tr("在线服务器"), iconCheck, entryHeight, sv.filter == "online" && sv.instanceFilter == "", func() {
 			sv.filter, sv.instanceFilter = "online", ""
 		})
-		s.secondaryEntry(c, "servers-manual", "全局添加", iconPlus, entryHeight, sv.filter == "manual" && sv.instanceFilter == "", func() {
+		s.secondaryEntry(c, "servers-manual", s.tr("全局添加"), iconPlus, entryHeight, sv.filter == "manual" && sv.instanceFilter == "", func() {
 			sv.filter, sv.instanceFilter = "manual", ""
 		})
 		if len(s.library.snapshot.Instances) > 0 {
 			ui.Divider(c).Margin(6, 14)
-			ui.Text(c, "按实例筛选").FontSize(10).FontWeight(600).TextColor(colors(t).Metadata).Padding(4, 16, 4, 16)
+			ui.Text(c, s.tr("按实例筛选")).FontSize(10).FontWeight(600).TextColor(colors(t).Metadata).Padding(4, 16, 4, 16)
 			for _, inst := range s.library.snapshot.Instances {
 				id := inst.ID
 				selected := sv.instanceFilter == id
@@ -434,7 +434,7 @@ func (s *Shell) serversView(c *ui.Context) {
 	dialogProgress := animateDialog(workspace, "add-server-dialog", sv.showAdd)
 	workspace.Children(func() {
 		ui.Row(c.Key("servers-toolbar")).FillWidth().Height(28).Shrink(0).Gap(8).Children(func() {
-			ui.Text(c, s.serversHeading()).FontSize(15).FontWeight(600).MinWidth(0).SingleLine()
+			ui.Text(c, s.tr(s.serversHeading())).FontSize(15).FontWeight(600).MinWidth(0).SingleLine()
 			if len(rows) > 0 {
 				ui.Textf(c, "%d", len(rows)).FontSize(11).TextColor(colors(t).Metadata).Shrink(0)
 			}
@@ -444,10 +444,10 @@ func (s *Shell) serversView(c *ui.Context) {
 			}
 			ui.Row(c).Width(172).MinWidth(84).Shrink(1).Height(26).Padding(0, 8).Gap(6).Radius(6).Background(t.Surface).Children(func() {
 				ui.Icon(c, iconSearch).Size(13, 13).TextColor(colors(t).Icon)
-				ui.TextInputBase(c.Key("server-search"), &sv.search).Label("搜索服务器").Placeholder("搜索名称或地址").Grow(1).MinWidth(0).FillHeight().FontSize(11)
+				ui.TextInputBase(c.Key("server-search"), &sv.search).Label(s.tr("搜索服务器")).Placeholder(s.tr("搜索名称或地址")).Grow(1).MinWidth(0).FillHeight().FontSize(11)
 			})
-			sizedIconButton(c, "refresh-servers", "刷新服务器状态", iconRefresh, 26, 15, 6, s.refreshServerStatuses).Disabled(sv.syncing)
-			ui.PrimaryButton(c.Key("add-server-open"), "添加服务器").Height(26).FontSize(12).OnClick(s.openAddServer)
+			sizedIconButton(c, "refresh-servers", s.tr("刷新服务器状态"), iconRefresh, 26, 15, 6, s.refreshServerStatuses).Disabled(sv.syncing)
+			ui.PrimaryButton(c.Key("add-server-open"), s.tr("添加服务器")).Height(26).FontSize(12).OnClick(s.openAddServer)
 		})
 
 		if sv.syncing && len(sv.records) == 0 {
@@ -475,20 +475,20 @@ func (s *Shell) addServerDialog(c *ui.Context, progress float32) {
 	p := colors(t)
 	open := true
 	dlg := ui.DialogBase(c.Key("add-server-dialog"), &open, func(backdrop, panel ui.Element) {
-		panel.Label("添加服务器").Width(340).Padding(14, 16).Radius(12).
+		panel.Label(s.tr("添加服务器")).Width(340).Padding(14, 16).Radius(12).
 			Background(p.Raised).Border(1, p.Border)
 		styleDialogMotion(backdrop, panel, p, progress, sv.showAdd)
 		ui.Column(c).FillWidth().Gap(10).Children(func() {
 			ui.Row(c).FillWidth().Height(20).Children(func() {
-				ui.Text(c, "添加服务器").FontSize(13).FontWeight(600)
+				ui.Text(c, s.tr("添加服务器")).FontSize(13).FontWeight(600)
 				ui.Spacer(c)
-				sizedIconButton(c, "close-add-server", "关闭", iconClose, 20, 13, 5, func() {
+				sizedIconButton(c, "close-add-server", s.tr("关闭"), iconClose, 20, 13, 5, func() {
 					sv.showAdd = false
 					sv.addError = ""
 				})
 			})
-			input := ui.TextInput(c.Key("add-server-address"), &sv.addAddress).Label("服务器地址").
-				Placeholder("输入服务器地址，如 mc.example.com").FillWidth().Height(30).FontSize(12).
+			input := ui.TextInput(c.Key("add-server-address"), &sv.addAddress).Label(s.tr("服务器地址")).
+				Placeholder(s.tr("输入服务器地址，如 mc.example.com")).FillWidth().Height(30).FontSize(12).
 				Disabled(sv.adding).
 				OnChange(func() { sv.addError = "" }).OnSubmit(s.submitAddServer)
 			if sv.showAdd {
@@ -496,14 +496,14 @@ func (s *Shell) addServerDialog(c *ui.Context, progress float32) {
 			}
 			ui.Row(c).FillWidth().Height(26).Gap(6).AlignItems(ui.Center).Children(func() {
 				targetInst, hasInst := s.instanceByID(sv.addInstanceID)
-				targetLabel := "自动选择"
+				targetLabel := s.tr("自动选择")
 				if hasInst {
 					targetLabel = targetInst.Name
 				}
-				instBtn := ui.ButtonBase(c.Key("add-server-instance")).Label("默认启动实例").Tooltip("启动实例："+targetLabel).
+				instBtn := ui.ButtonBase(c.Key("add-server-instance")).Label(s.tr("默认启动实例")).Tooltip(s.tr("启动实例："+targetLabel)).
 					Height(26).MaxWidth(150).Padding(0, 8).Gap(5).Radius(6).Disabled(sv.adding)
 				rowMotion(c, instBtn, p.Control).Menu(func(menu *ui.Menu) {
-					if menu.Item("自动选择").Checked(sv.addInstanceID == "").Chosen() {
+					if menu.Item(s.tr("自动选择")).Checked(sv.addInstanceID == "").Chosen() {
 						sv.addInstanceID = ""
 					}
 					for _, inst := range s.library.snapshot.Instances {
@@ -520,11 +520,11 @@ func (s *Shell) addServerDialog(c *ui.Context, progress float32) {
 					ui.Icon(c, iconChevronDown).Size(10, 10).Shrink(0).TextColor(p.Metadata)
 				})
 				ui.Spacer(c)
-				ui.Button(c.Key("add-server-cancel"), "取消").Height(26).FontSize(12).Disabled(sv.adding).OnClick(func() {
+				ui.Button(c.Key("add-server-cancel"), s.tr("取消")).Height(26).FontSize(12).Disabled(sv.adding).OnClick(func() {
 					sv.showAdd = false
 					sv.addError = ""
 				})
-				ui.PrimaryButton(c.Key("add-server-submit"), "添加").Height(26).FontSize(12).
+				ui.PrimaryButton(c.Key("add-server-submit"), s.tr("添加")).Height(26).FontSize(12).
 					Disabled(sv.adding || strings.TrimSpace(sv.addAddress) == "").OnClick(s.submitAddServer)
 			})
 			if sv.addError != "" {
@@ -548,12 +548,12 @@ func (s *Shell) serversEmptyState(c *ui.Context) {
 			message = "没有匹配的服务器"
 			detail = "可以调整筛选条件或清除搜索关键词。"
 		}
-		ui.Text(c, message).FontSize(13).FontWeight(500)
-		ui.Text(c, detail).FontSize(11).TextColor(t.TextMuted).TextAlign(ui.Center)
+		ui.Text(c, s.tr(message)).FontSize(13).FontWeight(500)
+		ui.Text(c, s.tr(detail)).FontSize(11).TextColor(t.TextMuted).TextAlign(ui.Center)
 		if len(sv.records) == 0 {
 			ui.Row(c).Gap(8).Margin(4, 0, 0, 0).Children(func() {
-				ui.PrimaryButton(c.Key("empty-add-server"), "添加服务器").Height(28).OnClick(s.openAddServer)
-				ui.Button(c.Key("empty-rescan-servers"), "收录实例服务器").Height(28).Disabled(sv.syncing || sv.actions.Sync == nil).OnClick(s.rescanServers)
+				ui.PrimaryButton(c.Key("empty-add-server"), s.tr("添加服务器")).Height(28).OnClick(s.openAddServer)
+				ui.Button(c.Key("empty-rescan-servers"), s.tr("收录实例服务器")).Height(28).Disabled(sv.syncing || sv.actions.Sync == nil).OnClick(s.rescanServers)
 			})
 		}
 	})
@@ -598,18 +598,18 @@ func (s *Shell) serverBannerCard(c *ui.Context, rec app.ServerRecord) {
 			// Top row: Address, source badge, spacer, online status, more menu
 			ui.Row(c).FillWidth().Height(18).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, rec.Address).FontSize(13).FontWeight(600).MinWidth(0).Shrink(1).SingleLine().ContextMenu(func(menu *ui.Menu) {
-					if menu.Item("复制服务器地址").Chosen() {
+					if menu.Item(s.tr("复制服务器地址")).Chosen() {
 						services.WriteClipboard(address)
 					}
 				})
 				if rec.Source == "manual" {
-					ui.Text(c, "全局").FontSize(10).TextColor(p.AccentInk).Padding(1, 5).Radius(4).Background(p.Selected).Shrink(0).SingleLine()
+					ui.Text(c, s.tr("全局")).FontSize(10).TextColor(p.AccentInk).Padding(1, 5).Radius(4).Background(p.Selected).Shrink(0).SingleLine()
 				}
 				ui.Spacer(c)
 
 				statusRow := ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center)
 				if versionText != "" {
-					statusRow.Tooltip("服务端：" + versionText)
+					statusRow.Tooltip(s.tr("服务端：" + versionText))
 				}
 				statusRow.Children(func() {
 					dotColor := p.IconMuted
@@ -625,7 +625,7 @@ func (s *Shell) serverBannerCard(c *ui.Context, rec app.ServerRecord) {
 					switch {
 					case probing:
 						busyIndicator(c, 11)
-						ui.Text(c, "探测中").FontSize(11).TextColor(p.Metadata).Shrink(0)
+						ui.Text(c, s.tr("探测中")).FontSize(11).TextColor(p.Metadata).Shrink(0)
 					case online:
 						ui.Textf(c, "%d / %d", ping.status.OnlinePlayers, ping.status.MaxPlayers).FontSize(11).FontWeight(500).TextColor(t.TextMuted).Shrink(0)
 						latencyColor := t.Success
@@ -636,22 +636,22 @@ func (s *Shell) serverBannerCard(c *ui.Context, rec app.ServerRecord) {
 						}
 						ui.Textf(c, "%d ms", ping.status.LatencyMS).FontSize(10).FontWeight(500).TextColor(latencyColor).Padding(1, 5).Radius(4).Background(p.Tag).Shrink(0)
 					case failed:
-						ui.Text(c, "离线").FontSize(11).TextColor(t.Danger).Shrink(0)
+						ui.Text(c, s.tr("离线")).FontSize(11).TextColor(t.Danger).Shrink(0)
 					default:
-						ui.Text(c, "未探测").FontSize(11).TextColor(p.Metadata).Shrink(0)
+						ui.Text(c, s.tr("未探测")).FontSize(11).TextColor(p.Metadata).Shrink(0)
 					}
 				})
 
-				moreBtn := ui.ButtonBase(c.Key("server-more")).Label(address+" 的更多操作").Tooltip("更多操作").Size(20, 20).Shrink(0).Radius(5).Center()
+				moreBtn := ui.ButtonBase(c.Key("server-more")).Label(s.tr(address+" 的更多操作")).Tooltip(s.tr("更多操作")).Size(20, 20).Shrink(0).Radius(5).Center()
 				rowMotion(c, moreBtn, ui.Transparent).Menu(func(menu *ui.Menu) {
-					if menu.Item("刷新状态").Chosen() {
+					if menu.Item(s.tr("刷新状态")).Chosen() {
 						s.pingServer(key, address)
 					}
-					if menu.Item("复制服务器地址").Chosen() {
+					if menu.Item(s.tr("复制服务器地址")).Chosen() {
 						services.WriteClipboard(address)
 					}
 					menu.Separator()
-					if menu.Item("从启动器移除").Chosen() {
+					if menu.Item(s.tr("从启动器移除")).Chosen() {
 						s.removeServer(key)
 					}
 				}).Children(func() { ui.Text(c, "···").FontSize(14).FontWeight(600) })
@@ -689,20 +689,20 @@ func (s *Shell) serverBannerCard(c *ui.Context, rec app.ServerRecord) {
 							ui.Text(c, rec.Address).FontSize(11).TextColor(p.Metadata).SingleLine()
 						}
 					case probing:
-						ui.Text(c, "正在探测服务器信息与 MOTD…").FontSize(11).TextColor(p.Metadata).SingleLine()
+						ui.Text(c, s.tr("正在探测服务器信息与 MOTD…")).FontSize(11).TextColor(p.Metadata).SingleLine()
 					case failed && ping.err != "":
 						ui.Text(c, ping.err).FontSize(11).TextColor(t.TextMuted).MaxLines(2).Ellipsis("…")
 					default:
-						ui.Text(c, "点击右上角刷新可探测服务器 MOTD 与在线状态").FontSize(11).TextColor(p.Metadata).SingleLine()
+						ui.Text(c, s.tr("点击右上角刷新可探测服务器 MOTD 与在线状态")).FontSize(11).TextColor(p.Metadata).SingleLine()
 					}
 				})
 
 				ui.Row(c).Shrink(0).Gap(6).AlignItems(ui.Center).Children(func() {
-					instLabel := "无可用实例"
+					instLabel := s.tr("无可用实例")
 					if hasInst {
 						instLabel = targetInst.Name
 					}
-					instBtn := ui.ButtonBase(c.Key("server-instance")).Label("选择启动实例").Tooltip("启动实例："+instLabel).Height(24).MaxWidth(116).Padding(0, 7).Gap(5).Radius(5).Disabled(len(s.library.snapshot.Instances) == 0)
+					instBtn := ui.ButtonBase(c.Key("server-instance")).Label(s.tr("选择启动实例")).Tooltip(s.tr("启动实例："+instLabel)).Height(24).MaxWidth(116).Padding(0, 7).Gap(5).Radius(5).Disabled(len(s.library.snapshot.Instances) == 0)
 					rowMotion(c, instBtn, p.Tag).Menu(func(menu *ui.Menu) {
 						for _, inst := range s.library.snapshot.Instances {
 							instID := inst.ID
@@ -724,10 +724,10 @@ func (s *Shell) serverBannerCard(c *ui.Context, rec app.ServerRecord) {
 					if !joinDisabled {
 						joinFill, joinInk = p.Accent, p.OnAccent
 					}
-					joinBtn := ui.ButtonBase(c.Key("join-server")).Label("启动并加入 "+address).Tooltip("使用「"+instLabel+"」启动并加入服务器").Height(24).Padding(0, 9).Gap(5).Radius(5).Disabled(joinDisabled)
+					joinBtn := ui.ButtonBase(c.Key("join-server")).Label(s.tr("启动并加入 "+address)).Tooltip(s.tr("启动并加入 "+address)).Height(24).Padding(0, 9).Gap(5).Radius(5).Disabled(joinDisabled)
 					rowMotion(c, joinBtn, joinFill).OnClick(func() { s.launchServer(rec) }).Children(func() {
 						ui.Icon(c, iconPlay).Size(10, 10).TextColor(joinInk)
-						ui.Text(c, "加入").FontSize(11).FontWeight(500).TextColor(joinInk)
+						ui.Text(c, s.tr("加入")).FontSize(11).FontWeight(500).TextColor(joinInk)
 					})
 				})
 			})

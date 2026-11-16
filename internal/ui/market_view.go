@@ -39,14 +39,14 @@ func (s *Shell) marketView(c *ui.Context) {
 		ui.Column(c.Key("market-filters")).FillWidth().Shrink(0).Padding(8, 10).Gap(6).Radius(10).Background(t.Surface).Children(func() {
 			ui.Row(c).FillWidth().Gap(8).Children(func() {
 				if association == nil {
-					target := "不指定实例"
+					target := s.tr("不指定实例")
 					for _, v := range s.library.snapshot.Instances {
 						if v.ID == m.targetID {
 							target = v.Name
 						}
 					}
-					ui.Button(c.Key("market-target"), target).Label("选择目标实例").Width(160).Height(28).Menu(func(menu *ui.Menu) {
-						if menu.Item("不指定实例").Checked(m.targetID == "").Chosen() {
+					ui.Button(c.Key("market-target"), target).Label(s.tr("选择目标实例")).Width(160).Height(28).Menu(func(menu *ui.Menu) {
+						if menu.Item(s.tr("不指定实例")).Checked(m.targetID == "").Chosen() {
 							s.selectMarketTarget("")
 						}
 						for _, v := range s.library.snapshot.Instances {
@@ -56,16 +56,16 @@ func (s *Shell) marketView(c *ui.Context) {
 						}
 					})
 				}
-				ui.TextInput(c.Key("market-query"), &m.text).Label("搜索市场").Placeholder("搜索").Grow(1).MinWidth(0).Height(28).OnSubmit(func() { s.searchMarket(true) })
-				iconButton(c, "market-search", "搜索", iconSearch, func() { s.searchMarket(true) })
+				ui.TextInput(c.Key("market-query"), &m.text).Label(s.tr("搜索市场")).Placeholder(s.tr("搜索")).Grow(1).MinWidth(0).Height(28).OnSubmit(func() { s.searchMarket(true) })
+				iconButton(c, "market-search", s.tr("搜索"), iconSearch, func() { s.searchMarket(true) })
 			})
 			ui.Row(c).FillWidth().Gap(8).Children(func() {
 				game := m.gameVersion
 				if game == "" {
-					game = "全部版本"
+					game = s.tr("全部版本")
 				}
-				ui.Button(c.Key("market-game-version"), game).Label("筛选游戏版本").Height(26).Width(126).Menu(func(menu *ui.Menu) {
-					if menu.Item("全部版本").Checked(m.gameVersion == "").Chosen() {
+				ui.Button(c.Key("market-game-version"), game).Label(s.tr("筛选游戏版本")).Height(26).Width(126).Menu(func(menu *ui.Menu) {
+					if menu.Item(s.tr("全部版本")).Checked(m.gameVersion == "").Chosen() {
 						s.selectMarketGame("")
 					}
 					for _, v := range s.library.snapshot.Releases {
@@ -74,8 +74,8 @@ func (s *Shell) marketView(c *ui.Context) {
 						}
 					}
 				})
-				sortLabel := marketSortLabel(m.sort)
-				ui.Button(c.Key("market-sort"), sortLabel).Label("市场排序").Height(26).Width(100).Menu(func(menu *ui.Menu) {
+				sortLabel := s.tr(marketSortLabel(m.sort))
+				ui.Button(c.Key("market-sort"), sortLabel).Label(s.tr("市场排序")).Height(26).Width(100).Menu(func(menu *ui.Menu) {
 					for _, sort := range []string{"relevance", "downloads", "follows", "newest", "updated", "name"} {
 						if m.source == market.Modrinth && sort == "name" {
 							continue
@@ -83,29 +83,29 @@ func (s *Shell) marketView(c *ui.Context) {
 						if m.source == market.CurseForge && sort == "follows" {
 							continue
 						}
-						if menu.Item(marketSortLabel(sort)).Checked(m.sort == sort).Chosen() {
+						if menu.Item(s.tr(marketSortLabel(sort))).Checked(m.sort == sort).Chosen() {
 							m.sort = sort
 							s.searchMarket(true)
 						}
 					}
 				})
 				if m.filtersActive() {
-					iconButton(c, "market-reset", "清除筛选", iconBack, func() { m.resetFilters(); s.searchMarket(true) })
+					iconButton(c, "market-reset", s.tr("清除筛选"), iconBack, func() { m.resetFilters(); s.searchMarket(true) })
 				}
 				ui.Spacer(c)
 				if !m.busy && m.error == "" && (m.source != market.CurseForge || m.actions.CurseForgeAvailable) {
-					ui.Textf(c, "%s 项", compactCount(int64(m.results.Total))).FontSize(11).TextColor(colors(t).Metadata)
+					ui.Text(c, s.tr(fmt.Sprintf("%s 项", compactCount(int64(m.results.Total))))).FontSize(11).TextColor(colors(t).Metadata)
 				}
 				if m.source == market.CurseForge && m.actions.SetKey != nil && m.actions.CurseForgeAvailable {
-					iconButton(c, "market-cf-key", "配置 CurseForge API Key", iconSettings, s.openMarketKey)
+					iconButton(c, "market-cf-key", s.tr("配置 CurseForge API Key"), iconSettings, s.openMarketKey)
 				}
 			})
 		})
 		if m.source == market.CurseForge && !m.actions.CurseForgeAvailable {
 			ui.Column(c).Grow(1).FillWidth().Center().Gap(12).Children(func() {
 				ui.Icon(c, iconInfo).Size(25, 25).TextColor(colors(t).Icon)
-				ui.Text(c, "需要 CurseForge API Key").FontSize(12)
-				ui.Button(c.Key("configure-cf"), "配置").Height(28).OnClick(s.openMarketKey)
+				ui.Text(c, s.tr("需要 CurseForge API Key")).FontSize(12)
+				ui.Button(c.Key("configure-cf"), s.tr("配置")).Height(28).OnClick(s.openMarketKey)
 			})
 			return
 		}
@@ -118,7 +118,7 @@ func (s *Shell) marketView(c *ui.Context) {
 			return
 		}
 		if len(m.results.Projects) == 0 {
-			marketStatus(c, "无结果", iconSearch)
+			marketStatus(c, s.tr("无结果"), iconSearch)
 			return
 		}
 		projects := m.results.Projects
@@ -132,7 +132,11 @@ func (s *Shell) marketView(c *ui.Context) {
 }
 func (s *Shell) marketProjectRow(c *ui.Context, p market.Project, separated bool) {
 	t := s.theme
-	button := ui.ButtonBase(c.Key("market-project-"+p.ID)).Label(p.Title).FillWidth().Height(marketProjectRowHeight).Padding(6, 10).Gap(8).Justify(ui.Start)
+	title, description := p.Title, p.Description
+	if s.i18n.TranslateResources {
+		title, description = market.TranslatedProject(p)
+	}
+	button := ui.ButtonBase(c.Key("market-project-"+p.ID)).Label(title).FillWidth().Height(marketProjectRowHeight).Padding(6, 10).Gap(8).Justify(ui.Start)
 	if separated {
 		const inset = 12
 		line := colors(t).ListDivider
@@ -149,12 +153,12 @@ func (s *Shell) marketProjectRow(c *ui.Context, p market.Project, separated bool
 		s.marketProjectIcon(c, p, marketProjectIconSize)
 		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).FillWidth().Gap(4).Children(func() {
-				ui.Text(c, p.Title).FontSize(13).FontWeight(500).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
+				ui.Text(c, title).FontSize(13).FontWeight(500).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
 				for _, tag := range firstStrings(p.Loaders, 3) {
 					s.marketLoaderTag(c, tag)
 				}
 			})
-			ui.Text(c, p.Description).FontSize(11).TextColor(t.TextMuted).FillWidth().MaxLines(1).Ellipsis("…")
+			ui.Text(c, description).FontSize(11).TextColor(t.TextMuted).FillWidth().MaxLines(1).Ellipsis("…")
 		})
 		ui.Column(c).Width(62).Shrink(0).AlignItems(ui.End).Gap(3).Children(func() {
 			ui.Row(c).Gap(4).Children(func() {
@@ -164,7 +168,7 @@ func (s *Shell) marketProjectRow(c *ui.Context, p market.Project, separated bool
 			if len(p.Categories) > 0 {
 				ui.Row(c).FillWidth().Gap(3).Children(func() {
 					s.categorySymbol(p.Categories[0], p.Categories[0]).draw(c, 10, t.TextMuted)
-					ui.Text(c, marketCategoryLabel(p.Categories[0])).FontSize(10).TextColor(colors(t).Metadata).MinWidth(0).Grow(1).MaxLines(1).Ellipsis("…")
+					ui.Text(c, s.tr(marketCategoryLabel(p.Categories[0]))).FontSize(10).TextColor(colors(t).Metadata).MinWidth(0).Grow(1).MaxLines(1).Ellipsis("…")
 				})
 			}
 		})
@@ -187,7 +191,7 @@ func (s *Shell) marketPagination(c *ui.Context) {
 		pages = min(500, pages)
 	}
 	ui.Row(c).FillWidth().Height(30).Shrink(0).Justify(ui.Center).Gap(5).Children(func() {
-		ui.Button(c.Key("market-prev"), "‹").Label("上一页").Size(27, 27).Disabled(m.page == 0).OnClick(func() { m.page--; s.searchMarket(false) })
+		ui.Button(c.Key("market-prev"), "‹").Label(s.tr("上一页")).Size(27, 27).Disabled(m.page == 0).OnClick(func() { m.page--; s.searchMarket(false) })
 		indexes := []int{0, m.page - 1, m.page, m.page + 1, pages - 1}
 		slices.Sort(indexes)
 		indexes = slices.Compact(indexes)
@@ -204,15 +208,15 @@ func (s *Shell) marketPagination(c *ui.Context) {
 			if index == m.page {
 				fill = colors(t).Selected
 			}
-			ui.Button(c.Key(fmt.Sprintf("market-page-%d", index)), fmt.Sprint(index+1)).Label(fmt.Sprintf("第 %d 页", index+1)).Size(27, 27).Background(fill).BorderWidth(0).OnClick(func() { m.page = index; s.searchMarket(false) })
+			ui.Button(c.Key(fmt.Sprintf("market-page-%d", index)), fmt.Sprint(index+1)).Label(s.tr(fmt.Sprintf("第 %d 页", index+1))).Size(27, 27).Background(fill).BorderWidth(0).OnClick(func() { m.page = index; s.searchMarket(false) })
 		}
-		ui.Button(c.Key("market-next"), "›").Label("下一页").Size(27, 27).Disabled(m.page+1 >= pages).OnClick(func() { m.page++; s.searchMarket(false) })
+		ui.Button(c.Key("market-next"), "›").Label(s.tr("下一页")).Size(27, 27).Disabled(m.page+1 >= pages).OnClick(func() { m.page++; s.searchMarket(false) })
 	})
 }
 func (s *Shell) marketError(c *ui.Context) {
 	ui.Column(c).Grow(1).FillWidth().Center().Gap(12).Children(func() {
 		ui.Text(c, s.market.error).FontSize(12).TextColor(s.theme.Danger).MaxLines(3)
-		ui.Button(c.Key("market-retry"), "重试").Height(27).OnClick(func() {
+		ui.Button(c.Key("market-retry"), s.tr("重试")).Height(27).OnClick(func() {
 			if s.market.selected != nil {
 				s.openMarketProject(*s.market.selected)
 			} else {
@@ -224,17 +228,17 @@ func (s *Shell) marketError(c *ui.Context) {
 func (s *Shell) marketKeyView(c *ui.Context) {
 	m := &s.market
 	ui.Row(c).FillWidth().Children(func() {
-		iconButton(c, "cf-key-back", "返回", iconBack, func() { m.showKey = false; m.keyInput = "" })
+		iconButton(c, "cf-key-back", s.tr("返回"), iconBack, func() { m.showKey = false; m.keyInput = "" })
 		ui.Text(c, "CurseForge").FontSize(16).FontWeight(500)
 	})
 	ui.TextInput(c.Key("cf-key"), &m.keyInput).Label("CurseForge API Key").Placeholder("API Key").Password().Height(30).FillWidth()
-	ui.Text(c, "仅在本次会话使用").FontSize(11).TextColor(s.theme.TextMuted)
+	ui.Text(c, s.tr("仅在本次会话使用")).FontSize(11).TextColor(s.theme.TextMuted)
 	ui.Row(c).Gap(8).Children(func() {
-		ui.Button(c.Key("cf-key-apply"), "应用").Height(28).Width(80).Disabled(strings.TrimSpace(m.keyInput) == "").OnClick(func() {
+		ui.Button(c.Key("cf-key-apply"), s.tr("应用")).Height(28).Width(80).Disabled(strings.TrimSpace(m.keyInput) == "").OnClick(func() {
 			s.applyMarketKey(strings.TrimSpace(m.keyInput))
 		})
 		if m.actions.CurseForgeAvailable {
-			ui.Button(c.Key("cf-key-clear"), "清除会话 Key").Height(28).OnClick(func() { s.applyMarketKey("") })
+			ui.Button(c.Key("cf-key-clear"), s.tr("清除会话 Key")).Height(28).OnClick(func() { s.applyMarketKey("") })
 		}
 	})
 	if m.keyError != "" {
@@ -298,16 +302,16 @@ func (s *Shell) marketDetailView(c *ui.Context) {
 	}
 	s.configureMarketMarkdown(c, &m.markdown, m.mediaCache)
 	ui.Row(c).FillWidth().Height(28).Shrink(0).Gap(8).Children(func() {
-		iconButton(c, "market-detail-back", "返回搜索", iconBack, s.backMarketResults)
+		iconButton(c, "market-detail-back", s.tr("返回搜索"), iconBack, s.backMarketResults)
 		ui.Spacer(c)
 		if state := s.marketAssociation(); state != nil {
-			ui.Button(c.Key("association-project"), "核对项目").Height(26).
+			ui.Button(c.Key("association-project"), s.tr("核对项目")).Height(26).
 				Disabled(state.active || state.origin != nil || m.detail == nil).
 				OnClick(func() { s.startAssetAssociation(state, p.Source, p.ID, "") })
 		}
 	})
 	if m.detailBusy {
-		loadingStatus(c, "正在读取…")
+		loadingStatus(c, s.tr("正在读取…"))
 		return
 	}
 	if m.error != "" {
@@ -318,15 +322,22 @@ func (s *Shell) marketDetailView(c *ui.Context) {
 		return
 	}
 	p = m.detail.Project
+	detailTitle, detailDescription := p.Title, p.Description
+	if s.i18n.TranslateResources {
+		detailTitle, detailDescription = market.TranslatedProject(p)
+		if p.TranslatedName != "" && p.TranslatedName != p.Title {
+			detailTitle = p.TranslatedName + " (" + p.Title + ")"
+		}
+	}
 	ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Padding(2, 0, 4, 0).Gap(12).Children(func() {
 		s.marketProjectIcon(c, p, 48)
 		ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
-			ui.Text(c, p.Title).FontSize(19).FontWeight(600).MaxLines(1).Ellipsis("…")
+			ui.Text(c, detailTitle).FontSize(19).FontWeight(600).MaxLines(1).Ellipsis("…")
 			ui.Text(c, p.Author).FontSize(12).TextColor(colors(t).Metadata).MaxLines(1).Ellipsis("…")
 		})
 		downloads := compactCount(p.Downloads)
 		ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(5).
-			Tooltip("下载量").Label("下载量 " + downloads).Children(func() {
+			Tooltip(s.tr("下载量")).Label(s.tr("下载量") + " " + downloads).Children(func() {
 			ui.Icon(c, iconDownload).Size(12, 12).TextColor(colors(t).Metadata)
 			ui.Text(c, downloads).FontSize(12).TextColor(colors(t).Metadata).SingleLine()
 		})
@@ -334,7 +345,7 @@ func (s *Shell) marketDetailView(c *ui.Context) {
 	s.marketDetailTabs(c, p.PageURL)
 	if m.tab == 0 {
 		ui.Scroll(c.Key("market-description")).Grow(1).MinHeight(0).FillWidth().Gap(12).Padding(4, 0).Transition(motionReveal).Children(func() {
-			ui.Text(c, p.Description).FontSize(12).FillWidth()
+			ui.Text(c, detailDescription).FontSize(12).FillWidth()
 			if p.Body != "" {
 				markdown.View(c, strings.TrimSpace(p.Body), &m.markdown).FillWidth()
 			}
@@ -350,7 +361,7 @@ func (s *Shell) marketDetailView(c *ui.Context) {
 	}
 	versions := m.detail.Versions
 	if len(versions) == 0 {
-		marketStatus(c, "没有匹配版本", iconArchive)
+		marketStatus(c, s.tr("没有匹配版本"), iconArchive)
 		return
 	}
 	m.versionsList.Key = func(index int) any { return versions[index].ID }
@@ -369,13 +380,13 @@ func (s *Shell) marketDetailTabs(c *ui.Context, pageURL string) {
 		label string
 		icon  *ui.SVG
 	}{
-		{label: "简介", icon: iconBook},
-		{label: "版本", icon: iconLayers},
+		{label: s.tr("简介"), icon: iconBook},
+		{label: s.tr("版本"), icon: iconLayers},
 	}
 	trackW := marketDetailTabWidth*2 + marketDetailTabGap
 	ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(8).Children(func() {
 		seg := ui.SegmentedBase(c.Key("market-detail-tabs"), &m.tab, len(tabs))
-		seg.Track.Label("详情视图").Size(trackW, marketDetailTabH).AlignItems(ui.Center).Children(func() {
+		seg.Track.Label(s.tr("详情视图")).Size(trackW, marketDetailTabH).AlignItems(ui.Center).Children(func() {
 			pill := ui.Box(c).Absolute().Left(0).Top(0).Size(marketDetailTabWidth, marketDetailTabH)
 			var segEls [2]ui.Element
 			var labelIcons [2]ui.Element
@@ -464,11 +475,11 @@ func (s *Shell) marketDetailTabs(c *ui.Context, pageURL string) {
 		})
 
 		if market.SafeURL(pageURL) {
-			label := "项目主页"
+			label := s.tr("项目主页")
 			if m.descriptionTruncated {
-				label = "完整说明"
+				label = s.tr("完整说明")
 			}
-			homeBtn := ui.ButtonBase(c.Key("market-website")).Label(label).Tooltip("在浏览器中打开项目主页").
+			homeBtn := ui.ButtonBase(c.Key("market-website")).Label(label).Tooltip(s.tr("在浏览器中打开项目主页")).
 				Height(marketDetailTabH).Padding(0, 10).Radius(7).Center().Gap(5).FocusRing(false)
 			fill := ui.Transparent
 			ink := colors(t).Metadata

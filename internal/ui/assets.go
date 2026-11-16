@@ -265,20 +265,20 @@ func (s *Shell) instanceView(c *ui.Context) {
 		}
 		s.assetIdentityStatus(c, value.ID)
 		ui.Row(c).FillWidth().Height(30).Shrink(0).Gap(3).Children(func() {
-			assetTab(c, "assets-all", "全部", a.kind == "", func() { a.kind = "" })
+			assetTab(c, "assets-all", s.tr("全部"), a.kind == "", func() { a.kind = "" })
 			for _, item := range assetCategories {
 				if item.kind == app.AssetModpack {
 					continue
 				}
-				assetTab(c, "assets-tab-"+string(item.kind), item.name, a.kind == item.kind, func() { a.kind = item.kind })
+				assetTab(c, "assets-tab-"+string(item.kind), s.tr(item.name), a.kind == item.kind, func() { a.kind = item.kind })
 			}
 			ui.Spacer(c)
 			ui.Row(c).Width(142).MinWidth(72).Shrink(1).Height(26).Padding(0, 7).Gap(5).Radius(6).Background(t.Surface).Children(func() {
 				ui.Icon(c, iconSearch).Size(13, 13).TextColor(colors(t).Icon)
-				ui.TextInputBase(c.Key("asset-search"), &a.search).Label("搜索实例资产").Placeholder("搜索").Grow(1).MinWidth(0).FillHeight().FontSize(11)
+				ui.TextInputBase(c.Key("asset-search"), &a.search).Label(s.tr("搜索实例资产")).Placeholder(s.tr("搜索")).Grow(1).MinWidth(0).FillHeight().FontSize(11)
 			})
-			sortLabels := []string{"名称", "修改日期", "文件大小"}
-			sortButton := ui.ButtonBase(c.Key("asset-sort")).Label("资产排序").Tooltip("排序："+sortLabels[a.sort]).Size(26, 26).Radius(5).Center()
+			sortLabels := []string{s.tr("名称"), s.tr("修改日期"), s.tr("文件大小")}
+			sortButton := ui.ButtonBase(c.Key("asset-sort")).Label(s.tr("资产排序")).Tooltip(s.tr("排序：")+sortLabels[a.sort]).Size(26, 26).Radius(5).Center()
 			if sortButton.Hovered() {
 				sortButton.Background(t.SurfaceHover)
 			}
@@ -289,7 +289,7 @@ func (s *Shell) instanceView(c *ui.Context) {
 					}
 				}
 			})
-			iconButton(c, "refresh-assets", "刷新资产", iconRefresh, s.refreshAssets)
+			iconButton(c, "refresh-assets", s.tr("刷新资产"), iconRefresh, s.refreshAssets)
 		})
 		ui.Column(c.Key("asset-content-" + string(a.kind))).Grow(1).MinHeight(0).FillWidth().Transition(motionReveal).Children(func() {
 			if a.busy {
@@ -309,7 +309,7 @@ func (s *Shell) instanceView(c *ui.Context) {
 func (s *Shell) instanceToolbar(c *ui.Context) {
 	t := s.theme
 	ui.Row(c).FillWidth().Height(28).Shrink(0).Gap(6).Children(func() {
-		toolbarAction(c, "instance-market", "添加资产", iconPlus, func() { s.openMarket(s.assets.kind) })
+		toolbarAction(c, "instance-market", s.tr("添加资产"), iconPlus, func() { s.openMarket(s.assets.kind) })
 		s.assetIdentityButton(c)
 		s.assetDiagnosticButton(c)
 		if value, ok := s.selectedInstance(); ok && value.Pack != nil && s.market.actions.InspectPackRepair != nil && s.market.actions.RestorePack != nil {
@@ -317,14 +317,14 @@ func (s *Shell) instanceToolbar(c *ui.Context) {
 			if state := s.assets.repair; state == nil || state.id == value.ID || state.job == "" {
 				action = func() { s.openPackRepair(value) }
 			}
-			toolbarAction(c, "instance-pack-repair", "检查整合包文件", iconArchive, action)
+			toolbarAction(c, "instance-pack-repair", s.tr("检查整合包文件"), iconArchive, action)
 		}
 		if s.assets.undo[s.library.selectedID] != "" {
-			ui.ButtonBase(c.Key("undo-asset-removal")).Label("撤销移除").Tooltip("恢复上次移除的资产，已有同名文件会保留").Size(28, 28).Radius(6).Center().Disabled(s.assets.changing || s.diagnosingAssets(s.library.selectedID) || s.assetUpdateBlocked(s.library.selectedID)).OnClick(s.restoreAsset).Children(func() { ui.Icon(c, iconUndo).Size(16, 16).TextColor(colors(t).Icon) })
+			ui.ButtonBase(c.Key("undo-asset-removal")).Label(s.tr("撤销移除")).Tooltip(s.tr("恢复上次移除的资产，已有同名文件会保留")).Size(28, 28).Radius(6).Center().Disabled(s.assets.changing || s.diagnosingAssets(s.library.selectedID) || s.assetUpdateBlocked(s.library.selectedID)).OnClick(s.restoreAsset).Children(func() { ui.Icon(c, iconUndo).Size(16, 16).TextColor(colors(t).Icon) })
 		}
 		ui.Spacer(c)
-		toolbarAction(c, "instance-directory", "打开实例目录", iconFolder, s.openInstanceDirectory)
-		toolbarAction(c, "instance-logs", "查看日志", iconLog, s.showInstanceLogs)
+		toolbarAction(c, "instance-directory", s.tr("打开实例目录"), iconFolder, s.openInstanceDirectory)
+		toolbarAction(c, "instance-logs", s.tr("查看日志"), iconLog, s.showInstanceLogs)
 	})
 }
 
@@ -335,14 +335,14 @@ func (s *Shell) instanceSummary(c *ui.Context, value instance.Instance) {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
 			ui.Row(c).FillWidth().Height(26).Gap(6).Children(func() {
 				ui.Text(c, value.Name).FontSize(20).FontWeight(600).MinWidth(0).Shrink(1).MaxLines(1).Ellipsis("…")
-				button := ui.ButtonBase(c.Key("instance-preferences")).Label("实例设置").Tooltip("实例设置").Size(24, 24).Shrink(0).Radius(5).Center()
+				button := ui.ButtonBase(c.Key("instance-preferences")).Label(s.tr("实例设置")).Tooltip(s.tr("实例设置")).Size(24, 24).Shrink(0).Radius(5).Center()
 				rowMotion(c, button, ui.Transparent).OnClick(s.openInstanceSettings).Children(func() {
 					ui.Icon(c, iconSettings).Size(13, 13).TextColor(colors(t).Icon)
 				})
 			})
-			subtitle := instanceType(value)
+			subtitle := s.tr(instanceType(value))
 			if value.Name != value.Version.ID {
-				subtitle = value.Version.ID + " · " + instanceType(value)
+				subtitle = value.Version.ID + " · " + subtitle
 			}
 			ui.Text(c, subtitle).FillWidth().MinWidth(0).FontSize(11).TextColor(t.TextMuted).MaxLines(1).Ellipsis("…")
 		})
@@ -354,6 +354,8 @@ func (s *Shell) instanceLaunchButton(c *ui.Context) {
 	t := s.theme
 	label, detail, action, disabled := s.launchButton()
 	icon := iconLog
+	accentButton := !disabled && (label == "检查启动条件" || label == "启动游戏" || label == "选择账户" || label == "安装游戏文件")
+	displayLabel := s.tr(label)
 	switch label {
 	case "检查启动条件", "启动游戏", "选择账户", "查看启动任务", "等待游戏窗口":
 		icon = iconPlay
@@ -365,20 +367,21 @@ func (s *Shell) instanceLaunchButton(c *ui.Context) {
 			icon = iconCheck
 		}
 	case "游戏正在运行":
-		label += " · 查看日志"
+		displayLabel += " · " + s.tr("查看日志")
 	case "游戏仍在运行":
-		label += " · 查看任务"
+		displayLabel += " · " + s.tr("查看任务")
 	case "正在恢复整合包文件":
 		icon = iconArchive
 	case "暂不支持此加载器":
-		label += " · 查看实例设置"
+		displayLabel += " · " + s.tr("查看实例设置")
 		icon = iconSettings
 	}
 	fill, ink := t.Surface, t.Text
-	if !disabled && (label == "检查启动条件" || label == "启动游戏" || label == "选择账户" || label == "安装游戏文件") {
+	if accentButton {
 		fill, ink = t.Accent, t.AccentText
 	}
-	button := ui.ButtonBase(c.Key("launch-game")).Label(label).Tooltip(label+"\n"+detail).
+	displayDetail := s.tr(detail)
+	button := ui.ButtonBase(c.Key("launch-game")).Label(displayLabel).Tooltip(displayLabel+"\n"+displayDetail).
 		Size(64, 44).Shrink(0).Radius(11).Center().Disabled(disabled)
 	rowMotion(c, button, fill).OnClick(action).Children(func() {
 		ui.Icon(c, icon).Size(22, 22).TextColor(ink).ContentTransition(ui.ContentTransition{Animation: &motionFade})
@@ -472,20 +475,20 @@ func (s *Shell) assetRow(c *ui.Context, file app.AssetFile) {
 		}
 		if !file.Directory {
 			if file.Origin == nil && s.assets.actions.Associate != nil {
-				toolbarAction(c, "asset-associate", "关联市场来源", iconScan, func() { s.openAssetAssociation(instanceID, file) })
+				toolbarAction(c, "asset-associate", s.tr("关联市场来源"), iconScan, func() { s.openAssetAssociation(instanceID, file) })
 			}
 			s.assetUpdateButton(c, instanceID, file)
 			disabled := s.assets.changing || s.diagnosingAssets(instanceID) || s.assetUpdateBlocked(instanceID) || s.identifyingAssets(instanceID) ||
 				s.associatingAsset(instanceID) || s.installation.active || s.assets.actions.Change == nil
 			enabled := file.Enabled
-			ui.Switch(c.Key("asset-enabled"), &enabled).Label("启用 "+file.Name).Size(30, 18).Disabled(disabled).OnClick(func() {
+			ui.Switch(c.Key("asset-enabled"), &enabled).Label(s.tr("启用 ")+file.Name).Size(30, 18).Disabled(disabled).OnClick(func() {
 				action := app.AssetDisable
 				if enabled {
 					action = app.AssetEnable
 				}
 				s.changeAsset(instanceID, file, action)
 			})
-			ui.ButtonBase(c.Key("asset-remove")).Label("移除 "+file.Name).Tooltip("移除，可撤销；文件保留在实例的 removed-assets 目录").Size(24, 24).Radius(5).Center().Disabled(disabled).OnClick(func() { s.changeAsset(instanceID, file, app.AssetRemove) }).Children(func() { ui.Icon(c, iconTrash).Size(14, 14).TextColor(colors(t).Icon) })
+			ui.ButtonBase(c.Key("asset-remove")).Label(s.tr("移除 ")+file.Name).Tooltip(s.tr("移除，可撤销；文件保留在实例的 removed-assets 目录")).Size(24, 24).Radius(5).Center().Disabled(disabled).OnClick(func() { s.changeAsset(instanceID, file, app.AssetRemove) }).Children(func() { ui.Icon(c, iconTrash).Size(14, 14).TextColor(colors(t).Icon) })
 		}
 	})
 }
@@ -511,7 +514,7 @@ func (s *Shell) assetEmptyState(c *ui.Context) {
 	}
 	ui.Column(c.Key("asset-empty-state")).Grow(1).MinHeight(0).FillWidth().Center().Gap(8).Children(func() {
 		ui.Icon(c, iconArchive).Size(25, 25).TextColor(colors(t).IconMuted)
-		ui.Text(c, title).FontSize(12).TextColor(t.TextMuted)
+		ui.Text(c, s.tr(title)).FontSize(12).TextColor(t.TextMuted)
 	})
 }
 
@@ -534,7 +537,7 @@ func (s *Shell) welcomeView(c *ui.Context) {
 	t := s.theme
 	ui.Column(c.Key("welcome")).Grow(1).FillWidth().Center().Gap(12).Padding(24).Children(func() {
 		ui.Icon(c, iconCube).Size(30, 30).TextColor(colors(t).IconMuted)
-		ui.Button(c.Key("welcome-create"), "新建实例").Height(28).OnClick(s.openNewInstance)
+		ui.Button(c.Key("welcome-create"), s.tr("新建实例")).Height(28).OnClick(s.openNewInstance)
 	})
 }
 

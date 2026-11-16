@@ -117,7 +117,8 @@ func (s *Shell) planAssetUpdate(state *assetUpdateState, version market.Version)
 	state.busy, state.message, state.canceling = true, "", false
 	state.planning = true
 	request := market.UpdateRequest{InstanceID: state.instanceID, Kind: market.Kind(state.file.Kind), World: state.file.World, Loader: state.loader,
-		Selections: []market.UpdateSelection{{Path: state.file.Path, Source: state.origin.Source, ProjectID: state.origin.ProjectID, VersionID: version.ID}}}
+		Selections:     []market.UpdateSelection{{Path: state.file.Path, Source: state.origin.Source, ProjectID: state.origin.ProjectID, VersionID: version.ID}},
+		PrefixFileName: s.i18n.PrefixResourceFileName}
 	state.cancel = s.assets.actions.PlanUpdate(request, func(plan market.UpdatePlan, err error) {
 		if s.assets.update != state {
 			return

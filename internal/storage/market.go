@@ -102,7 +102,7 @@ func (s *MarketStore) check(ctx context.Context, root *os.Root, plan market.Inst
 			return err
 		}
 		if f.Source != plan.Request.Source || !market.ValidID(f.ProjectID) || !market.ValidID(f.VersionID) ||
-			!meta.ValidPath(f.Path) || !market.SafeFilename(f.File.Filename) || path.Base(f.Path) != f.File.Filename ||
+			!meta.ValidPath(f.Path) || !market.SafeFilename(f.File.Filename) || (path.Base(f.Path) != f.File.Filename && !market.HasTranslatedPrefix(path.Base(f.Path), f.File.Filename)) ||
 			!meta.ValidSHA1(f.File.SHA1) || (f.File.URL != "" && !market.SafeURL(f.File.URL)) ||
 			f.File.Size <= 0 || f.File.Size > download.MaxFileSize {
 			return errors.New("资产文件计划无效")

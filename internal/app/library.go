@@ -51,11 +51,12 @@ type LoaderReleaseCatalog interface {
 }
 
 type LibraryService struct {
-	catalog  VersionCatalog
-	store    InstanceRepository
-	platform meta.Platform
-	mu       sync.Mutex
-	loaders  LoaderReleaseCatalog
+	catalog       VersionCatalog
+	store         InstanceRepository
+	platform      meta.Platform
+	mu            sync.Mutex
+	loaders       LoaderReleaseCatalog
+	GameDirectory GameDirectoryResolver
 }
 
 func NewLibraryService(catalog VersionCatalog, store InstanceRepository, platform meta.Platform) *LibraryService {
@@ -165,6 +166,11 @@ func (s *LibraryService) Create(ctx context.Context, request CreateInstance) (in
 	}
 	if err := s.store.Create(ctx, value); err != nil {
 		return instance.Instance{}, fmt.Errorf("创建实例失败: %w", err)
+	}
+	if request.Settings.I18n.AutoSetInstanceLanguage && s.GameDirectory != nil {
+		if dir, err := s.GameDirectory(ctx, value.ID); err == nil && dir != "" {
+			_ = EnsureMinecraftOptionsLanguage(dir, request.Settings.I18n.MinecraftLanguageCode(nil))
+		}
 	}
 	return value, nil
 }

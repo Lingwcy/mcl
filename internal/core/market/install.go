@@ -17,6 +17,7 @@ type InstallRequest struct {
 	Source                                                       Source
 	Kind                                                         Kind
 	ProjectID, VersionID, InstanceID, GameVersion, Loader, World string
+	PrefixFileName                                               bool
 }
 type InstallFile struct {
 	Source                     Source

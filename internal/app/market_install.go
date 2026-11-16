@@ -7,6 +7,7 @@ import (
 	"path"
 	"slices"
 
+	"mcl/internal/core/archive"
 	"mcl/internal/core/download"
 	"mcl/internal/core/market"
 	"mcl/internal/core/meta"
@@ -79,6 +80,7 @@ func (s *MarketInstaller) Plan(ctx context.Context, request market.InstallReques
 	}
 	slices.Sort(ids)
 	ids = slices.Compact(ids)
+	projectsByID := make(map[string]market.Project, len(ids))
 	for start := 0; start < len(ids); start += 20 {
 		batch := ids[start:min(start+20, len(ids))]
 		projects, err := client.ProjectSummaries(ctx, request.Source, batch)
@@ -99,12 +101,42 @@ func (s *MarketInstaller) Plan(ctx context.Context, request market.InstallReques
 			if !found {
 				continue
 			}
+			projectsByID[file.ProjectID] = project
 			file.Metadata.WithProject(project)
 			if file.File.URL == "" && market.SafeURL(project.PageURL) {
 				if plan.LocalPages == nil {
 					plan.LocalPages = make(map[string]string)
 				}
 				plan.LocalPages[file.Path] = project.PageURL
+			}
+		}
+	}
+	if request.PrefixFileName {
+		usedPaths := make(map[string]bool, len(plan.Files))
+		for _, file := range plan.Files {
+			usedPaths[archive.Key(file.Path)] = true
+		}
+		for index := range plan.Files {
+			file := &plan.Files[index]
+			project, ok := projectsByID[file.ProjectID]
+			if !ok {
+				project = market.Project{Kind: request.Kind, Title: file.File.Filename}
+			}
+			prefixed := market.PrefixedFilename(file.File.Filename, project)
+			if prefixed == file.File.Filename {
+				continue
+			}
+			newPath := path.Join(path.Dir(file.Path), prefixed)
+			if usedPaths[archive.Key(newPath)] {
+				continue
+			}
+			oldPath := file.Path
+			delete(usedPaths, archive.Key(oldPath))
+			usedPaths[archive.Key(newPath)] = true
+			file.Path = newPath
+			if pageURL, ok := plan.LocalPages[oldPath]; ok {
+				delete(plan.LocalPages, oldPath)
+				plan.LocalPages[newPath] = pageURL
 			}
 		}
 	}

@@ -175,6 +175,7 @@ func (s *Shell) startGameWithServer(value instance.Instance, serverAddress, serv
 		return
 	}
 	launchSettings := s.settings
+	launchSettings.I18n = s.effectiveI18n()
 	if serverAddress != "" {
 		launchSettings.Game.AutoJoinServer = true
 		launchSettings.Game.ServerAddress = serverAddress
@@ -350,13 +351,13 @@ func (s *Shell) legacyActivityView(c *ui.Context) {
 	i, t := &s.installation, s.theme
 	ui.Scroll(c).Grow(1).FillWidth().Padding(18, 24, 24).Gap(8).Children(func() {
 		ui.Row(c).FillWidth().Height(28).Shrink(0).Gap(8).Children(func() {
-			settingsGroupLabel(c, "下载与任务").Grow(1)
+			settingsGroupLabel(c, s.tr("下载与任务")).Grow(1)
 			if s.downloadJobs.actions.Refresh != nil {
-				ui.Button(c.Key("back-download-tasks"), "下载任务").Height(24).OnClick(func() { s.downloadJobs.showLegacy = false })
+				ui.Button(c.Key("back-download-tasks"), s.tr("下载任务")).Height(24).OnClick(func() { s.downloadJobs.showLegacy = false })
 			}
-			ui.Button(c.Key("refresh-sessions"), "刷新会话").Height(24).Disabled(i.sessionsBusy).OnClick(s.refreshSessions)
+			ui.Button(c.Key("refresh-sessions"), s.tr("刷新会话")).Height(24).Disabled(i.sessionsBusy).OnClick(s.refreshSessions)
 		})
-		ui.Button(c.Key("open-directory-operations"), "目录迁移与复制任务…").Height(26).OnClick(s.openDirectoryTasks)
+		ui.Button(c.Key("open-directory-operations"), s.tr("目录迁移与复制任务…")).Height(26).OnClick(s.openDirectoryTasks)
 		s.marketTaskCard(c)
 		s.javaTaskCard(c)
 		s.assetAssociationTask(c)
@@ -384,8 +385,8 @@ func (s *Shell) legacyActivityView(c *ui.Context) {
 				}
 			}
 			section(c, name, func() {
-				ui.Textf(c, "游戏仍在运行 · Minecraft %s · PID %d", record.VersionID, record.Process.PID).FontSize(12)
-				ui.Text(c, "请在游戏窗口中退出。上次启动器的日志无法在此恢复。").FontSize(11).TextColor(t.TextMuted)
+				ui.Textf(c, s.tr("游戏仍在运行 · Minecraft %s · PID %d"), record.VersionID, record.Process.PID).FontSize(12)
+				ui.Text(c, s.tr("请在游戏窗口中退出。上次启动器的日志无法在此恢复。")).FontSize(11).TextColor(t.TextMuted)
 			})
 		}
 		if i.instanceID == "" {
@@ -395,19 +396,19 @@ func (s *Shell) legacyActivityView(c *ui.Context) {
 			association := s.market.association
 			associationTask := association != nil && (association.active || association.message != "")
 			if !marketTask && !packTask && !associationTask && s.java.job.packageID == "" && !s.assets.changing && s.assets.identity == nil && s.assets.update == nil && s.assets.diagnostic == nil && len(s.games.rows) == 0 && len(i.sessions) == 0 {
-				ui.Text(c, "暂无任务").FontSize(13).TextColor(t.TextMuted)
+				ui.Text(c, s.tr("暂无任务")).FontSize(13).TextColor(t.TextMuted)
 			}
 			if i.message != "" {
-				ui.Text(c, i.message).FontSize(11).TextColor(t.Danger)
+				ui.Text(c, s.tr(i.message)).FontSize(11).TextColor(t.Danger)
 			}
 			return
 		}
 		section(c, i.name, func() {
-			ui.Button(c.Key("task-logs"), "任务日志").Width(90).Height(24).OnClick(func() { s.showLogs("") })
+			ui.Button(c.Key("task-logs"), s.tr("任务日志")).Width(90).Height(24).OnClick(func() { s.showLogs("") })
 			if game, found := s.launchGameSnapshot(); s.waitingForGameWindow(game, found) {
 				ui.Row(c).Gap(12).Children(func() {
-					ui.Text(c, "等待游戏窗口…").Grow(1).FontSize(12).TextColor(t.TextMuted)
-					ui.Button(c.Key("view-launch"), "查看启动").Height(26).OnClick(func() { s.page = launchPage })
+					ui.Text(c, s.tr("等待游戏窗口…")).Grow(1).FontSize(12).TextColor(t.TextMuted)
+					ui.Button(c.Key("view-launch"), s.tr("查看启动")).Height(26).OnClick(func() { s.page = launchPage })
 				})
 				return
 			}
@@ -420,24 +421,24 @@ func (s *Shell) legacyActivityView(c *ui.Context) {
 					} else {
 						busyIndicator(c, 14)
 					}
-					ui.Text(c.Key("installation-stage"), labelStage).Grow(1).ContentTransition(ui.ContentTransition{Animation: &motionFade})
+					ui.Text(c.Key("installation-stage"), s.tr(labelStage)).Grow(1).ContentTransition(ui.ContentTransition{Animation: &motionFade})
 					label := "取消任务"
 					if i.canceling {
 						label = "正在取消…"
 					}
-					ui.Button(c.Key("cancel-install"), label).Height(26).Disabled(i.canceling).OnClick(s.cancelInstallation)
+					ui.Button(c.Key("cancel-install"), s.tr(label)).Height(26).Disabled(i.canceling).OnClick(s.cancelInstallation)
 				})
 				p := i.progress.Progress
 				if p.TotalFiles > 0 {
-					ui.Text(c, fmt.Sprintf("%d / %d 个文件 · %.1f / %.1f MiB · 复用 %d 个", p.Files, p.TotalFiles, float64(p.Bytes)/(1<<20), float64(p.TotalBytes)/(1<<20), p.Reused)).FontSize(11).TextColor(colors(t).Metadata)
-					smoothProgress(c, float64(p.Files)/float64(p.TotalFiles)).Label("安装进度").FillWidth().Height(4)
+					ui.Text(c, fmt.Sprintf(s.tr("%d / %d 个文件 · %.1f / %.1f MiB · 复用 %d 个"), p.Files, p.TotalFiles, float64(p.Bytes)/(1<<20), float64(p.TotalBytes)/(1<<20), p.Reused)).FontSize(11).TextColor(colors(t).Metadata)
+					smoothProgress(c, float64(p.Files)/float64(p.TotalFiles)).Label(s.tr("安装进度")).FillWidth().Height(4)
 				}
 			} else {
 				color := t.TextMuted
 				if i.failed {
 					color = t.Danger
 				}
-				ui.Text(c, i.message).FontSize(12).TextColor(color)
+				ui.Text(c, s.tr(i.message)).FontSize(12).TextColor(color)
 				if report := i.checked; report != nil {
 					ui.Textf(c, "Minecraft %s · Java %s · %s · %d MiB", report.VersionID, report.Java.Version, report.Java.Arch, report.MemoryMiB).FontSize(12).TextColor(t.TextMuted)
 					ui.Text(c, report.Java.Executable).FontSize(11).TextColor(colors(t).Metadata).Selectable()
@@ -449,7 +450,7 @@ func (s *Shell) legacyActivityView(c *ui.Context) {
 					} else if i.launching {
 						label = "重新启动"
 					}
-					ui.Button(c.Key("retry-install"), label).Height(26).OnClick(func() {
+					ui.Button(c.Key("retry-install"), s.tr(label)).Height(26).OnClick(func() {
 						s.library.selectedID = i.instanceID
 						if i.checking {
 							s.startLaunchCheck()
@@ -459,11 +460,11 @@ func (s *Shell) legacyActivityView(c *ui.Context) {
 							s.startInstallation()
 						}
 					})
-					ui.Button(c.Key("task-instance-settings"), "实例设置").Height(26).OnClick(func() { s.library.selectedID = i.instanceID; s.openInstanceSettings() })
+					ui.Button(c.Key("task-instance-settings"), s.tr("实例设置")).Height(26).OnClick(func() { s.library.selectedID = i.instanceID; s.openInstanceSettings() })
 				})
 			}
 		})
-		ui.Text(c, "进度按完整校验的文件计数。取消后可重新安装，完整文件会直接复用。").FontSize(11).TextColor(t.TextMuted)
+		ui.Text(c, s.tr("进度按完整校验的文件计数。取消后可重新安装，完整文件会直接复用。")).FontSize(11).TextColor(t.TextMuted)
 	})
 }
 

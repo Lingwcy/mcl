@@ -36,7 +36,7 @@ func (s *Shell) creditsView(c *ui.Context) {
 		ui.Scroll(c.Key("credits-settings-scroll")).Grow(1).MinHeight(0).FillWidth().Padding(18, 24, 24).Gap(12).Children(func() {
 			ui.Column(c.Key("credits-section")).FillWidth().Shrink(0).Gap(8).Children(func() {
 				settingsGroupLabel(c, "鸣谢")
-				ui.Text(c, "启动器的开发和发展离不开他们的辛苦付出。").FontSize(12).TextColor(p.Metadata).Margin(0, 2)
+				ui.Text(c, s.tr("启动器的开发和发展离不开他们的辛苦付出。")).FontSize(12).TextColor(p.Metadata).Margin(0, 2)
 				ui.Grid(c.Key("credits-grid")).FillWidth().Columns(columns).Gap(10).Children(func() {
 					for _, entry := range creditEntries {
 						creditCard(c, t, entry)

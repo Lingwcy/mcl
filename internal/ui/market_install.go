@@ -78,7 +78,7 @@ func (s *Shell) selectMarketInstall(project market.Project, version market.Versi
 	if loader == "" && project.Kind == market.Mod && len(version.Loaders) == 1 {
 		loader = version.Loaders[0]
 	}
-	m.install = &marketInstallState{project: project, version: version, request: market.InstallRequest{Source: project.Source, Kind: project.Kind, ProjectID: project.ID, VersionID: version.ID, InstanceID: id, Loader: loader}}
+	m.install = &marketInstallState{project: project, version: version, request: market.InstallRequest{Source: project.Source, Kind: project.Kind, ProjectID: project.ID, VersionID: version.ID, InstanceID: id, Loader: loader, PrefixFileName: s.i18n.PrefixResourceFileName}}
 	m.showInstall, m.showKey, m.message = true, false, ""
 	m.install.archiveName = project.Title
 	if project.Kind == market.Modpack && m.importDirectoryID != nil {
@@ -226,25 +226,29 @@ func (s *Shell) marketInstallView(c *ui.Context) {
 	}
 	ui.Row(c).FillWidth().Height(28).Shrink(0).Gap(10).Children(func() {
 		if !i.busy {
-			iconButton(c, "install-back", "返回版本", iconBack, func() { s.market.install = nil })
+			iconButton(c, "install-back", s.tr("返回版本"), iconBack, func() { s.market.install = nil })
 		}
-		ui.Text(c, i.project.Title).FontSize(16).FontWeight(500).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
+		title := i.project.Title
+		if s.i18n.TranslateResources && i.project.TranslatedName != "" && i.project.TranslatedName != i.project.Title {
+			title = i.project.TranslatedName + " (" + i.project.Title + ")"
+		}
+		ui.Text(c, title).FontSize(16).FontWeight(500).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
 	})
 	ui.Text(c, i.version.Name).FontSize(12).TextColor(t.TextMuted).MaxLines(2)
 	if i.complete {
-		marketStatus(c, "文件已安装", iconCheck)
-		ui.Button(c.Key("install-open-instance"), "查看实例").Height(28).OnClick(func() { id := i.request.InstanceID; s.market.install = nil; s.selectInstance(id) })
+		marketStatus(c, s.tr("文件已安装"), iconCheck)
+		ui.Button(c.Key("install-open-instance"), s.tr("查看实例")).Height(28).OnClick(func() { id := i.request.InstanceID; s.market.install = nil; s.selectInstance(id) })
 		return
 	}
 	if i.busy {
-		label := "正在解析依赖…"
+		label := s.tr("正在解析依赖…")
 		switch {
 		case i.supplying:
-			label = "正在核验本地文件…"
+			label = s.tr("正在核验本地文件…")
 		case i.installing && i.progress.TotalFiles > i.progress.Files:
 			label = fmt.Sprintf("%d / %d · %s", i.progress.Files, i.progress.TotalFiles, formatBytes(i.progress.Bytes))
 		case i.installing:
-			label = "正在检查并写入实例…"
+			label = s.tr("正在检查并写入实例…")
 		}
 		s.workStatus(c, s.marketTaskPaused(i), label)
 		if i.installing && i.progress.TotalFiles > 0 {

@@ -149,6 +149,7 @@ type Prepared struct {
 	release     func()
 	lease       SessionLease
 	versionSHA1 string
+	mcLang      string
 	receipt     install.Receipt
 	gameID      string
 	settled     chan struct{}
@@ -262,7 +263,11 @@ func (s *LaunchService) Prepare(ctx context.Context, id string, fallback Setting
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	p := &Prepared{memoryProbe: s.memoryProbe, ctx: ctx, options: options, receipt: receipt, versionSHA1: value.Version.SHA1, start: s.start, release: reserved.Close, lease: reserved.lease, settled: make(chan struct{})}
+	var mcLang string
+	if fallback.I18n.AutoSetInstanceLanguage {
+		mcLang = fallback.I18n.MinecraftLanguageCode(nil)
+	}
+	p := &Prepared{memoryProbe: s.memoryProbe, ctx: ctx, options: options, receipt: receipt, versionSHA1: value.Version.SHA1, mcLang: mcLang, start: s.start, release: reserved.Close, lease: reserved.lease, settled: make(chan struct{})}
 	evidence := diagnostics.Snapshot{}
 	if scope := taskScope(ctx); scope != nil {
 		scope.execution.mu.Lock()
@@ -379,6 +384,9 @@ func (p *Prepared) Start(session launch.Session) (launch.Game, error) {
 	plan, err := launch.Build(p.options, session)
 	if err != nil {
 		return nil, err
+	}
+	if p.mcLang != "" {
+		_ = EnsureMinecraftOptionsLanguage(plan.Directory(), p.mcLang)
 	}
 	if p.openLogs != nil {
 		p.files, err = p.openLogs(p.ctx)

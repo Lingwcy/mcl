@@ -117,15 +117,15 @@ func downloadSettingMenu(c *ui.Context, key, label, selected string, choices []d
 	if selected == "custom" {
 		width = 94
 	}
-	ui.ButtonBase(c.Key(key)).Label(label).Width(width).MinWidth(0).Height(26).Radius(6).Padding(0, 9).Gap(8).Background(t.Surface).Disabled(blocked).
+	ui.ButtonBase(c.Key(key)).Label(tr(c, label)).Width(width).MinWidth(0).Height(26).Radius(6).Padding(0, 9).Gap(8).Background(t.Surface).Disabled(blocked).
 		Menu(func(menu *ui.Menu) {
 			for _, choice := range choices {
-				if menu.Item(choice.label).Checked(choice.value == selected).Chosen() {
+				if menu.Item(tr(c, choice.label)).Checked(choice.value == selected).Chosen() {
 					choose(choice.value)
 				}
 			}
 		}).Children(func() {
-		ui.Text(c, name).FontSize(12).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
+		ui.Text(c, tr(c, name)).FontSize(12).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
 		ui.Icon(c, iconChevronDown).Size(12, 12).Shrink(0).TextColor(colors(t).Metadata)
 	})
 }
@@ -148,7 +148,7 @@ func (s *Shell) downloadSettingsView(c *ui.Context) {
 						selected = draft.concurrency
 						if draft.customConcurrency {
 							selected = "custom"
-							ui.TextInput(c.Key("download-concurrency"), &draft.concurrency).Label("自定义下载并发数").Placeholder("1–128").Width(72).Height(26).Disabled(blocked).OnChange(s.saveSettings).OnSubmit(s.saveSettings)
+							ui.TextInput(c.Key("download-concurrency"), &draft.concurrency).Label(s.tr("自定义下载并发数")).Placeholder("1–128").Width(72).Height(26).Disabled(blocked).OnChange(s.saveSettings).OnSubmit(s.saveSettings)
 						}
 					}
 					downloadSettingMenu(c, "download-concurrency-mode", "并发下载", selected, concurrencyChoices, blocked, func(value string) {
@@ -168,7 +168,7 @@ func (s *Shell) downloadSettingsView(c *ui.Context) {
 						selected = draft.speed
 						if draft.customSpeed {
 							selected = "custom"
-							ui.TextInput(c.Key("download-speed-value"), &draft.speed).Label("自定义下载速率上限，KiB/s").Width(72).Height(26).Disabled(blocked).OnChange(s.saveSettings).OnSubmit(s.saveSettings)
+							ui.TextInput(c.Key("download-speed-value"), &draft.speed).Label(s.tr("自定义下载速率上限，KiB/s")).Width(72).Height(26).Disabled(blocked).OnChange(s.saveSettings).OnSubmit(s.saveSettings)
 							ui.Text(c, "KiB/s").FontSize(11).TextColor(colors(t).Metadata)
 						}
 					}
@@ -190,9 +190,9 @@ func (s *Shell) downloadSettingsView(c *ui.Context) {
 					gameSettingsDivider(c)
 					gameSettingRow(c, "proxy-address", "代理地址", func() {
 						ui.Spacer(c)
-						ui.TextInput(c.Key("download-proxy-host"), &draft.proxyHost).Label("代理主机").Placeholder("主机").Width(156).MinWidth(0).Height(26).Disabled(blocked).OnChange(s.saveSettings).OnSubmit(s.saveSettings)
+						ui.TextInput(c.Key("download-proxy-host"), &draft.proxyHost).Label(s.tr("代理主机")).Placeholder(s.tr("主机")).Width(156).MinWidth(0).Height(26).Disabled(blocked).OnChange(s.saveSettings).OnSubmit(s.saveSettings)
 						ui.Text(c, ":").FontSize(12).TextColor(colors(t).Metadata)
-						ui.TextInput(c.Key("download-proxy-port"), &draft.proxyPort).Label("代理端口").Placeholder("端口").Width(66).Height(26).Disabled(blocked).OnChange(s.saveSettings).OnSubmit(s.saveSettings)
+						ui.TextInput(c.Key("download-proxy-port"), &draft.proxyPort).Label(s.tr("代理端口")).Placeholder(s.tr("端口")).Width(66).Height(26).Disabled(blocked).OnChange(s.saveSettings).OnSubmit(s.saveSettings)
 					})
 				}
 			})

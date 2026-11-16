@@ -77,51 +77,51 @@ func (s *Shell) aboutView(c *ui.Context) {
 				ui.Column(c).Shrink(1).MinWidth(0).MaxWidth(260).Gap(3).AlignItems(ui.End).Children(func() {
 					version := s.version
 					if version == "" {
-						version = "未知"
+						version = s.tr("未知")
 					}
-					ui.Text(c, "版本 "+version).FontSize(12).TextColor(t.Text)
+					ui.Text(c, s.tr("版本 ")+version).FontSize(12).TextColor(t.Text)
 					if line, accent := updateStatusLine(status); line != "" {
 						color := p.Metadata
 						if accent {
 							color = p.SettingsNavAccent
 						}
-						ui.Text(c, line).FontSize(11).TextColor(color).MaxLines(2).Ellipsis("…").TextAlign(ui.End)
+						ui.Text(c, s.tr(line)).FontSize(11).TextColor(color).MaxLines(2).Ellipsis("…").TextAlign(ui.End)
 					}
 				})
 				label, action, busy := updateAction(s, status)
-				ui.Button(c.Key("about-update-action"), label).Height(28).FontSize(12).Shrink(0).Disabled(u == nil || busy).OnClick(action)
+				ui.Button(c.Key("about-update-action"), s.tr(label)).Height(28).FontSize(12).Shrink(0).Disabled(u == nil || busy).OnClick(action)
 			})
 			if (status.Phase == UpdateAvailable || status.Phase == UpdateReady) && status.Notes != "" {
 				ui.Column(c.Key("about-update-notes")).FillWidth().Padding(14, 16).Gap(8).Radius(10).Border(0.5, p.ListDivider).Children(func() {
-					ui.Text(c, status.Version+" 更新内容").FontSize(12).FontWeight(600).TextColor(t.Text)
+					ui.Text(c, status.Version+s.tr(" 更新内容")).FontSize(12).FontWeight(600).TextColor(t.Text)
 					ui.Text(c, status.Notes).FontSize(12).TextColor(p.Metadata)
 				})
 			}
 			ui.Column(c.Key("about-update-settings")).FillWidth().Radius(10).Border(0.5, p.ListDivider).Clip().Children(func() {
-				gameSettingRow(c, "about-auto-check", "自动检查", func() {
-					ui.Text(c, "每天在后台检查一次新版本").FontSize(11).TextColor(p.Metadata).MinWidth(0).MaxLines(1).Ellipsis("…")
+				gameSettingRow(c, "about-auto-check", s.tr("自动检查"), func() {
+					ui.Text(c, s.tr("每天在后台检查一次新版本")).FontSize(11).TextColor(p.Metadata).MinWidth(0).MaxLines(1).Ellipsis("…")
 					ui.Spacer(c)
 					on := enabled && u.AutomaticChecks()
-					ui.Switch(c.Key("about-auto-check-switch"), &on).Label("自动检查更新").Size(30, 18).Disabled(!enabled).OnClick(func() {
+					ui.Switch(c.Key("about-auto-check-switch"), &on).Label(s.tr("自动检查更新")).Size(30, 18).Disabled(!enabled).OnClick(func() {
 						if s.updates != nil {
 							s.updates.SetAutomaticChecks(on)
 						}
 					})
 				})
 				gameSettingsDivider(c)
-				gameSettingRow(c, "about-auto-install", "自动安装", func() {
-					ui.Text(c, "下载后在下次启动时生效").FontSize(11).TextColor(p.Metadata).MinWidth(0).MaxLines(1).Ellipsis("…")
+				gameSettingRow(c, "about-auto-install", s.tr("自动安装"), func() {
+					ui.Text(c, s.tr("下载后在下次启动时生效")).FontSize(11).TextColor(p.Metadata).MinWidth(0).MaxLines(1).Ellipsis("…")
 					ui.Spacer(c)
 					on := enabled && u.AutomaticDownloads()
-					ui.Switch(c.Key("about-auto-install-switch"), &on).Label("自动下载并安装更新").Size(30, 18).Disabled(!enabled || !u.AutomaticChecks()).OnClick(func() {
+					ui.Switch(c.Key("about-auto-install-switch"), &on).Label(s.tr("自动下载并安装更新")).Size(30, 18).Disabled(!enabled || !u.AutomaticChecks()).OnClick(func() {
 						if s.updates != nil {
 							s.updates.SetAutomaticDownloads(on)
 						}
 					})
 				})
 				gameSettingsDivider(c)
-				gameSettingRow(c, "about-last-check", "上次检查", func() {
-					label := "尚未检查"
+				gameSettingRow(c, "about-last-check", s.tr("上次检查"), func() {
+					label := s.tr("尚未检查")
 					if u != nil {
 						if last := u.LastCheck(); !last.IsZero() {
 							label = last.Local().Format("2006-01-02 15:04")
@@ -131,7 +131,7 @@ func (s *Shell) aboutView(c *ui.Context) {
 				})
 			})
 			if u != nil && !enabled {
-				ui.Text(c, "当前构建不能自动更新：开发版本，或所在文件夹不可写。请从发布页下载新版本。").FontSize(11).TextColor(p.Metadata).Margin(0, 2)
+				ui.Text(c, s.tr("当前构建不能自动更新：开发版本，或所在文件夹不可写。请从发布页下载新版本。")).FontSize(11).TextColor(p.Metadata).Margin(0, 2)
 			}
 		})
 	})
