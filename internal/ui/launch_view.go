@@ -33,7 +33,9 @@ func (s *Shell) returnToLaunchInstance() {
 
 func (s *Shell) retryLaunch() {
 	s.library.selectedID = s.installation.instanceID
-	s.startGame()
+	if value, ok := s.selectedInstance(); ok {
+		s.startGameWithServer(value, s.installation.retryServerAddress, s.installation.retryServerName)
+	}
 }
 
 func (s *Shell) launchLogs() {

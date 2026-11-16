@@ -60,7 +60,7 @@ func TestLibraryCreateRenameAndRefresh(t *testing.T) {
 	click(t, tester, "返回实例")
 	click(t, tester, "账户")
 	shell.refreshLibrary(false)
-	click(t, tester, "Home")
+	click(t, tester, "实例")
 	if !tester.HasText("重命名世界") {
 		t.Fatalf("rename lost identity across navigation and refresh: %v", tester.Texts())
 	}

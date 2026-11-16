@@ -29,26 +29,28 @@ type InstallationActions struct {
 }
 
 type installationState struct {
-	actions           InstallationActions
-	receipts          map[string]install.Receipt
-	generation        uint64
-	instanceID, name  string
-	active, canceling bool
-	cancel            func()
-	progress          install.Progress
-	message           string
-	failed            bool
-	checking          bool
-	launching         bool
-	checked           *app.PreparationReport
-	sessions          []launch.Record
-	sessionsBusy      bool
-	sessionsError     string
-	events            []launch.Line
-	eventSequence     uint64
-	lastStage         string
-	launchGameID      string
-	requestLaunchStop func()
+	actions            InstallationActions
+	receipts           map[string]install.Receipt
+	generation         uint64
+	instanceID, name   string
+	active, canceling  bool
+	cancel             func()
+	progress           install.Progress
+	message            string
+	failed             bool
+	checking           bool
+	launching          bool
+	checked            *app.PreparationReport
+	sessions           []launch.Record
+	sessionsBusy       bool
+	sessionsError      string
+	events             []launch.Line
+	eventSequence      uint64
+	lastStage          string
+	launchGameID       string
+	retryServerAddress string
+	retryServerName    string
+	requestLaunchStop  func()
 }
 
 func (s *Shell) taskEvent(text string, failed bool) {
@@ -155,9 +157,16 @@ func (s *Shell) startLaunchCheck() {
 }
 
 func (s *Shell) startGame() {
-	i := &s.installation
 	value, ok := s.selectedInstance()
-	if !ok || i.active || i.actions.Launch == nil {
+	if !ok {
+		return
+	}
+	s.startGameWithServer(value, "", "")
+}
+
+func (s *Shell) startGameWithServer(value instance.Instance, serverAddress, serverName string) {
+	i := &s.installation
+	if i.active || i.actions.Launch == nil {
 		return
 	}
 	profile, ok := s.accounts.data.Active()
@@ -166,6 +175,15 @@ func (s *Shell) startGame() {
 		return
 	}
 	launchSettings := s.settings
+	if serverAddress != "" {
+		launchSettings.Game.AutoJoinServer = true
+		launchSettings.Game.ServerAddress = serverAddress
+		if err := launchSettings.Validate(); err != nil {
+			s.Notify(ToastError, err.Error())
+			return
+		}
+	}
+	i.retryServerAddress, i.retryServerName = serverAddress, serverName
 	i.generation++
 	generation := i.generation
 	i.instanceID, i.name, i.active = value.ID, value.Name, true
@@ -181,7 +199,11 @@ func (s *Shell) startGame() {
 		stopAfterStart = true
 		s.cancelInstallation()
 	}
-	s.taskEvent("准备启动游戏 · "+profile.Name, false)
+	event := "准备启动游戏 · " + profile.Name
+	if serverName != "" {
+		event += " · 直连 " + serverName
+	}
+	s.taskEvent(event, false)
 	s.page = launchPage
 	i.cancel = i.actions.Launch(value.ID, profile.ID(), launchSettings, func(p install.Progress) {
 		if i.active && i.generation == generation {

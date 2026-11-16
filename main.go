@@ -113,6 +113,8 @@ func run() error {
 	assetDiagnostics := app.NewAssetDiagnosticService(instances, sessions, assetStore, java.Probe)
 	marketInstaller := app.NewMarketInstaller(marketService, instances, sessions, storage.NewMarketStore(paths.Root), sharedDownloads)
 	archiveImporter := app.NewArchiveImporter(marketService, catalog, instances, sessions, storage.NewArchiveStore(paths.Root), sharedDownloads)
+	serverService := app.NewServerService(storage.NewServerStore(paths.Root))
+	wallpaperService := app.NewWallpaperService(storage.NewWallpaperStore(paths.Root))
 	javaCatalog := java.NewCatalogClient()
 	javaCatalog.HTTP.Transport = network
 	javaService := app.NewJavaService(storage.NewJavaStore(paths.Root), platform.JavaCandidates,
@@ -230,6 +232,8 @@ func run() error {
 			})
 		})
 		connectMarket(ctx, &workers, window, shell, marketService, marketInstaller, archiveImporter, packImports)
+		connectServers(ctx, &workers, window, shell, serverService)
+		connectWallpapers(ctx, &workers, window, shell, wallpaperService)
 		shell.ConnectAssets(launcherui.AssetActions{
 			Icon: func(id string, file app.AssetFile, done func(image.Image, error)) func() {
 				return marketWork(ctx, &workers, window, func(ctx context.Context) (image.Image, error) {
