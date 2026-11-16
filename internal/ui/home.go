@@ -316,7 +316,7 @@ func (s *Shell) homeView(c *ui.Context) {
 			Padding(14, 18, 18, 18).Children(func() {
 			ui.Row(c).FillWidth().Justify(ui.End).Gap(6).Children(func() {
 				wpBtn := ui.ButtonBase(c.Key("home-wallpaper-shortcut")).
-					Label("个性化设置").Tooltip("个性化").
+					Label(s.tr("个性化设置")).Tooltip(s.tr("个性化")).
 					Size(26, 26).Radius(7).Center()
 				s.homeCornerButtonMotion(wpBtn, p).OnClick(func() {
 					s.page, s.sidebarCollapsed = wallpaperSettingsPage, false
@@ -362,13 +362,13 @@ func (s *Shell) homeAccountCard(c *ui.Context) {
 	p := colors(t)
 	profile, hasAccount := a.data.Active()
 
-	accountName := "未选择角色"
-	accountMode := "点击添加账户"
+	accountName := s.tr("未选择角色")
+	accountMode := s.tr("点击添加账户")
 	if hasAccount {
 		accountName = profile.Name
-		accountMode = "离线模式"
+		accountMode = s.tr("离线模式")
 		if profile.Kind == auth.Microsoft {
-			accountMode = "正版账户"
+			accountMode = s.tr("正版账户")
 		}
 	}
 
@@ -380,7 +380,7 @@ func (s *Shell) homeAccountCard(c *ui.Context) {
 	ui.Row(c.Key("home-account-card")).Width(172).Height(52).Radius(10).
 		Background(p.Raised.Alpha(0.84)).Border(0.5, cardBorder).
 		Shadow(0, 6, 20, 0, p.Shadow).Padding(6, 7, 6, 10).Gap(4).AlignItems(ui.Center).Children(func() {
-		mainBtn := ui.ButtonBase(c.Key("home-account-open")).Label("账户 · "+accountName).Tooltip("打开账户管理").
+		mainBtn := ui.ButtonBase(c.Key("home-account-open")).Label(s.tr("账户 · "+accountName)).Tooltip(s.tr("打开账户管理")).
 			Grow(1).MinWidth(0).FillHeight().Radius(7).Padding(0, 4).Gap(8).Justify(ui.Start)
 		mainFill := ui.Transparent
 		if mainBtn.Hovered() {
@@ -396,14 +396,14 @@ func (s *Shell) homeAccountCard(c *ui.Context) {
 		})
 
 		ui.Column(c).Shrink(0).FillHeight().Justify(ui.Start).Children(func() {
-			switchBtn := ui.ButtonBase(c.Key("home-account-switch")).Label("切换账户").Tooltip("切换账户").
+			switchBtn := ui.ButtonBase(c.Key("home-account-switch")).Label(s.tr("切换账户")).Tooltip(s.tr("切换账户")).
 				Size(20, 20).Radius(5).Center()
 			rowMotion(c, switchBtn, p.Control.Alpha(0.85)).Menu(func(menu *ui.Menu) {
 				for _, prof := range a.data.Profiles {
 					id := prof.ID()
-					mode := "离线"
+					mode := s.tr("离线")
 					if prof.Kind == auth.Microsoft {
-						mode = "微软"
+						mode = s.tr("微软")
 					}
 					if menu.Item(prof.Name + " · " + mode).Checked(id == a.data.ActiveID).Chosen() {
 						if id != a.data.ActiveID {
@@ -414,7 +414,7 @@ func (s *Shell) homeAccountCard(c *ui.Context) {
 				if len(a.data.Profiles) > 0 {
 					menu.Separator()
 				}
-				if menu.Item("账户管理…").Chosen() {
+				if menu.Item(s.tr("账户管理…")).Chosen() {
 					s.openAccounts()
 				}
 			}).Children(func() {
@@ -441,6 +441,8 @@ func (s *Shell) homeLaunchCard(c *ui.Context) {
 			subtitle = inst.Name + " · " + inst.Version.ID
 		}
 	}
+	title = s.tr(title)
+	subtitle = s.tr(subtitle)
 
 	surface := darkColors.Canvas.Alpha(0.76)
 	hoverSurface := darkColors.Control.Alpha(0.88)
@@ -472,7 +474,7 @@ func (s *Shell) homeLaunchCard(c *ui.Context) {
 		})
 
 		ui.Column(c).Shrink(0).FillHeight().Justify(ui.Start).Children(func() {
-			pickBtn := ui.ButtonBase(c.Key("home-instance-menu")).Label("选择游戏实例").Tooltip("切换或新建实例").
+			pickBtn := ui.ButtonBase(c.Key("home-instance-menu")).Label(s.tr("选择游戏实例")).Tooltip(s.tr("切换或新建实例")).
 				Size(20, 20).Radius(5).Center()
 			pickFill := darkColors.Control.Alpha(0.80)
 			if pickBtn.Pressed() {
@@ -496,10 +498,10 @@ func (s *Shell) homeLaunchCard(c *ui.Context) {
 					if len(s.library.snapshot.Instances) > 0 {
 						menu.Separator()
 					}
-					if menu.Item("新建实例…").Chosen() {
+					if menu.Item(s.tr("新建实例…")).Chosen() {
 						s.openNewInstance()
 					}
-					if menu.Item("管理全部实例…").Chosen() {
+					if menu.Item(s.tr("管理全部实例…")).Chosen() {
 						s.openHome()
 					}
 				}).Children(func() {
@@ -527,14 +529,14 @@ func (s *Shell) wallpaperSettingsView(c *ui.Context) {
 		// Section 1: My Wallpapers photo tile gallery
 		ui.Column(c.Key("wallpaper-gallery-section")).FillWidth().Shrink(0).Gap(7).Children(func() {
 			ui.Row(c.Key("wallpaper-settings-header")).FillWidth().Height(22).Shrink(0).Gap(8).Children(func() {
-				settingsGroupLabel(c, "我的墙纸").Grow(1)
+				settingsGroupLabel(c, s.tr("我的墙纸")).Grow(1)
 				if w.busy {
 					busyIndicator(c, 12)
 				}
 				if len(w.snapshot.Wallpapers) > compactLimit {
-					toggleLabel := "显示全部 (" + strconv.Itoa(len(w.snapshot.Wallpapers)) + ")"
+					toggleLabel := s.tr("显示全部 (" + strconv.Itoa(len(w.snapshot.Wallpapers)) + ")")
 					if w.showAll {
-						toggleLabel = "收起"
+						toggleLabel = s.tr("收起")
 					}
 					toggleBtn := ui.ButtonBase(c.Key("toggle-all-wallpapers")).Label(toggleLabel).Height(22).Padding(0, 8).Radius(5)
 					rowMotion(c, toggleBtn, ui.Transparent).OnClick(func() { w.showAll = !w.showAll }).Children(func() {
@@ -570,9 +572,9 @@ func (s *Shell) wallpaperSettingsView(c *ui.Context) {
 		// Section 2: Background Effects
 		ui.Column(c.Key("wallpaper-effects-section")).FillWidth().Shrink(0).Gap(7).Children(func() {
 			ui.Row(c).FillWidth().Height(22).Shrink(0).Gap(8).Children(func() {
-				settingsGroupLabel(c, "背景效果").Grow(1)
+				settingsGroupLabel(c, s.tr("背景效果")).Grow(1)
 				if opts.Opacity != 100 || opts.Blur != 0 || opts.Dim != 0 {
-					resetBtn := ui.ButtonBase(c.Key("reset-wallpaper-effects")).Label("恢复默认效果").Height(22).Padding(0, 8).Radius(5)
+					resetBtn := ui.ButtonBase(c.Key("reset-wallpaper-effects")).Label(s.tr("恢复默认效果")).Height(22).Padding(0, 8).Radius(5)
 					rowMotion(c, resetBtn, ui.Transparent).OnClick(func() {
 						w.options.Opacity = 100
 						w.options.Blur = 0
@@ -582,7 +584,7 @@ func (s *Shell) wallpaperSettingsView(c *ui.Context) {
 						w.dimFloat = 0
 						s.saveWallpaperOptions()
 					}).Children(func() {
-						ui.Text(c, "恢复默认").FontSize(11).TextColor(p.Metadata)
+						ui.Text(c, s.tr("恢复默认")).FontSize(11).TextColor(p.Metadata)
 					})
 				}
 			})
@@ -592,11 +594,11 @@ func (s *Shell) wallpaperSettingsView(c *ui.Context) {
 				wallpaperEffectRow(c, "wp-shuffle-row", "混合随机切换", func() {
 					ui.Spacer(c)
 					if len(w.snapshot.Wallpapers) > 1 {
-						ui.Button(c.Key("wp-shuffle-now"), "换一张").Height(22).FontSize(11).
+						ui.Button(c.Key("wp-shuffle-now"), s.tr("换一张")).Height(22).FontSize(11).
 							Disabled(w.busy || w.actions.Shuffle == nil).OnClick(s.shuffleWallpaper)
 					}
 					shuffleOn := opts.Shuffle
-					ui.Switch(c.Key("wp-shuffle"), &shuffleOn).Label("混合随机切换").Size(30, 18).
+					ui.Switch(c.Key("wp-shuffle"), &shuffleOn).Label(s.tr("混合随机切换")).Size(30, 18).
 						Disabled(w.busy || len(w.snapshot.Wallpapers) == 0).OnClick(func() {
 						if shuffleOn {
 							s.shuffleWallpaper()
@@ -609,7 +611,7 @@ func (s *Shell) wallpaperSettingsView(c *ui.Context) {
 				gameSettingsDivider(c)
 				wallpaperEffectRow(c, "wp-opacity-row", "背景不透明度", func() {
 					ui.Spacer(c)
-					slider := ui.Slider(c.Key("wp-opacity"), &w.opacityFloat, 15, 100).Label("背景不透明度").Step(1).Width(176).Shrink(0)
+					slider := ui.Slider(c.Key("wp-opacity"), &w.opacityFloat, 15, 100).Label(s.tr("背景不透明度")).Step(1).Width(176).Shrink(0)
 					val := int(math.Round(w.opacityFloat))
 					ui.Textf(c, "%d%%", val).FontSize(11).TextColor(p.Metadata).Width(42).TextAlign(ui.End).Shrink(0)
 					if slider.Changed() && val != w.options.Opacity {
@@ -620,7 +622,7 @@ func (s *Shell) wallpaperSettingsView(c *ui.Context) {
 				gameSettingsDivider(c)
 				wallpaperEffectRow(c, "wp-blur-row", "背景模糊", func() {
 					ui.Spacer(c)
-					slider := ui.Slider(c.Key("wp-blur"), &w.blurFloat, 0, 24).Label("背景模糊").Step(1).Width(176).Shrink(0)
+					slider := ui.Slider(c.Key("wp-blur"), &w.blurFloat, 0, 24).Label(s.tr("背景模糊")).Step(1).Width(176).Shrink(0)
 					val := int(math.Round(w.blurFloat))
 					ui.Textf(c, "%d px", val).FontSize(11).TextColor(p.Metadata).Width(42).TextAlign(ui.End).Shrink(0)
 					if slider.Changed() && val != w.options.Blur {
@@ -631,7 +633,7 @@ func (s *Shell) wallpaperSettingsView(c *ui.Context) {
 				gameSettingsDivider(c)
 				wallpaperEffectRow(c, "wp-dim-row", "背景压暗", func() {
 					ui.Spacer(c)
-					slider := ui.Slider(c.Key("wp-dim"), &w.dimFloat, 0, 70).Label("背景压暗").Step(1).Width(176).Shrink(0)
+					slider := ui.Slider(c.Key("wp-dim"), &w.dimFloat, 0, 70).Label(s.tr("背景压暗")).Step(1).Width(176).Shrink(0)
 					val := int(math.Round(w.dimFloat))
 					ui.Textf(c, "%d%%", val).FontSize(11).TextColor(p.Metadata).Width(42).TextAlign(ui.End).Shrink(0)
 					if slider.Changed() && val != w.options.Dim {
@@ -646,7 +648,7 @@ func (s *Shell) wallpaperSettingsView(c *ui.Context) {
 
 func wallpaperEffectRow(c *ui.Context, key, label string, controls func()) {
 	ui.Row(c.Key(key)).FillWidth().Height(38).Shrink(0).Padding(0, 14).Gap(10).Children(func() {
-		ui.Text(c, label).FontSize(12).Width(96).Shrink(0)
+		ui.Text(c, tr(c, label)).FontSize(12).Width(96).Shrink(0)
 		ui.Row(c).Grow(1).MinWidth(0).Gap(8).AlignItems(ui.Center).Children(controls)
 	})
 }
@@ -660,7 +662,7 @@ func wallpaperSelectedBadge(c *ui.Context, p interfaceColors) {
 func (s *Shell) addWallpaperTile(c *ui.Context) {
 	w, t := &s.wallpapers, s.theme
 	p := colors(t)
-	btn := ui.ButtonBase(c.Key("tile-add")).Label("添加墙纸").Tooltip("从本地选择一张或多张图片作为墙纸").
+	btn := ui.ButtonBase(c.Key("tile-add")).Label(s.tr("添加墙纸")).Tooltip(s.tr("从本地选择一张或多张图片作为墙纸")).
 		FillWidth().Height(wallpaperTileHeight).Radius(7).Center().
 		Border(0.5, p.Divider).Disabled(w.busy || w.actions.Add == nil)
 	rowMotion(c, btn, p.Control).OnClick(s.addWallpaper).Children(func() {
@@ -671,7 +673,7 @@ func (s *Shell) addWallpaperTile(c *ui.Context) {
 					ui.Icon(c, iconPlus).Size(8, 8).TextColor(p.Secondary)
 				})
 			})
-			ui.Text(c, "添加墙纸").FontSize(10).TextColor(p.Secondary)
+			ui.Text(c, s.tr("添加墙纸")).FontSize(10).TextColor(p.Secondary)
 		})
 	})
 }
@@ -680,7 +682,7 @@ func (s *Shell) shuffleWallpaperTile(c *ui.Context, active bool) {
 	w, t := &s.wallpapers, s.theme
 	p := colors(t)
 	photos := w.snapshot.Wallpapers
-	btn := ui.ButtonBase(c.Key("tile-shuffle")).Label("混合随机切换").Tooltip("每次启动随机切换，点击立即换一张").
+	btn := ui.ButtonBase(c.Key("tile-shuffle")).Label(s.tr("混合随机切换")).Tooltip(s.tr("每次启动随机切换，点击立即换一张")).
 		FillWidth().Height(wallpaperTileHeight).Radius(7).Clip().
 		Disabled(w.busy || w.actions.Shuffle == nil || len(photos) == 0)
 	if active {
@@ -714,7 +716,7 @@ func (s *Shell) shuffleWallpaperTile(c *ui.Context, active bool) {
 func (s *Shell) defaultWallpaperTile(c *ui.Context, active bool) {
 	w, t := &s.wallpapers, s.theme
 	p := colors(t)
-	btn := ui.ButtonBase(c.Key("tile-default")).Label("mcl 默认壁纸").Tooltip("mcl 动漫默认壁纸").
+	btn := ui.ButtonBase(c.Key("tile-default")).Label(s.tr("mcl 默认壁纸")).Tooltip(s.tr("mcl 动漫默认壁纸")).
 		FillWidth().Height(wallpaperTileHeight).Radius(7).Clip().Disabled(w.busy)
 	if active {
 		btn.Border(2, p.Accent)
@@ -723,7 +725,7 @@ func (s *Shell) defaultWallpaperTile(c *ui.Context, active bool) {
 	}
 	btn.OnClick(func() { s.selectWallpaper("") }).Children(func() {
 		ui.Image(c.Key("thumb"), defaultWallpaperBitmap).Fill().Fit(ui.Cover)
-		ui.Text(c, "默认").FontSize(9).TextColor(ui.RGB(255, 255, 255)).
+		ui.Text(c, s.tr("默认")).FontSize(9).TextColor(ui.RGB(255, 255, 255)).
 			Padding(1, 5).Radius(4).Background(ui.RGBA(0, 0, 0, 0.52)).
 			Absolute().Bottom(5).Left(5)
 		if active {
@@ -739,7 +741,7 @@ func (s *Shell) wallpaperPhotoTile(c *ui.Context, wp app.Wallpaper, active bool)
 	thumb := w.thumbs[id]
 	tileRoot := ui.Box(c.Key("tile-" + id)).FillWidth().Height(wallpaperTileHeight)
 	tileRoot.Children(func() {
-		pickBtn := ui.ButtonBase(c.Key("pick")).Label("使用墙纸 " + wp.Name).
+		pickBtn := ui.ButtonBase(c.Key("pick")).Label(s.tr("使用墙纸 " + wp.Name)).
 			Tooltip(fmt.Sprintf("%s\n%d × %d", wp.Name, wp.Width, wp.Height)).
 			Fill().Radius(7).Clip().Disabled(w.busy)
 		if active {
@@ -748,11 +750,11 @@ func (s *Shell) wallpaperPhotoTile(c *ui.Context, wp app.Wallpaper, active bool)
 			pickBtn.Border(0.5, p.Divider)
 		}
 		pickBtn.ContextMenu(func(menu *ui.Menu) {
-			if menu.Item("设为墙纸").Chosen() {
+			if menu.Item(s.tr("设为墙纸")).Chosen() {
 				s.selectWallpaper(id)
 			}
 			menu.Separator()
-			if menu.Item("移除墙纸").Chosen() {
+			if menu.Item(s.tr("移除墙纸")).Chosen() {
 				s.removeWallpaper(id)
 			}
 		}).OnClick(func() { s.selectWallpaper(id) }).Children(func() {
@@ -769,7 +771,7 @@ func (s *Shell) wallpaperPhotoTile(c *ui.Context, wp app.Wallpaper, active bool)
 		})
 
 		if tileRoot.Hovered() && !w.busy && w.actions.Remove != nil {
-			rmBtn := ui.ButtonBase(c.Key("remove")).Label("移除 "+wp.Name).Tooltip("移除墙纸").
+			rmBtn := ui.ButtonBase(c.Key("remove")).Label(s.tr("移除 "+wp.Name)).Tooltip(s.tr("移除墙纸")).
 				Absolute().Top(5).Right(5).Size(18, 18).Radius(9).Center()
 			rmFill := ui.RGBA(0, 0, 0, 0.56)
 			if rmBtn.Pressed() {

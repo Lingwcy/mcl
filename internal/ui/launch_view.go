@@ -92,7 +92,7 @@ func (s *Shell) launchView(c *ui.Context) {
 			if earlyExit {
 				status = "游戏在窗口出现前退出"
 			}
-			detail = fmt.Sprintf("退出代码 %d", game.Exit.Code)
+			detail = fmt.Sprintf(s.tr("退出代码 %d"), game.Exit.Code)
 			if game.Exit.Error != "" {
 				detail += " · " + game.Exit.Error
 			}
@@ -139,7 +139,7 @@ func (s *Shell) launchView(c *ui.Context) {
 				case windowOpened:
 					ui.Icon(c, iconCheck).Size(15, 15).TextColor(t.Success)
 				}
-				ui.Text(c, status).FontSize(12).TextColor(t.TextMuted).MaxLines(2)
+				ui.Text(c, s.tr(status)).FontSize(12).TextColor(t.TextMuted).MaxLines(2)
 				if i.active {
 					if progress := launchProgressDetail(i); progress != "" {
 						ui.Text(c, progress).FontSize(11).TextColor(palette.Metadata)
@@ -147,21 +147,21 @@ func (s *Shell) launchView(c *ui.Context) {
 				}
 			})
 			if detail != "" {
-				ui.Text(c, detail).FontSize(12).TextColor(t.Danger).MaxLines(5).Selectable()
+				ui.Text(c, s.tr(detail)).FontSize(12).TextColor(t.Danger).MaxLines(5).Selectable()
 			}
 			ui.Row(c.Key("launch-actions")).Height(32).Shrink(0).Gap(4).Center().Children(func() {
-				iconButton(c, "launch-logs", "打开终端日志", iconLog, s.launchLogs)
+				iconButton(c, "launch-logs", s.tr("打开终端日志"), iconLog, s.launchLogs)
 				stopLabel := "停止游戏"
 				if i.active {
 					stopLabel = "停止启动准备"
 				}
 				canStop := i.active && !i.canceling && i.requestLaunchStop != nil ||
 					i.launchGameID != "" && (!hasGame || game.Running && !game.Stopping)
-				iconButton(c, "stop-launch", stopLabel, iconSquare, s.stopLaunch).Disabled(!canStop)
-				iconButton(c, "leave-launch", "退出启动页，返回实例", iconBack, s.returnToLaunchInstance)
+				iconButton(c, "stop-launch", s.tr(stopLabel), iconSquare, s.stopLaunch).Disabled(!canStop)
+				iconButton(c, "leave-launch", s.tr("退出启动页，返回实例"), iconBack, s.returnToLaunchInstance)
 			})
 			if !busy && !running && !i.active {
-				ui.PrimaryButton(c.Key("retry-launch"), "重新启动").Height(28).OnClick(s.retryLaunch)
+				ui.PrimaryButton(c.Key("retry-launch"), s.tr("重新启动")).Height(28).OnClick(s.retryLaunch)
 			}
 		})
 		ui.Spacer(c)
@@ -192,7 +192,7 @@ const (
 func (s *Shell) launchProgressBar(c *ui.Context, state launchBarState) {
 	const segmentWidth float32 = 0.26
 	palette := colors(s.theme)
-	host := ui.Box(c.Key("launch-bar")).Label("启动状态").FillWidth().Height(10).Shrink(0).Background(palette.Control)
+	host := ui.Box(c.Key("launch-bar")).Label(s.tr("启动状态")).FillWidth().Height(10).Shrink(0).Background(palette.Control)
 	reduceMotion := c.Preferences().ReduceMotion
 	var center, span, readyTint float32
 	switch state {

@@ -208,22 +208,22 @@ func (s *Shell) javaView(c *ui.Context) {
 	ui.Column(c.Key("java-workspace")).Grow(1).MinHeight(0).FillWidth().Padding(18, 24, 20).Gap(8).Children(func() {
 		ui.Row(c.Key("java-toolbar")).FillWidth().Height(28).Shrink(0).Gap(8).Children(func() {
 			if j.downloads {
-				iconButton(c, "back-java", "返回 Java 管理", iconBack, s.closeJavaDownloads)
-				settingsGroupLabel(c, "下载 Java").Grow(1).MinWidth(0)
+				iconButton(c, "back-java", s.tr("返回 Java 管理"), iconBack, s.closeJavaDownloads)
+				settingsGroupLabel(c, s.tr("下载 Java")).Grow(1).MinWidth(0)
 				s.javaVersionMenu(c)
-				iconButton(c, "refresh-java-catalog", "刷新下载目录", iconRefresh, s.loadJavaCatalog).Disabled(j.loading)
+				iconButton(c, "refresh-java-catalog", s.tr("刷新下载目录"), iconRefresh, s.loadJavaCatalog).Disabled(j.loading)
 			} else {
 				ui.Spacer(c)
-				ui.PrimaryButton(c.Key("download-java"), "下载").Height(26).OnClick(s.openJavaDownloads)
-				ui.Button(c.Key("add-java"), "添加").Label("添加本机 Java").Height(26).Disabled(j.editing).Menu(func(menu *ui.Menu) {
-					if menu.Item("选择 Java 目录").Chosen() {
+				ui.PrimaryButton(c.Key("download-java"), s.tr("下载")).Height(26).OnClick(s.openJavaDownloads)
+				ui.Button(c.Key("add-java"), s.tr("添加")).Label(s.tr("添加本机 Java")).Height(26).Disabled(j.editing).Menu(func(menu *ui.Menu) {
+					if menu.Item(s.tr("选择 Java 目录")).Chosen() {
 						s.pickJava(true)
 					}
-					if menu.Item("选择可执行文件").Chosen() {
+					if menu.Item(s.tr("选择可执行文件")).Chosen() {
 						s.pickJava(false)
 					}
 				})
-				iconButton(c, "refresh-java", "重新发现本机 Java", iconRefresh, s.refreshJava).Disabled(j.editing)
+				iconButton(c, "refresh-java", s.tr("重新发现本机 Java"), iconRefresh, s.refreshJava).Disabled(j.editing)
 			}
 		})
 		s.javaTaskCard(c)
@@ -244,17 +244,17 @@ func (s *Shell) javaInventoryList(c *ui.Context) {
 			if j.editing {
 				label = "正在检查 Java…"
 			}
-			ui.Text(c, label).FontSize(11).TextColor(colors(t).Metadata)
+			ui.Text(c, s.tr(label)).FontSize(11).TextColor(colors(t).Metadata)
 		})
 	}
 	if len(j.inventory.Warnings) > 0 {
-		ui.Textf(c, "%d 个路径无法读取或运行", len(j.inventory.Warnings)).FontSize(11).TextColor(t.Warning).MaxLines(1)
+		ui.Textf(c, s.tr("%d 个路径无法读取或运行"), len(j.inventory.Warnings)).FontSize(11).TextColor(t.Warning).MaxLines(1)
 	}
 	ui.Scroll(c.Key("java-inventory-scroll")).Grow(1).MinHeight(0).FillWidth().Children(func() {
 		if len(j.inventory.Environments) == 0 && !j.scanning {
 			ui.Column(c).FillWidth().Padding(32, 8).Center().Gap(8).Children(func() {
 				ui.Icon(c, iconSettingsRuntime).Size(24, 24).TextColor(colors(t).IconMuted)
-				ui.Text(c, "尚未发现 Java").FontSize(12).TextColor(t.TextMuted)
+				ui.Text(c, s.tr("尚未发现 Java")).FontSize(12).TextColor(t.TextMuted)
 			})
 			return
 		}
@@ -286,25 +286,25 @@ func (s *Shell) javaEnvironmentRow(c *ui.Context, value app.JavaEnvironment) {
 		marketTag(c, value.Kind, false)
 		marketTag(c, javaArchLabel(r.Arch), false)
 		if active {
-			ui.Icon(c, iconCheck).Label("全局默认 Java").Size(13, 13).Shrink(0).TextColor(colors(t).AccentInk)
+			ui.Icon(c, iconCheck).Label(s.tr("全局默认 Java")).Size(13, 13).Shrink(0).TextColor(colors(t).AccentInk)
 		}
 		ui.Text(c, compactJavaPath(r.Home())).FontSize(11).TextColor(colors(t).Metadata).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…").TextAlign(ui.End)
-		ui.ButtonBase(c.Key("java-options")).Label("Java "+r.Version+" 的操作").Tooltip("更多操作").Size(26, 26).Shrink(0).Radius(5).Center().Disabled(s.java.editing).Menu(func(menu *ui.Menu) {
-			if menu.Item("设为全局默认").Disabled(active || s.saving || s.loadErr != nil).Chosen() {
+		ui.ButtonBase(c.Key("java-options")).Label(fmt.Sprintf(s.tr("Java %s 的操作"), r.Version)).Tooltip(s.tr("更多操作")).Size(26, 26).Shrink(0).Radius(5).Center().Disabled(s.java.editing).Menu(func(menu *ui.Menu) {
+			if menu.Item(s.tr("设为全局默认")).Disabled(active || s.saving || s.loadErr != nil).Chosen() {
 				s.defaultJava(value)
 			}
-			if menu.Item("打开所在文件夹").Chosen() && s.java.actions.Open != nil {
+			if menu.Item(s.tr("打开所在文件夹")).Chosen() && s.java.actions.Open != nil {
 				s.java.actions.Open(r.Home(), func(err error) {
 					if err != nil {
 						s.java.message, s.java.failed = err.Error(), true
 					}
 				})
 			}
-			if menu.Item("复制 Java 路径").Chosen() {
+			if menu.Item(s.tr("复制 Java 路径")).Chosen() {
 				services.WriteClipboard(r.Executable)
 			}
 			menu.Separator()
-			if menu.Item("从列表移除").Chosen() {
+			if menu.Item(s.tr("从列表移除")).Chosen() {
 				s.removeJava(value)
 			}
 		}).Children(func() { ui.Text(c, "···").FontSize(15).FontWeight(600) })
@@ -313,7 +313,7 @@ func (s *Shell) javaEnvironmentRow(c *ui.Context, value app.JavaEnvironment) {
 
 func (s *Shell) javaVersionMenu(c *ui.Context) {
 	j := &s.java
-	ui.Button(c.Key("java-download-major"), fmt.Sprintf("Java %d", j.major)).Label("Java 主版本").Width(110).Height(26).Menu(func(menu *ui.Menu) {
+	ui.Button(c.Key("java-download-major"), fmt.Sprintf("Java %d", j.major)).Label(s.tr("Java 主版本")).Width(110).Height(26).Menu(func(menu *ui.Menu) {
 		majors := j.catalog.Majors
 		if len(majors) == 0 {
 			majors = []int{25, 21, 17, 11, 8}
@@ -330,13 +330,13 @@ func (s *Shell) javaVersionMenu(c *ui.Context) {
 func (s *Shell) javaDownloadList(c *ui.Context) {
 	j, t := &s.java, s.theme
 	if j.loading {
-		loadingStatus(c, "读取 Java 官方目录")
+		loadingStatus(c, s.tr("读取 Java 官方目录"))
 		return
 	}
 	ui.Scroll(c.Key("java-download-scroll")).Grow(1).MinHeight(0).FillWidth().Gap(8).Children(func() {
 		if len(j.catalog.Packages) == 0 {
 			if j.message == "" {
-				ui.Text(c, "此版本暂无适合本机的发行包").FontSize(12).TextColor(t.TextMuted).Margin(20, 0)
+				ui.Text(c, s.tr("此版本暂无适合本机的发行包")).FontSize(12).TextColor(t.TextMuted).Margin(20, 0)
 			}
 			return
 		}
@@ -356,7 +356,7 @@ func (s *Shell) javaDownloadList(c *ui.Context) {
 					if s.javaPackageInstalled(p) {
 						label = "已安装"
 					}
-					ui.Button(c.Key("install-java"), label).Height(26).Disabled(j.job.active || s.javaPackageInstalled(p)).OnClick(func() { s.installJava(p) })
+					ui.Button(c.Key("install-java"), s.tr(label)).Height(26).Disabled(j.job.active || s.javaPackageInstalled(p)).OnClick(func() { s.installJava(p) })
 				})
 				if index < len(j.catalog.Packages)-1 {
 					ui.Box(c).FillWidth().Height(0.5).Margin(0, 12).Background(colors(t).ListDivider)
@@ -380,15 +380,15 @@ func (s *Shell) javaTaskCard(c *ui.Context) {
 	}
 	ui.Column(c.Key("java-install-task")).FillWidth().Shrink(0).Padding(10, 12).Gap(7).Radius(8).Background(t.Surface).Children(func() {
 		ui.Row(c).FillWidth().Gap(8).Children(func() {
-			ui.Text(c, job.title).FontSize(12).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
+			ui.Text(c, s.tr(job.title)).FontSize(12).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
 			if job.active {
 				if s.page == settingsPage {
-					iconButton(c, "cancel-java-install", "取消安装 Java", iconClose, s.cancelJavaInstall).Disabled(job.canceling)
+					iconButton(c, "cancel-java-install", s.tr("取消安装 Java"), iconClose, s.cancelJavaInstall).Disabled(job.canceling)
 				} else {
-					ui.Button(c.Key("view-java-install"), "查看").Height(24).OnClick(func() { s.page = settingsPage })
+					ui.Button(c.Key("view-java-install"), s.tr("查看")).Height(24).OnClick(func() { s.page = settingsPage })
 				}
 			} else {
-				iconButton(c, "dismiss-java-job", "关闭 Java 任务", iconClose, func() { s.java.job = javaJob{} })
+				iconButton(c, "dismiss-java-job", s.tr("关闭 Java 任务"), iconClose, func() { s.java.job = javaJob{} })
 			}
 		})
 		label := job.message
@@ -404,7 +404,7 @@ func (s *Shell) javaTaskCard(c *ui.Context) {
 				if !paused {
 					busyIndicator(c, 11)
 				}
-				ui.Text(c, label).FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, s.tr(label)).FontSize(11).TextColor(t.TextMuted)
 				ui.Spacer(c)
 				if job.progress.Total > 0 {
 					ui.Text(c, formatBytes(job.progress.Bytes)+" / "+formatBytes(job.progress.Total)).FontSize(10).TextColor(colors(t).Metadata)
@@ -418,7 +418,7 @@ func (s *Shell) javaTaskCard(c *ui.Context) {
 			if job.failed {
 				color = t.Danger
 			}
-			ui.Text(c, label).FontSize(11).TextColor(color).MaxLines(3)
+			ui.Text(c, s.tr(label)).FontSize(11).TextColor(color).MaxLines(3)
 		}
 	})
 }

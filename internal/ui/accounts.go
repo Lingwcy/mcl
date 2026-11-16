@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 
@@ -176,11 +177,11 @@ func (s *Shell) accountAvatar(c *ui.Context, id string, size float32) {
 
 func (s *Shell) accountRailButton(c *ui.Context) {
 	a, t := &s.accounts, s.theme
-	label := "账户 · 未登录"
+	label := s.tr("账户 · 未登录")
 	if profile, ok := a.data.Active(); ok {
-		label = "账户 · " + profile.Name
+		label = s.tr("账户 · ") + profile.Name
 	}
-	button := ui.ButtonBase(c.Key("rail-accounts")).Label("账户").Tooltip(label).Size(30, 30).Shrink(0).Radius(8).Center()
+	button := ui.ButtonBase(c.Key("rail-accounts")).Label(s.tr("账户")).Tooltip(label).Size(30, 30).Shrink(0).Radius(8).Center()
 	fill := ui.Transparent
 	if s.page == accountsPage {
 		fill = colors(t).Selected
@@ -198,17 +199,17 @@ func (s *Shell) accountsView(c *ui.Context) {
 			if a.canceling {
 				label = "正在取消登录…"
 			}
-			s.accountLoadingView(c, label, true)
+			s.accountLoadingView(c, s.tr(label), true)
 			return
 		}
 		if !a.loaded {
 			if a.busy {
-				s.accountLoadingView(c, "正在读取账户", false)
+				s.accountLoadingView(c, s.tr("正在读取账户"), false)
 			} else {
 				ui.Column(c.Key("account-load-error")).Fill().Center().Gap(12).Children(func() {
 
 					if a.actions.Load != nil {
-						ui.Button(c.Key("reload-accounts"), "重新读取账户").Height(28).OnClick(s.loadAccounts)
+						ui.Button(c.Key("reload-accounts"), s.tr("重新读取账户")).Height(28).OnClick(s.loadAccounts)
 					}
 				})
 			}
@@ -216,7 +217,7 @@ func (s *Shell) accountsView(c *ui.Context) {
 		}
 		if len(a.data.Profiles) == 0 {
 			if a.busy {
-				s.accountLoadingView(c, "正在添加离线账户", false)
+				s.accountLoadingView(c, s.tr("正在添加离线账户"), false)
 			} else {
 				s.emptyAccountsView(c)
 			}
@@ -224,11 +225,11 @@ func (s *Shell) accountsView(c *ui.Context) {
 		}
 		ui.Row(c.Key("accounts-toolbar")).FillWidth().Height(28).Shrink(0).Gap(8).Children(func() {
 			ui.Spacer(c)
-			ui.PrimaryButton(c.Key("add-account"), "添加账户").Height(26).Disabled(a.busy || !a.loaded).Menu(func(m *ui.Menu) {
-				if m.Item("微软账户").Chosen() {
+			ui.PrimaryButton(c.Key("add-account"), s.tr("添加账户")).Height(26).Disabled(a.busy || !a.loaded).Menu(func(m *ui.Menu) {
+				if m.Item(s.tr("微软账户")).Chosen() {
 					s.microsoftSignIn("")
 				}
-				if m.Item("离线 ID").Chosen() {
+				if m.Item(s.tr("离线 ID")).Chosen() {
 					a.showOffline, a.message = true, ""
 				}
 			})
@@ -256,25 +257,25 @@ func (s *Shell) emptyAccountsView(c *ui.Context) {
 		ui.Column(c.Key("account-welcome")).FillWidth().MaxWidth(320).AlignItems(ui.Center).Gap(16).Transition(motionReveal).Children(func() {
 			ui.Column(c).AlignItems(ui.Center).Gap(12).Children(func() {
 				s.accountAvatar(c, "", 48)
-				ui.Text(c, "还没有账户").FontSize(15).FontWeight(600).TextColor(t.Text)
+				ui.Text(c, s.tr("还没有账户")).FontSize(15).FontWeight(600).TextColor(t.Text)
 			})
 			ui.Row(c.Key("first-account-actions")).FillWidth().Gap(10).Children(func() {
-				ui.PrimaryButton(c.Key("first-microsoft"), "").Label("登录微软账户").Height(32).Grow(1).MinWidth(0).Gap(8).
+				ui.PrimaryButton(c.Key("first-microsoft"), "").Label(s.tr("登录微软账户")).Height(32).Grow(1).MinWidth(0).Gap(8).
 					Disabled(a.actions.Microsoft == nil).OnClick(func() { s.microsoftSignIn("") }).Children(func() {
 					ui.Icon(c, iconMicrosoft).Size(14, 14).Shrink(0)
-					ui.Text(c, "登录微软账户").FontSize(12).SingleLine()
+					ui.Text(c, s.tr("登录微软账户")).FontSize(12).SingleLine()
 				})
-				ui.Button(c.Key("first-offline"), "").Label("添加离线 ID").Height(32).Grow(1).MinWidth(0).Gap(8).
+				ui.Button(c.Key("first-offline"), "").Label(s.tr("添加离线 ID")).Height(32).Grow(1).MinWidth(0).Gap(8).
 					Disabled(a.actions.Offline == nil).OnClick(func() { a.showOffline, a.message = true, "" }).Children(func() {
 					ui.Icon(c, iconUser).Size(15, 15).Shrink(0)
-					ui.Text(c, "添加离线 ID").FontSize(12).SingleLine()
+					ui.Text(c, s.tr("添加离线 ID")).FontSize(12).SingleLine()
 				})
 			})
 			if a.showOffline {
 				s.offlineAccountForm(c)
 			}
 			if !a.actions.MicrosoftAvailable {
-				ui.Text(c, "微软登录需要配置 mcl 自有的应用 Client ID").FillWidth().TextAlign(ui.Center).FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, s.tr("微软登录需要配置 mcl 自有的应用 Client ID")).FillWidth().TextAlign(ui.Center).FontSize(11).TextColor(t.TextMuted)
 			}
 		})
 	})
@@ -287,7 +288,7 @@ func (s *Shell) accountLoadingView(c *ui.Context, label string, cancelable bool)
 			loadingStatus(c, label)
 		})
 		if cancelable {
-			ui.Button(c.Key("cancel-sign-in"), "取消登录").Height(28).Disabled(a.canceling).OnClick(func() {
+			ui.Button(c.Key("cancel-sign-in"), s.tr("取消登录")).Height(28).Disabled(a.canceling).OnClick(func() {
 				if a.cancel != nil {
 					a.canceling = true
 					a.cancel()
@@ -301,9 +302,9 @@ func (s *Shell) offlineAccountForm(c *ui.Context) {
 	a := &s.accounts
 	save := func() { s.changeAccount(a.name, a.actions.Offline) }
 	ui.Row(c.Key("offline-account-form")).FillWidth().MaxWidth(360).Gap(6).Children(func() {
-		ui.TextInput(c.Key("offline-name"), &a.name).Label("离线玩家名称").Placeholder("玩家名称").Grow(1).MinWidth(0).Height(28).Disabled(a.busy).OnSubmit(save)
-		ui.PrimaryButton(c.Key("save-offline"), "添加").Height(28).Disabled(a.busy || a.name == "").OnClick(save)
-		iconButton(c, "cancel-offline", "关闭离线账户表单", iconClose, func() { a.showOffline, a.name, a.message = false, "", "" })
+		ui.TextInput(c.Key("offline-name"), &a.name).Label(s.tr("离线玩家名称")).Placeholder(s.tr("玩家名称")).Grow(1).MinWidth(0).Height(28).Disabled(a.busy).OnSubmit(save)
+		ui.PrimaryButton(c.Key("save-offline"), s.tr("添加")).Height(28).Disabled(a.busy || a.name == "").OnClick(save)
+		iconButton(c, "cancel-offline", s.tr("关闭离线账户表单"), iconClose, func() { a.showOffline, a.name, a.message = false, "", "" })
 	})
 }
 
@@ -316,7 +317,7 @@ func (s *Shell) accountRow(c *ui.Context, profile auth.Profile) {
 		provider = "微软"
 	}
 	ui.Row(c.Key(id)).FillWidth().Height(44).Shrink(0).Padding(0, 6).Gap(4).Children(func() {
-		button := ui.ButtonBase(c.Key("select")).Label("切换到 "+profile.Name).Grow(1).MinWidth(0).Height(38).Radius(7).Padding(0, 8).Gap(8).Justify(ui.Start).Disabled(a.busy)
+		button := ui.ButtonBase(c.Key("select")).Label(fmt.Sprintf(s.tr("切换到 %s"), profile.Name)).Grow(1).MinWidth(0).Height(38).Radius(7).Padding(0, 8).Gap(8).Justify(ui.Start).Disabled(a.busy)
 		rowMotion(c, button, ui.Transparent).OnClick(func() {
 			if !active {
 				s.changeAccount(id, a.actions.Select)
@@ -324,26 +325,26 @@ func (s *Shell) accountRow(c *ui.Context, profile auth.Profile) {
 		}).Children(func() {
 			s.accountAvatar(c, id, 24)
 			ui.Text(c, profile.Name).FontSize(13).FontWeight(500).MinWidth(0).MaxLines(1).Ellipsis("…")
-			marketTag(c, provider, false)
+			marketTag(c, s.tr(provider), false)
 			ui.Spacer(c)
 			if active {
-				ui.Icon(c, iconCheck).Label("当前账户").Size(15, 15).TextColor(colors(t).AccentInk)
+				ui.Icon(c, iconCheck).Label(s.tr("当前账户")).Size(15, 15).TextColor(colors(t).AccentInk)
 			}
 		})
-		ui.ButtonBase(c.Key("options")).Label(profile.Name+" 的账户选项").Tooltip("账户选项").Size(28, 28).Radius(5).Center().Disabled(a.busy).Menu(func(m *ui.Menu) {
+		ui.ButtonBase(c.Key("options")).Label(fmt.Sprintf(s.tr("%s 的账户选项"), profile.Name)).Tooltip(s.tr("账户选项")).Size(28, 28).Radius(5).Center().Disabled(a.busy).Menu(func(m *ui.Menu) {
 			if profile.Kind == auth.Microsoft {
-				if m.Item("重新登录").Chosen() {
+				if m.Item(s.tr("重新登录")).Chosen() {
 					s.microsoftSignIn(id)
 				}
 			} else {
-				if m.Item("使用同名正版头像").Disabled(a.headLookups[id]).Chosen() {
+				if m.Item(s.tr("使用同名正版头像")).Disabled(a.headLookups[id]).Chosen() {
 					s.refreshOfflineHead(profile, true)
 				}
-				if m.Item("从本地皮肤设置头像").Chosen() {
+				if m.Item(s.tr("从本地皮肤设置头像")).Chosen() {
 					s.changeAccount(id, a.actions.PickSkin)
 				}
 			}
-			if m.Item("移除账户").Chosen() {
+			if m.Item(s.tr("移除账户")).Chosen() {
 				s.changeAccount(id, a.actions.Remove)
 			}
 		}).Children(func() { ui.Text(c, "···").FontSize(16).FontWeight(600) })

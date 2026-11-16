@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"mcl/internal/core/archive"
 	"mcl/internal/core/download"
 	"mcl/internal/core/market"
 	"mcl/internal/core/meta"
@@ -146,6 +147,7 @@ func (s *AssetUpdateService) Plan(ctx context.Context, request market.UpdateRequ
 	if snapshot.Unknown > 0 {
 		plan.Warnings = append(plan.Warnings, fmt.Sprintf("%d 个未识别文件的依赖与版本尚未检查", snapshot.Unknown))
 	}
+	projectsByKey := make(map[string]market.Project)
 	for _, source := range []market.Source{market.Modrinth, market.CurseForge} {
 		var ids []string
 		for _, change := range plan.Changes {
@@ -172,19 +174,67 @@ func (s *AssetUpdateService) Plan(ctx context.Context, request market.UpdateRequ
 						file.File.URL = ""
 					}
 				}
-				if file.Source == source && file.Metadata != nil {
+				if file.Source == source {
 					if project, ok := projects[file.ProjectID]; ok {
-						copy := *file.Metadata
-						copy.WithProject(project)
-						file.Metadata = &copy
-						if file.File.URL == "" && market.SafeURL(project.PageURL) {
-							if plan.LocalPages == nil {
-								plan.LocalPages = make(map[string]string)
+						projectsByKey[string(source)+":"+file.ProjectID] = project
+						if file.Metadata != nil {
+							copy := *file.Metadata
+							copy.WithProject(project)
+							file.Metadata = &copy
+							if file.File.URL == "" && market.SafeURL(project.PageURL) {
+								if plan.LocalPages == nil {
+									plan.LocalPages = make(map[string]string)
+								}
+								plan.LocalPages[file.Path] = project.PageURL
 							}
-							plan.LocalPages[file.Path] = project.PageURL
 						}
 					}
 				}
+			}
+		}
+	}
+	if request.PrefixFileName {
+		usedPaths := make(map[string]bool)
+		for _, reused := range plan.Reused {
+			usedPaths[archive.Key(reused.Path)] = true
+			usedPaths[archive.Key(reused.File.Path)] = true
+		}
+		for _, change := range plan.Changes {
+			usedPaths[archive.Key(change.Path())] = true
+			usedPaths[archive.Key(change.After.Path)] = true
+		}
+		for index := range plan.Changes {
+			change := &plan.Changes[index]
+			if change.ReusesContent() {
+				continue
+			}
+			file := &change.After
+			project, ok := projectsByKey[string(file.Source)+":"+file.ProjectID]
+			if !ok {
+				project = market.Project{Kind: request.Kind, Title: file.File.Filename}
+			}
+			prefixed := market.PrefixedFilename(file.File.Filename, project)
+			if prefixed == file.File.Filename {
+				continue
+			}
+			oldCanonical := file.Path
+			oldTarget := change.Path()
+			newCanonical := path.Join(path.Dir(oldCanonical), prefixed)
+			newTarget := newCanonical
+			if !change.Enabled {
+				newTarget += ".disabled"
+			}
+			if usedPaths[archive.Key(newCanonical)] || usedPaths[archive.Key(newTarget)] {
+				continue
+			}
+			delete(usedPaths, archive.Key(oldCanonical))
+			delete(usedPaths, archive.Key(oldTarget))
+			usedPaths[archive.Key(newCanonical)] = true
+			usedPaths[archive.Key(newTarget)] = true
+			file.Path = newCanonical
+			if pageURL, ok := plan.LocalPages[oldCanonical]; ok {
+				delete(plan.LocalPages, oldCanonical)
+				plan.LocalPages[newCanonical] = pageURL
 			}
 		}
 	}

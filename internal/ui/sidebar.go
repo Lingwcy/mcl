@@ -21,29 +21,29 @@ func (s *Shell) titlebar(c *ui.Context) {
 		})
 		if s.page != launchPage {
 			if s.page != homePage {
-				titlebarIconButton(c, "toggle-sidebar", "收起或展开侧栏", iconSidebar, func() { s.sidebarCollapsed = !s.sidebarCollapsed })
+				titlebarIconButton(c, "toggle-sidebar", s.tr("收起或展开侧栏"), iconSidebar, func() { s.sidebarCollapsed = !s.sidebarCollapsed })
 			}
 			if s.page != libraryPage && s.page != homePage {
-				titlebarIconButton(c, "nav-library", "游戏库", iconBack, s.openHome)
+				titlebarIconButton(c, "nav-library", s.tr("游戏库"), iconBack, s.openHome)
 			}
 		}
 		ui.Spacer(c)
-		titlebarIconButton(c, "nav-activity", "下载与任务", iconDownload, func() { s.page = activityPage })
+		titlebarIconButton(c, "nav-activity", s.tr("下载与任务"), iconDownload, func() { s.page = activityPage })
 		icon := iconMoon
 		if t.Dark {
 			icon = iconSun
 		}
-		titlebarIconButton(c, "toggle-theme", "切换明暗主题", icon, s.toggleAppearance)
+		titlebarIconButton(c, "toggle-theme", s.tr("切换明暗主题"), icon, s.toggleAppearance)
 		if w := s.window; w != nil {
 			ui.Box(c).Width(1).Height(13).Shrink(0).Background(colors(t).Divider)
 			ui.Row(c.Key("window-controls")).Shrink(0).Gap(2).Children(func() {
-				titlebarIconButton(c, "window-minimize", "最小化窗口", iconMinus, w.Minimize)
+				titlebarIconButton(c, "window-minimize", s.tr("最小化窗口"), iconMinus, w.Minimize)
 				label, icon := "最大化窗口", iconSquare
 				if w.IsMaximized() {
 					label, icon = "还原窗口", iconRestoreWindow
 				}
-				titlebarIconButton(c, "window-maximize", label, icon, w.ToggleMaximize).MaximizeButton()
-				titlebarIconButton(c, "window-close", "关闭窗口", iconClose, w.Close)
+				titlebarIconButton(c, "window-maximize", s.tr(label), icon, w.ToggleMaximize).MaximizeButton()
+				titlebarIconButton(c, "window-close", s.tr("关闭窗口"), iconClose, w.Close)
 			})
 		}
 	})
@@ -80,14 +80,14 @@ func (s *Shell) openMarket(kind app.AssetKind) {
 func (s *Shell) navigationRail(c *ui.Context) {
 	settings := s.page.inSettings()
 	instances := s.page != homePage && s.page != marketPage && s.page != serversPage && !settings
-	ui.Column(c.Key("navigation-rail")).Label("主导航").Width(railWidth).Shrink(0).FillHeight().Padding(4, 5, 1).Gap(6).Children(func() {
-		s.railButton(c, "rail-home", "主页", iconHome, s.page == homePage, s.openHomePage)
-		s.railButton(c, "rail-instances", "实例", iconCube, instances, s.openHome)
-		s.railButton(c, "rail-market", "市场", iconMarket, s.page == marketPage, func() { s.openMarket(s.market.kind) })
-		s.railButton(c, "rail-servers", "服务器", iconServer, s.page == serversPage, s.openServers)
+	ui.Column(c.Key("navigation-rail")).Label(s.tr("主导航")).Width(railWidth).Shrink(0).FillHeight().Padding(4, 5, 1).Gap(6).Children(func() {
+		s.railButton(c, "rail-home", s.tr("主页"), iconHome, s.page == homePage, s.openHomePage)
+		s.railButton(c, "rail-instances", s.tr("实例"), iconCube, instances, s.openHome)
+		s.railButton(c, "rail-market", s.tr("市场"), iconMarket, s.page == marketPage, func() { s.openMarket(s.market.kind) })
+		s.railButton(c, "rail-servers", s.tr("服务器"), iconServer, s.page == serversPage, s.openServers)
 		ui.Spacer(c)
 		s.accountRailButton(c)
-		s.railButton(c, "nav-settings", "设置", iconSettings, settings && s.page != accountsPage, func() { s.page, s.sidebarCollapsed = gameSettingsPage, false })
+		s.railButton(c, "nav-settings", s.tr("设置"), iconSettings, settings && s.page != accountsPage, func() { s.page, s.sidebarCollapsed = gameSettingsPage, false })
 	})
 }
 
@@ -127,7 +127,7 @@ func (s *Shell) sidebar(c *ui.Context) ui.Element {
 	} else if s.page.inSettings() {
 		group = "settings"
 	}
-	panel := ui.Column(c.Key("secondary-sidebar")).Label("副侧栏").Width(secondarySidebarWidth(c)).Shrink(0).FillHeight().
+	panel := ui.Column(c.Key("secondary-sidebar")).Label(s.tr("副侧栏")).Width(secondarySidebarWidth(c)).Shrink(0).FillHeight().
 		Background(sidebarColor(t)).BorderWidth(0, 0.5, 0, 0).BorderColor(colors(t).Divider)
 	return panel.Children(func() {
 		ui.Column(c.Key(group)).Grow(1).MinHeight(0).FillWidth().Transition(motionReveal).Children(func() {
@@ -148,16 +148,16 @@ func (s *Shell) sidebar(c *ui.Context) ui.Element {
 func (s *Shell) instanceSidebar(c *ui.Context) {
 	l, t := &s.library, s.theme
 	ui.Row(c).FillWidth().Height(44).Shrink(0).Padding(0, 12, 0, 16).Gap(6).Children(func() {
-		ui.Text(c, "实例").FontSize(12).FontWeight(600).Grow(1)
-		iconButton(c, "open-instance-search", "搜索实例", iconSearch, s.openInstanceSearch)
-		iconButton(c, "nav-new-instance", "新建实例", iconPlus, s.openNewInstance)
+		ui.Text(c, s.tr("实例")).FontSize(12).FontWeight(600).Grow(1)
+		iconButton(c, "open-instance-search", s.tr("搜索实例"), iconSearch, s.openInstanceSearch)
+		iconButton(c, "nav-new-instance", s.tr("新建实例"), iconPlus, s.openNewInstance)
 	})
 	rows := l.snapshot.Instances
 	l.sidebarList.Key = func(index int) any { return rows[index].ID }
 	l.sidebarList.Label = func(index int) string { return rows[index].Name }
 	ui.Column(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
 		if len(rows) == 0 {
-			ui.Text(c, "暂无实例").FontSize(11).TextColor(t.TextMuted).Margin(8, 16)
+			ui.Text(c, s.tr("暂无实例")).FontSize(11).TextColor(t.TextMuted).Margin(8, 16)
 			return
 		}
 		ui.List(c.Key("sidebar-instances"), &l.sidebarList, len(rows), func(index int) {
@@ -192,14 +192,14 @@ func (s *Shell) marketSidebar(c *ui.Context) {
 		s.secondaryEntry(c, "source-modrinth", "Modrinth", iconModrinth, entryHeight, m.source == market.Modrinth, func() { s.switchMarketSource(market.Modrinth) })
 		s.secondaryEntry(c, "source-curseforge", "CurseForge", iconCurseForge, entryHeight, m.source == market.CurseForge, func() { s.switchMarketSource(market.CurseForge) })
 		if m.source == market.CurseForge {
-			ui.Row(c).FillWidth().Padding(0, 12).Justify(ui.End).Children(func() { iconButton(c, "cf-config", "配置 API Key", iconSettings, s.openMarketKey) })
+			ui.Row(c).FillWidth().Padding(0, 12).Justify(ui.End).Children(func() { iconButton(c, "cf-config", s.tr("配置 CurseForge API Key"), iconSettings, s.openMarketKey) })
 		}
 		ui.Divider(c).Margin(4, 14)
 		for _, item := range assetCategories {
-			s.secondaryEntry(c, "market-"+string(item.kind), item.name, item.icon, entryHeight, m.kind == item.kind, func() { s.openMarket(item.kind) })
+			s.secondaryEntry(c, "market-"+string(item.kind), s.tr(item.name), item.icon, entryHeight, m.kind == item.kind, func() { s.openMarket(item.kind) })
 		}
 		if m.source == market.CurseForge {
-			s.secondaryEntry(c, "market-world", "地图", iconMap, entryHeight, m.kind == app.AssetKind(market.World), func() { s.openMarket(app.AssetKind(market.World)) })
+			s.secondaryEntry(c, "market-world", s.tr("地图"), iconMap, entryHeight, m.kind == app.AssetKind(market.World), func() { s.openMarket(app.AssetKind(market.World)) })
 		}
 		ui.Divider(c).Margin(4, 14)
 		s.marketLoaderFilters(c)
@@ -209,15 +209,16 @@ func (s *Shell) marketSidebar(c *ui.Context) {
 }
 
 func (s *Shell) settingsSidebar(c *ui.Context) {
-	ui.Scroll(c.Key("settings-links")).Label("设置导航").Grow(1).MinHeight(0).FillWidth().Padding(12, 10, 8).Gap(2).Children(func() {
-		s.settingsEntry(c, "settings-game", "游戏设置", iconSettingsGame, gameSettingsPage)
-		s.settingsEntry(c, "settings-wallpaper", "个性化", iconPalette, wallpaperSettingsPage)
-		s.settingsEntry(c, "settings-download", "下载设置", iconSettingsDownload, downloadSettingsPage)
-		s.settingsEntry(c, "settings-runtime", "Java 管理", iconSettingsRuntime, settingsPage)
-		s.settingsEntry(c, "settings-accounts", "账户", iconSettingsAccount, accountsPage)
-		s.settingsEntry(c, "settings-tasks", "下载与任务", iconSettingsDownload, settingsActivityPage)
-		s.settingsEntry(c, "settings-about", "关于与更新", iconInfo, aboutPage)
-		s.settingsEntry(c, "settings-credits", "鸣谢", iconSparkles, creditsPage)
+	ui.Scroll(c.Key("settings-links")).Label(s.tr("设置导航")).Grow(1).MinHeight(0).FillWidth().Padding(12, 10, 8).Gap(2).Children(func() {
+		s.settingsEntry(c, "settings-game", s.tr("游戏设置"), iconSettingsGame, gameSettingsPage)
+		s.settingsEntry(c, "settings-wallpaper", s.tr("个性化"), iconPalette, wallpaperSettingsPage)
+		s.settingsEntry(c, "settings-i18n", s.tr("国际化"), iconLanguages, i18nSettingsPage)
+		s.settingsEntry(c, "settings-download", s.tr("下载设置"), iconSettingsDownload, downloadSettingsPage)
+		s.settingsEntry(c, "settings-runtime", s.tr("Java 管理"), iconSettingsRuntime, settingsPage)
+		s.settingsEntry(c, "settings-accounts", s.tr("账户"), iconSettingsAccount, accountsPage)
+		s.settingsEntry(c, "settings-tasks", s.tr("下载与任务"), iconSettingsDownload, settingsActivityPage)
+		s.settingsEntry(c, "settings-about", s.tr("关于与更新"), iconInfo, aboutPage)
+		s.settingsEntry(c, "settings-credits", s.tr("鸣谢"), iconSparkles, creditsPage)
 	})
 }
 

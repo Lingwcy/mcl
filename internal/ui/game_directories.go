@@ -153,6 +153,7 @@ func (s *Shell) creationGameDirectoryID() string {
 func (s *Shell) creationSettings() app.Settings {
 	value := s.settings
 	value.GameDirectoryID = s.creationGameDirectoryID()
+	value.I18n = s.effectiveI18n()
 	return value
 }
 

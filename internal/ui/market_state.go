@@ -90,7 +90,12 @@ func (s *Shell) ConnectMarket(actions MarketActions) {
 }
 func (s *Shell) marketQuery() market.Query {
 	m := &s.market
-	return market.Query{Source: m.source, Kind: market.Kind(m.kind), Text: strings.TrimSpace(m.text), GameVersion: m.gameVersion, Loaders: slices.Clone(m.loaders), Categories: slices.Clone(m.categoryIDs), Environments: slices.Clone(m.environments), OpenSource: m.openSource, Sort: m.sort, Page: m.page}
+	text := strings.TrimSpace(m.text)
+	translate := s.i18n.TranslateResources
+	if translate {
+		text = market.RewriteSearchQuery(text)
+	}
+	return market.Query{Source: m.source, Kind: market.Kind(m.kind), Text: text, GameVersion: m.gameVersion, Loaders: slices.Clone(m.loaders), Categories: slices.Clone(m.categoryIDs), Environments: slices.Clone(m.environments), OpenSource: m.openSource, Translate: translate, Sort: m.sort, Page: m.page}
 }
 func (s *Shell) searchMarket(reset bool) {
 	m := &s.market

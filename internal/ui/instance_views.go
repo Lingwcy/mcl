@@ -7,7 +7,7 @@ func (s *Shell) libraryStatus(c *ui.Context) {
 	if l.busy {
 		ui.Row(c.Key("library-busy")).Gap(7).Transition(motionReveal).Children(func() {
 			busyIndicator(c, 12)
-			ui.Text(c, "正在处理…").FontSize(11).TextColor(s.theme.TextMuted)
+			ui.Text(c, s.tr("正在处理…")).FontSize(11).TextColor(s.theme.TextMuted)
 		})
 	}
 
@@ -24,59 +24,59 @@ func (s *Shell) instanceSettingsView(c *ui.Context) {
 	disabled := state.deleting || !state.loaded || state.loading || state.conflict || reason != "" || s.library.actions.SavePreferences == nil
 	ui.Scroll(c.Key("instance-settings-"+state.id)).Grow(1).MinHeight(0).FillWidth().Padding(18, 24, 24).Gap(16).Children(func() {
 		ui.Row(c.Key("instance-settings-header")).FillWidth().Height(26).Gap(8).Children(func() {
-			iconButton(c, "back-instance", "返回实例", iconBack, s.openHome)
-			ui.Text(c, "实例设置").FontSize(12).Grow(1).MinWidth(0)
+			iconButton(c, "back-instance", s.tr("返回实例"), iconBack, s.openHome)
+			ui.Text(c, s.tr("实例设置")).FontSize(12).Grow(1).MinWidth(0)
 			if state.saving {
 				busyIndicator(c, 12)
 			}
-			iconButton(c, "reload-instance-settings", "重新读取并放弃未保存修改", iconRefresh, func() { s.loadInstanceSettings(value) }).Disabled(state.deleting || state.loading || state.saving || s.library.actions.LoadInstance == nil)
+			iconButton(c, "reload-instance-settings", s.tr("重新读取并放弃未保存修改"), iconRefresh, func() { s.loadInstanceSettings(value) }).Disabled(state.deleting || state.loading || state.saving || s.library.actions.LoadInstance == nil)
 		})
 		if state.loading {
-			loadingStatus(c, "正在读取实例…")
+			loadingStatus(c, s.tr("正在读取实例…"))
 			return
 		}
 		if state.loadError != "" {
-			ui.Text(c, state.loadError).FontSize(12).TextColor(t.Danger).MaxLines(4)
+			ui.Text(c, s.tr(state.loadError)).FontSize(12).TextColor(t.Danger).MaxLines(4)
 			return
 		}
 		ui.Column(c.Key("instance-identity-group")).FillWidth().Gap(8).Children(func() {
-			settingsGroupLabel(c, "基本信息")
+			settingsGroupLabel(c, s.tr("基本信息"))
 			ui.Column(c).FillWidth().Radius(10).Border(0.5, colors(t).ListDivider).Clip().Children(func() {
 				ui.Row(c.Key("instance-icon-row")).FillWidth().Height(64).Padding(0, 14).Gap(10).Children(func() {
-					ui.Text(c, "图标").FontSize(12).Grow(1).MinWidth(0)
+					ui.Text(c, s.tr("图标")).FontSize(12).Grow(1).MinWidth(0)
 					if state.iconBusy {
 						busyIndicator(c, 12)
 					}
-					button := ui.ButtonBase(c.Key("edit-instance-icon")).Label("更换实例图标").Tooltip("更换图标").Size(44, 44).Shrink(0).Radius(9).Center().Disabled(disabled || state.iconBusy)
+					button := ui.ButtonBase(c.Key("edit-instance-icon")).Label(s.tr("更换实例图标")).Tooltip(s.tr("更换图标")).Size(44, 44).Shrink(0).Radius(9).Center().Disabled(disabled || state.iconBusy)
 					controlMotion(c, button, ui.Transparent, !disabled && !state.iconBusy).OnClick(func() { state.iconOpen = !state.iconOpen }).Children(func() {
 						drawInstanceArtwork(c, instanceSettingsIconStyle(state), state.bitmap, 40)
 					})
 					creationPopover(c.Key("instance-icon-popover"), button, &state.iconOpen, 270, func() { s.instanceSettingsIconPicker(c, state, disabled) })
 				})
 				gameSettingsDivider(c)
-				gameSettingRow(c, "name", "名称", func() {
-					ui.TextInput(c.Key("instance-name"), &state.name).Label("实例名称").Grow(1).MinWidth(0).Height(26).FontSize(12).Disabled(disabled).
+				gameSettingRow(c, "name", s.tr("名称"), func() {
+					ui.TextInput(c.Key("instance-name"), &state.name).Label(s.tr("实例名称")).Grow(1).MinWidth(0).Height(26).FontSize(12).Disabled(disabled).
 						OnChange(func() { s.saveInstancePreferences(state) }).OnSubmit(func() { s.saveInstancePreferences(state) })
 				})
 				gameSettingsDivider(c)
-				gameSettingRow(c, "game-directory", "游戏目录", func() {
+				gameSettingRow(c, "game-directory", s.tr("游戏目录"), func() {
 					path := s.instanceGamePath(state.value)
 					if path == "" {
-						path = "目录未登记"
+						path = s.tr("目录未登记")
 					}
 					services := c.Services()
 					ui.Text(c, path).FontSize(11).TextColor(colors(t).Metadata).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…").ContextMenu(func(menu *ui.Menu) {
-						if menu.Item("复制路径").Chosen() {
+						if menu.Item(s.tr("复制路径")).Chosen() {
 							services.WriteClipboard(path)
 						}
 					})
-					iconButton(c, "open-instance-location", "打开游戏目录", iconFolder, func() { s.openInstanceGameDirectory(state.id) }).Disabled(s.gameDirectories.busy || s.gameDirectories.actions.OpenInstance == nil)
-					ui.Button(c.Key("migrate-instance-directory"), "迁移…").Height(26).Disabled(disabled || state.saving || s.directories.actions.InspectMove == nil).OnClick(s.openDirectoryMove)
+					iconButton(c, "open-instance-location", s.tr("打开游戏目录"), iconFolder, func() { s.openInstanceGameDirectory(state.id) }).Disabled(s.gameDirectories.busy || s.gameDirectories.actions.OpenInstance == nil)
+					ui.Button(c.Key("migrate-instance-directory"), s.tr("迁移…")).Height(26).Disabled(disabled || state.saving || s.directories.actions.InspectMove == nil).OnClick(s.openDirectoryMove)
 				})
 				gameSettingsDivider(c)
 				if state.value.Description != "" {
 					ui.Row(c.Key("instance-description")).FillWidth().MinHeight(44).Padding(10, 14).Gap(10).Children(func() {
-						ui.Text(c, "描述").FontSize(12).Width(84).Shrink(0)
+						ui.Text(c, s.tr("描述")).FontSize(12).Width(84).Shrink(0)
 						ui.Text(c, state.value.Description).FontSize(12).TextColor(t.TextMuted).Grow(1).MinWidth(0).MaxLines(4)
 					})
 					gameSettingsDivider(c)
@@ -85,8 +85,8 @@ func (s *Shell) instanceSettingsView(c *ui.Context) {
 					instanceSettingValue(c, state.value.Version.ID)
 				})
 				gameSettingsDivider(c)
-				gameSettingRow(c, "loader", "加载器", func() {
-					label := "原版"
+				gameSettingRow(c, "loader", s.tr("加载器"), func() {
+					label := s.tr("原版")
 					if required, ok := state.value.RequiredLoader(); ok {
 						label = marketLoaderLabel(required.Type) + " " + required.Version
 					}
@@ -95,13 +95,13 @@ func (s *Shell) instanceSettingsView(c *ui.Context) {
 			})
 		})
 		ui.Column(c.Key("instance-runtime-group")).FillWidth().Gap(8).Children(func() {
-			settingsGroupLabel(c, "运行环境")
+			settingsGroupLabel(c, s.tr("运行环境"))
 			ui.Column(c).FillWidth().Radius(10).Border(0.5, colors(t).ListDivider).Clip().Children(func() {
-				gameSettingRow(c, "java", "Java 偏好", func() {
-					ui.TextInput(c.Key("instance-java"), &state.javaPath).Label("实例 Java 路径").Placeholder("自动选择").Grow(1).MinWidth(0).Height(26).FontSize(12).Disabled(disabled).
+				gameSettingRow(c, "java", s.tr("Java 偏好"), func() {
+					ui.TextInput(c.Key("instance-java"), &state.javaPath).Label(s.tr("实例 Java 路径")).Placeholder(s.tr("自动选择")).Grow(1).MinWidth(0).Height(26).FontSize(12).Disabled(disabled).
 						OnChange(func() { s.saveInstancePreferences(state) }).OnSubmit(func() { s.saveInstancePreferences(state) })
-					ui.ButtonBase(c.Key("instance-java-choice")).Label("选择实例 Java").Tooltip("选择 Java").Size(24, 24).Shrink(0).Radius(5).Center().Disabled(disabled).Menu(func(menu *ui.Menu) {
-						if menu.Item("自动选择").Checked(state.javaPath == "").Chosen() {
+					ui.ButtonBase(c.Key("instance-java-choice")).Label(s.tr("选择实例 Java")).Tooltip(s.tr("选择 Java")).Size(24, 24).Shrink(0).Radius(5).Center().Disabled(disabled).Menu(func(menu *ui.Menu) {
+						if menu.Item(s.tr("自动选择")).Checked(state.javaPath == "").Chosen() {
 							state.javaPath = ""
 							s.saveInstancePreferences(state)
 						}
@@ -116,7 +116,7 @@ func (s *Shell) instanceSettingsView(c *ui.Context) {
 					}).Children(func() { ui.Icon(c, iconChevronDown).Size(12, 12).TextColor(colors(t).Icon) })
 				})
 				gameSettingsDivider(c)
-				gameSettingRow(c, "memory", "游戏内存", func() { instanceSettingValue(c, "自动分配") })
+				gameSettingRow(c, "memory", s.tr("游戏内存"), func() { instanceSettingValue(c, s.tr("自动分配")) })
 			})
 		})
 		ui.Row(c.Key("delete-instance-row")).FillWidth().Height(38).Gap(8).Children(func() {
@@ -124,13 +124,13 @@ func (s *Shell) instanceSettingsView(c *ui.Context) {
 			if state.deleting {
 				busyIndicator(c, 12)
 			}
-			ui.ButtonBase(c.Key("delete-instance")).Label("删除实例及其全部数据").Height(28).Padding(0, 10).Gap(7).Radius(6).Disabled(!state.loaded || state.loading || state.saving || state.deleting || state.iconBusy || reason != "" || s.library.actions.DeleteInstance == nil).OnClick(s.deleteSelectedInstance).Children(func() {
+			ui.ButtonBase(c.Key("delete-instance")).Label(s.tr("删除实例及其全部数据")).Height(28).Padding(0, 10).Gap(7).Radius(6).Disabled(!state.loaded || state.loading || state.saving || state.deleting || state.iconBusy || reason != "" || s.library.actions.DeleteInstance == nil).OnClick(s.deleteSelectedInstance).Children(func() {
 				ui.Icon(c, iconTrash).Size(14, 14).TextColor(t.Danger)
-				ui.Text(c, "删除实例…").FontSize(12).TextColor(t.Danger)
+				ui.Text(c, s.tr("删除实例…")).FontSize(12).TextColor(t.Danger)
 			})
 		})
 		if reason != "" {
-			ui.Text(c, reason).FontSize(12).TextColor(t.TextMuted).MaxLines(3)
+			ui.Text(c, s.tr(reason)).FontSize(12).TextColor(t.TextMuted).MaxLines(3)
 		}
 	})
 }
@@ -143,18 +143,18 @@ func instanceSettingValue(c *ui.Context, label string) {
 func (s *Shell) instanceSettingsIconPicker(c *ui.Context, state *instanceSettingsState, disabled bool) {
 	ui.Column(c).Width(250).Padding(7).Gap(10).Children(func() {
 		ui.Row(c).FillWidth().Gap(8).Children(func() {
-			ui.Text(c, "实例图标").FontSize(11).TextColor(s.theme.TextMuted).Grow(1)
-			ui.Button(c.Key("automatic-icon"), "自动").Height(23).FontSize(11).Disabled(disabled).OnClick(func() { s.chooseInstanceSettingsIcon(state, "") })
+			ui.Text(c, s.tr("实例图标")).FontSize(11).TextColor(s.theme.TextMuted).Grow(1)
+			ui.Button(c.Key("automatic-icon"), s.tr("自动")).Height(23).FontSize(11).Disabled(disabled).OnClick(func() { s.chooseInstanceSettingsIcon(state, "") })
 		})
 		ui.Row(c).FillWidth().Wrap().Gap(6).Children(func() {
 			for _, style := range []string{"grass", "fabric", "forge", "neoforge", "quilt", "cat", "leaf", "spark", "craft"} {
-				button := ui.ButtonBase(c.Key(style)).Label("图标 "+style).Tooltip(instancePresetLabel(style)).Size(38, 38).Radius(9).Center().Border(1, ui.Transparent).Disabled(disabled)
+				button := ui.ButtonBase(c.Key(style)).Label(s.tr("图标 ")+style).Tooltip(s.tr(instancePresetLabel(style))).Size(38, 38).Radius(9).Center().Border(1, ui.Transparent).Disabled(disabled)
 				if state.iconStyle == style && len(state.icon) == 0 {
 					button.BorderColor(s.theme.Accent)
 				}
 				controlMotion(c, button, ui.Transparent, !disabled).OnClick(func() { s.chooseInstanceSettingsIcon(state, style) }).Children(func() { drawInstanceArtwork(c, style, nil, 30) })
 			}
 		})
-		ui.Button(c.Key("instance-custom-icon"), "选择图片…").Height(26).FontSize(11).FillWidth().Disabled(disabled || state.iconBusy || s.library.actions.PickIcon == nil).OnClick(func() { s.pickInstanceSettingsIcon(state) })
+		ui.Button(c.Key("instance-custom-icon"), s.tr("选择图片…")).Height(26).FontSize(11).FillWidth().Disabled(disabled || state.iconBusy || s.library.actions.PickIcon == nil).OnClick(func() { s.pickInstanceSettingsIcon(state) })
 	})
 }

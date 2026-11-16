@@ -23,6 +23,7 @@ const (
 	settingsPage          page = "settings"
 	gameSettingsPage      page = "game-settings"
 	wallpaperSettingsPage page = "wallpaper-settings"
+	i18nSettingsPage      page = "i18n-settings"
 	downloadSettingsPage  page = "download-settings"
 	newInstancePage       page = "new-instance"
 	existingGamesPage     page = "existing-games"
@@ -35,7 +36,7 @@ const (
 )
 
 func (p page) inSettings() bool {
-	return p == settingsPage || p == gameSettingsPage || p == wallpaperSettingsPage || p == downloadSettingsPage || p == accountsPage || p == settingsActivityPage || p == creditsPage || p == aboutPage
+	return p == settingsPage || p == gameSettingsPage || p == wallpaperSettingsPage || p == i18nSettingsPage || p == downloadSettingsPage || p == accountsPage || p == settingsActivityPage || p == creditsPage || p == aboutPage
 }
 
 const (
@@ -64,9 +65,11 @@ type Shell struct {
 	directories      directoryState
 	instanceEditor   *instanceSettingsState
 	page             page
+	locale           string
 	theme            *ui.Theme
 	applyAppearance  func(bool)
 	settings         app.Settings
+	i18n             app.I18nSettings
 	gameSettings     gameSettingsState
 	downloadSettings downloadSettingsState
 	downloadTools    downloadToolsState
@@ -97,7 +100,9 @@ func NewShell(settings app.Settings, dataDir string, loadErr error, save SaveSet
 	return &Shell{
 		creation:        creationState{installNow: true},
 		gameDirectories: gameDirectoriesState{rows: []app.GameDirectory{{Name: "内置目录", Path: filepath.Join(dataDir, "instances")}}},
-		page:            libraryPage, theme: compactTheme(false), settings: settings,
+		page:            libraryPage,
+		locale:          settings.I18n.EffectiveLanguage([]string{app.LangZhHans}),
+		theme:           compactTheme(false), settings: settings, i18n: settings.I18n,
 		dataDir: dataDir, loadErr: loadErr, save: save,
 		gameSettings:     newGameSettingsState(settings),
 		downloadSettings: newDownloadSettingsState(settings.Download),
@@ -107,6 +112,9 @@ func NewShell(settings app.Settings, dataDir string, loadErr error, save SaveSet
 func (s *Shell) BindWindow(window *mygo.Window) {
 	s.window = window
 	s.page = homePage
+	mygo.App.SetLanguages(app.SupportedLanguages...)
+	s.locale = s.i18n.EffectiveLanguage(mygo.App.PreferredLanguages())
+	mygo.App.SetLocale(s.locale)
 	window.OnFocus(func() { s.memory.blurred = false; s.syncMemoryObservation(); window.Invalidate() })
 	window.OnBlur(func() { s.memory.blurred = true; s.syncMemoryObservation(); window.Invalidate() })
 	window.OnClosed(func() {
@@ -149,6 +157,11 @@ func (s *Shell) toggleAppearance() {
 }
 
 func (s *Shell) View(c *ui.Context) {
+	loc := s.locale
+	if loc == "" {
+		loc = app.LangZhHans
+	}
+	*ui.Local(c.Root(), "mcl-locale", func() string { return loc }) = loc
 	if s.page != activityPage && s.page != settingsActivityPage && s.downloadJobs.selected != "" {
 		s.closeDownloadTask()
 	}
@@ -262,6 +275,8 @@ func (s *Shell) View(c *ui.Context) {
 							s.gameSettingsView(c)
 						case wallpaperSettingsPage:
 							s.wallpaperSettingsView(c)
+						case i18nSettingsPage:
+							s.i18nSettingsView(c)
 						case downloadSettingsPage:
 							s.downloadSettingsView(c)
 						case accountsPage:
@@ -286,9 +301,9 @@ func (s *Shell) View(c *ui.Context) {
 
 func (s *Shell) empty(c *ui.Context, heading, title string) {
 	t := s.theme
-	ui.Column(c).Label(heading).Grow(1).FillWidth().Padding(24).Center().Gap(10).Children(func() {
+	ui.Column(c).Label(s.tr(heading)).Grow(1).FillWidth().Padding(24).Center().Gap(10).Children(func() {
 		ui.Icon(c, iconUser).Size(26, 26).TextColor(colors(t).IconMuted)
-		ui.Text(c, title).FontSize(12).TextColor(t.TextMuted)
+		ui.Text(c, s.tr(title)).FontSize(12).TextColor(t.TextMuted)
 	})
 }
 
@@ -318,7 +333,7 @@ func (s *Shell) saveSettings() {
 	}
 	snapshot := s.settings
 	snapshot.GCMode, snapshot.JVMArguments = s.gameSettings.gc, strings.TrimSpace(s.gameSettings.arguments)
-	snapshot.Game, snapshot.Download = game, downloads
+	snapshot.Game, snapshot.Download, snapshot.I18n = game, downloads, s.i18n
 	snapshot.GameDirectoryID = s.gameSettings.directoryID
 	if err := snapshot.Validate(); err != nil {
 		s.notice, s.noticeFail = err.Error(), true

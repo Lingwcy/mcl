@@ -25,12 +25,14 @@ type Settings struct {
 	JVMArguments string               `json:"jvm_arguments,omitempty"`
 	Game         launch.GameSettings  `json:"game,omitempty"`
 	Download     download.Preferences `json:"download,omitempty"`
+	I18n         I18nSettings         `json:"i18n,omitempty"`
 }
 
 func DefaultSettings() Settings {
 	return Settings{
 		GCMode:   launch.GCTunedG1,
 		Download: download.Preferences{Source: download.SourceAuto},
+		I18n:     DefaultI18nSettings(),
 	}
 }
 
@@ -42,6 +44,9 @@ func (s Settings) Validate() error {
 		return err
 	}
 	if err := s.Download.Validate(); err != nil {
+		return err
+	}
+	if err := s.I18n.Validate(); err != nil {
 		return err
 	}
 	if s.MaxMemoryMiB != 0 && (s.MaxMemoryMiB < 512 || s.MaxMemoryMiB > 65536) {

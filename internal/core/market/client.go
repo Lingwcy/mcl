@@ -20,9 +20,9 @@ var ErrAPIKey = errors.New("CurseForge 需要自有 API Key，请在市场配置
 // Client settings are immutable after construction. No remote response bodies,
 // request headers or API keys are included in errors or diagnostic formatting.
 type Client struct {
-	HTTP                       *http.Client
-	ModrinthURL, CurseForgeURL string
-	apiKey                     string
+	HTTP                                     *http.Client
+	ModrinthURL, CurseForgeURL, TranslateURL string
+	apiKey                                   string
 }
 
 func NewClient(curseForgeKey string) *Client {
@@ -31,7 +31,7 @@ func NewClient(curseForgeKey string) *Client {
 			return errors.New("拒绝跨站市场重定向")
 		}
 		return nil
-	}}, ModrinthURL: "https://api.modrinth.com/v2", CurseForgeURL: "https://api.curseforge.com/v1", apiKey: strings.TrimSpace(curseForgeKey)}
+	}}, ModrinthURL: "https://api.modrinth.com/v2", CurseForgeURL: "https://api.curseforge.com/v1", TranslateURL: "https://mod.mcimirror.top", apiKey: strings.TrimSpace(curseForgeKey)}
 }
 func (c *Client) CurseForgeAvailable() bool { return c.apiKey != "" }
 func (c *Client) String() string            { return "market.Client" }

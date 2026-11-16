@@ -35,6 +35,7 @@ var (
 	iconPuzzle           = bundledIcon("puzzle")
 	iconSparkles         = bundledIcon("sparkles")
 	iconPalette          = bundledIcon("palette")
+	iconLanguages        = bundledIcon("languages")
 	iconFile             = bundledIcon("file-text")
 	iconArchive          = bundledIcon("archive")
 	iconChevron          = bundledIcon("chevron-right")

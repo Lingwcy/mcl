@@ -78,6 +78,7 @@ func run() error {
 	library := app.NewLibraryServiceWithLoaders(catalog, instances, host, loaderCatalog)
 	sessions := storage.NewSessionStore(paths.Root, process.Running)
 	assetStore := storage.NewAssetStore(paths.Instances)
+	library.GameDirectory = assetStore.Directory
 	assets := app.NewAssetsService(instances, assetStore, sessions)
 	transfers, err := download.NewTransferControl(settings.Download)
 	if err != nil {
@@ -105,6 +106,7 @@ func run() error {
 	if key == "" {
 		key = os.Getenv("GRUN_CURSEFORGE_API_KEY")
 	}
+	market.SetTranslationCachePath(filepath.Join(paths.Root, "resource_description_translations.json"))
 	marketClient := market.NewClient(key)
 	marketClient.HTTP.Transport = network
 	marketService := app.NewMarketService(marketClient)

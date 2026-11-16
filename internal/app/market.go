@@ -27,13 +27,19 @@ func (s *MarketService) SetCurseForgeKey(key string) error {
 	replacement := market.NewClient(key)
 	if s.client != nil {
 		replacement.HTTP = s.client.HTTP
-		replacement.ModrinthURL, replacement.CurseForgeURL = s.client.ModrinthURL, s.client.CurseForgeURL
+		replacement.ModrinthURL, replacement.CurseForgeURL, replacement.TranslateURL = s.client.ModrinthURL, s.client.CurseForgeURL, s.client.TranslateURL
 	}
 	s.client = replacement
 	return nil
 }
 func (s *MarketService) Search(ctx context.Context, q market.Query) (market.Results, error) {
-	return s.Client().Search(ctx, q)
+	client := s.Client()
+	results, err := client.Search(ctx, q)
+	if err != nil {
+		return results, err
+	}
+	client.EnhanceProjects(ctx, results.Projects, q.Translate)
+	return results, nil
 }
 func (s *MarketService) Categories(ctx context.Context, source market.Source, kind market.Kind) ([]market.Category, error) {
 	return s.Client().Categories(ctx, source, kind)
@@ -71,5 +77,17 @@ func (s *MarketService) Detail(ctx context.Context, p market.Project, game, load
 	versions = slices.DeleteFunc(versions, func(v market.Version) bool {
 		return (game != "" && !slices.Contains(v.GameVersions, game)) || (loader != "" && !slices.Contains(v.Loaders, loader))
 	})
+	if project.Slug == "" {
+		project.Slug = p.Slug
+	}
+	enhanced := []market.Project{project}
+	client.EnhanceProjects(ctx, enhanced, true)
+	project = enhanced[0]
+	if project.TranslatedName == "" {
+		project.TranslatedName = p.TranslatedName
+	}
+	if project.TranslatedDescription == "" {
+		project.TranslatedDescription = p.TranslatedDescription
+	}
 	return MarketDetail{Project: project, Versions: versions}, nil
 }

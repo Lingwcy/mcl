@@ -30,6 +30,7 @@ type UpdateRequest struct {
 	InstanceID, GameVersion, VersionSHA1, Loader, World string
 	Kind                                                Kind
 	Selections                                          []UpdateSelection
+	PrefixFileName                                      bool
 }
 type UpdateChange struct {
 	Before  *InstalledFile
@@ -352,7 +353,7 @@ func (p UpdatePlan) Validate() error {
 			}
 			old[archive.Key(change.Before.Path)] = true
 		}
-		if !change.ReusesContent() && ((change.After.File.URL != "" && !SafeURL(change.After.File.URL)) || path.Base(change.After.Path) != change.After.File.Filename) {
+		if !change.ReusesContent() && ((change.After.File.URL != "" && !SafeURL(change.After.File.URL)) || (path.Base(change.After.Path) != change.After.File.Filename && !HasTranslatedPrefix(path.Base(change.After.Path), change.After.File.Filename))) {
 			return errors.New("新版本的下载地址或目标文件名无效")
 		}
 		if newPaths[archive.Key(change.Path())] || canonicalTargets[archive.Key(change.After.Path)] {

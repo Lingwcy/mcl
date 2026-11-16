@@ -84,9 +84,9 @@ func (s *Shell) marketFilterMore(c *ui.Context, group string, total, initial int
 	key := m.filterKey(group)
 	expanded := m.filterMore[key]
 	if total > initial {
-		label := "显示更多"
+		label := s.tr("显示更多")
 		if expanded {
-			label = "收起"
+			label = s.tr("收起")
 		}
 		ui.ButtonBase(c.Key("filter-more-"+key)).Label(label).Width(secondarySidebarWidth(c)-32).Height(22).Margin(1, 16, 2).Padding(0, 4).Justify(ui.Start).OnClick(func() {
 			if m.filterMore == nil {
@@ -120,7 +120,7 @@ func (s *Shell) marketLoaderFilters(c *ui.Context) {
 	} else if m.kind != app.AssetMod && m.kind != app.AssetModpack {
 		return
 	}
-	s.marketFilterGroup(c, "loaders", "加载器", len(m.loaders), true, func() {
+	s.marketFilterGroup(c, "loaders", s.tr("加载器"), len(m.loaders), true, func() {
 		more := m.filterMore[m.filterKey("loaders")]
 		needsVersion := m.source == market.CurseForge && m.gameVersion == ""
 		for index, loader := range loaders {
@@ -128,7 +128,7 @@ func (s *Shell) marketLoaderFilters(c *ui.Context) {
 			if !more && index >= 3 && !selected {
 				continue
 			}
-			marketFilterChoice(c, "filter-loader-"+loader, marketLoaderLabel(loader), s.loaderSymbol(loader), selected, needsVersion && !selected, func(checked bool) {
+			marketFilterChoice(c, "filter-loader-"+loader, s.tr(marketLoaderLabel(loader)), s.loaderSymbol(loader), selected, needsVersion && !selected, func(checked bool) {
 				m.loaders = selectedFilter(m.loaders, loader, checked)
 				s.searchMarket(true)
 			})
@@ -143,15 +143,15 @@ func (s *Shell) marketCategoryFilters(c *ui.Context) {
 	if m.source == market.CurseForge {
 		limit = 10
 	}
-	s.marketFilterGroup(c, "categories", "类别", len(m.categoryIDs), m.source == market.CurseForge, func() {
+	s.marketFilterGroup(c, "categories", s.tr("类别"), len(m.categoryIDs), m.source == market.CurseForge, func() {
 		if m.categoriesBusy {
-			ui.Text(c, "读取中…").FontSize(11).TextColor(t.TextMuted).Margin(3, 16)
+			ui.Text(c, s.tr("读取中…")).FontSize(11).TextColor(t.TextMuted).Margin(3, 16)
 			return
 		}
 		if m.categoryError != "" {
 			ui.Row(c).FillWidth().Padding(0, 14).Gap(8).Children(func() {
-				ui.Text(c, "类别不可用").FontSize(11).TextColor(t.TextMuted)
-				iconButton(c, "retry-categories", "重试类别", iconRefresh, s.loadMarketCategories)
+				ui.Text(c, s.tr("类别不可用")).FontSize(11).TextColor(t.TextMuted)
+				iconButton(c, "retry-categories", s.tr("重试类别"), iconRefresh, s.loadMarketCategories)
 			})
 			return
 		}
@@ -170,14 +170,14 @@ func (s *Shell) marketCategoryFilters(c *ui.Context) {
 			key := "categories:" + header
 			more := m.filterMore[m.filterKey(key)]
 			if header != "" && len(headers) > 1 {
-				ui.Text(c, marketHeaderLabel(header)).FontSize(10).TextColor(colors(t).Metadata).Margin(5, 17, 2)
+				ui.Text(c, s.tr(marketHeaderLabel(header))).FontSize(10).TextColor(colors(t).Metadata).Margin(5, 17, 2)
 			}
 			for index, category := range entries {
 				selected := slices.Contains(m.categoryIDs, category.ID)
 				if !more && index >= 6 && !selected {
 					continue
 				}
-				marketFilterChoice(c, "filter-category-"+category.ID, marketCategoryLabel(category.Name), s.categorySymbol(category.ID, category.Name), selected, !selected && atLimit, func(checked bool) {
+				marketFilterChoice(c, "filter-category-"+category.ID, s.tr(marketCategoryLabel(category.Name)), s.categorySymbol(category.ID, category.Name), selected, !selected && atLimit, func(checked bool) {
 					m.categoryIDs = selectedFilter(m.categoryIDs, category.ID, checked)
 					s.searchMarket(true)
 				})
@@ -185,7 +185,7 @@ func (s *Shell) marketCategoryFilters(c *ui.Context) {
 			s.marketFilterMore(c, key, len(entries), 6)
 		}
 		if len(m.categories) == 0 {
-			ui.Text(c, "无可用类别").FontSize(11).TextColor(t.TextMuted).Margin(3, 16)
+			ui.Text(c, s.tr("无可用类别")).FontSize(11).TextColor(t.TextMuted).Margin(3, 16)
 		}
 	})
 }
@@ -199,18 +199,18 @@ func (s *Shell) marketEnvironmentFilters(c *ui.Context) {
 	if m.openSource {
 		selected++
 	}
-	s.marketFilterGroup(c, "environments", "环境", selected, true, func() {
+	s.marketFilterGroup(c, "environments", s.tr("环境"), selected, true, func() {
 		for _, environment := range []struct{ id, label string }{{"client", "客户端"}, {"server", "服务端"}} {
 			icon := iconMonitor
 			if environment.id == "server" {
 				icon = iconServer
 			}
-			marketFilterChoice(c, "filter-environment-"+environment.id, environment.label, marketSymbol{svg: icon}, slices.Contains(m.environments, environment.id), false, func(checked bool) {
+			marketFilterChoice(c, "filter-environment-"+environment.id, s.tr(environment.label), marketSymbol{svg: icon}, slices.Contains(m.environments, environment.id), false, func(checked bool) {
 				m.environments = selectedFilter(m.environments, environment.id, checked)
 				s.searchMarket(true)
 			})
 		}
-		marketFilterChoice(c, "filter-open-source", "开源", marketSymbol{svg: iconCode}, m.openSource, false, func(checked bool) { m.openSource = checked; s.searchMarket(true) })
+		marketFilterChoice(c, "filter-open-source", s.tr("开源"), marketSymbol{svg: iconCode}, m.openSource, false, func(checked bool) { m.openSource = checked; s.searchMarket(true) })
 	})
 }
 

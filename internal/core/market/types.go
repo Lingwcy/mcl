@@ -40,6 +40,7 @@ type Query struct {
 	Text, GameVersion, Sort           string
 	Loaders, Categories, Environments []string
 	OpenSource                        bool
+	Translate                         bool
 	Page                              int
 }
 
@@ -112,6 +113,7 @@ type Project struct {
 	Source                                                       Source
 	Kind                                                         Kind
 	ID, Slug, Title, Description, Author, IconURL, PageURL, Body string
+	TranslatedName, TranslatedDescription                        string
 	Categories, Loaders                                          []string
 	Downloads, Follows                                           int64
 	DistributionRestricted                                       bool
