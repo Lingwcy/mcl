@@ -18,6 +18,7 @@ const (
 	accountsPage          page = "accounts"
 	activityPage          page = "activity"
 	settingsActivityPage  page = "settings-activity"
+	otherActivityPage     page = "other-activity"
 	logsPage              page = "logs"
 	launchPage            page = "launch"
 	settingsPage          page = "settings"
@@ -36,7 +37,7 @@ const (
 )
 
 func (p page) inSettings() bool {
-	return p == settingsPage || p == gameSettingsPage || p == wallpaperSettingsPage || p == i18nSettingsPage || p == downloadSettingsPage || p == accountsPage || p == settingsActivityPage || p == creditsPage || p == aboutPage
+	return p == settingsPage || p == gameSettingsPage || p == wallpaperSettingsPage || p == i18nSettingsPage || p == downloadSettingsPage || p == accountsPage || p == settingsActivityPage || p == otherActivityPage || p == creditsPage || p == aboutPage
 }
 
 const (
@@ -162,7 +163,7 @@ func (s *Shell) View(c *ui.Context) {
 		loc = app.LangZhHans
 	}
 	*ui.Local(c.Root(), "mcl-locale", func() string { return loc }) = loc
-	if s.page != activityPage && s.page != settingsActivityPage && s.downloadJobs.selected != "" {
+	if s.downloadJobs.selected != "" && s.downloadJobs.owner != s.page {
 		s.closeDownloadTask()
 	}
 	if s.page != directoryPage && s.directories.busy && !s.directories.running {
@@ -283,6 +284,8 @@ func (s *Shell) View(c *ui.Context) {
 							s.accountsView(c)
 						case activityPage, settingsActivityPage:
 							s.activityView(c)
+						case otherActivityPage:
+							s.legacyActivityView(c)
 						case logsPage:
 							s.logView(c)
 						case creditsPage:

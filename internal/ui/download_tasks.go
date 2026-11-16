@@ -20,15 +20,16 @@ type DownloadTaskActions struct {
 	Clear   func(bool, func(error))
 }
 type downloadTaskState struct {
-	actions                     DownloadTaskActions
-	groups                      []tasks.Group
-	selected                    string
-	detail                      tasks.Group
-	list, files                 ui.ListState
-	commands                    map[string]bool
-	showLegacy, loading, closed bool
-	generation                  uint64
-	cancelDetail                func()
+	actions         DownloadTaskActions
+	groups          []tasks.Group
+	selected        string
+	owner           page
+	detail          tasks.Group
+	inlineFiles     ui.ListState
+	commands        map[string]bool
+	loading, closed bool
+	generation      uint64
+	cancelDetail    func()
 }
 
 func (s *Shell) ConnectDownloadTasks(actions DownloadTaskActions) {
@@ -154,8 +155,13 @@ func (s *Shell) openDownloadTask(id string) {
 	if d.actions.Details == nil {
 		return
 	}
+	sameTask := d.selected == id
 	s.closeDownloadTask()
+	if !sameTask {
+		d.inlineFiles = ui.ListState{}
+	}
 	d.selected = id
+	d.owner = s.page
 	d.loading = true
 	generation := d.generation
 	d.cancelDetail = d.actions.Details(id, func(group tasks.Group, err error) {
@@ -179,6 +185,7 @@ func (s *Shell) closeDownloadTask() {
 	}
 	d.cancelDetail = nil
 	d.selected = ""
+	d.owner = ""
 	d.loading = false
 	d.detail = tasks.Group{}
 }

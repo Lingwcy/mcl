@@ -126,7 +126,7 @@ func (s *Shell) startLaunchCheck() {
 	i.events, i.lastStage = nil, ""
 	s.taskEvent("开始检查启动条件", false)
 	i.progress = install.Progress{Stage: "java"}
-	s.page = activityPage
+	s.page = otherActivityPage
 	i.cancel = i.actions.Check(value.ID, s.settings, func(p install.Progress) {
 		if i.active && i.generation == generation {
 			s.taskProgress(p)
@@ -351,12 +351,14 @@ func (s *Shell) legacyActivityView(c *ui.Context) {
 	i, t := &s.installation, s.theme
 	ui.Scroll(c).Grow(1).FillWidth().Padding(18, 24, 24).Gap(8).Children(func() {
 		ui.Row(c).FillWidth().Height(28).Shrink(0).Gap(8).Children(func() {
-			settingsGroupLabel(c, s.tr("下载与任务")).Grow(1)
-			if s.downloadJobs.actions.Refresh != nil {
-				ui.Button(c.Key("back-download-tasks"), s.tr("下载任务")).Height(24).OnClick(func() { s.downloadJobs.showLegacy = false })
-			}
+			settingsGroupLabel(c, s.tr("活动与会话")).Grow(1)
 			ui.Button(c.Key("refresh-sessions"), s.tr("刷新会话")).Height(24).Disabled(i.sessionsBusy).OnClick(s.refreshSessions)
 		})
+		for _, group := range s.downloadJobs.groups {
+			if group.Intent.Kind == "preparation" {
+				s.downloadTaskRow(c, group)
+			}
+		}
 		ui.Button(c.Key("open-directory-operations"), s.tr("目录迁移与复制任务…")).Height(26).OnClick(s.openDirectoryTasks)
 		s.marketTaskCard(c)
 		s.javaTaskCard(c)
@@ -489,7 +491,7 @@ func (s *Shell) launchButton() (label, subtitle string, action func(), disabled 
 			continue
 		}
 		if record.InstanceID == value.ID {
-			return "游戏仍在运行", value.Name, func() { s.page = activityPage; s.refreshSessions() }, false
+			return "游戏仍在运行", value.Name, func() { s.page = otherActivityPage; s.refreshSessions() }, false
 		}
 	}
 	if i.active {
@@ -499,7 +501,7 @@ func (s *Shell) launchButton() (label, subtitle string, action func(), disabled 
 		return "查看安装任务", i.name + " · " + installationStage(i.progress.Stage), func() { s.page = activityPage }, false
 	}
 	if s.identifyingAssets(value.ID) {
-		return "识别资产中", value.Name, func() { s.page = activityPage }, false
+		return "识别资产中", value.Name, func() { s.page = otherActivityPage }, false
 	}
 	if s.associatingAsset(value.ID) {
 		return "核对资产来源中", value.Name, func() { s.showAssetAssociation(s.market.association) }, false
@@ -508,7 +510,7 @@ func (s *Shell) launchButton() (label, subtitle string, action func(), disabled 
 		return "正在检查资产", value.Name, func() { s.viewAssetDiagnostic(s.assets.diagnostic) }, false
 	}
 	if s.assets.changeID == value.ID {
-		return "修改资产中", value.Name, func() { s.page = activityPage }, false
+		return "修改资产中", value.Name, func() { s.page = otherActivityPage }, false
 	}
 	if s.repairingPack(value.ID) {
 		return "正在恢复整合包文件", value.Name, func() { s.viewPackRepair(s.assets.repair) }, false

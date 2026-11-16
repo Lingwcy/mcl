@@ -104,7 +104,7 @@ func (s *InstallationService) Run(ctx context.Context, id string, report func(in
 
 func (s *InstallationService) RunWithJava(ctx context.Context, id, fallbackJava string, report func(install.Progress)) (install.Receipt, error) {
 	if s.Tasks != nil && taskScope(ctx) == nil {
-		intent, err := taskGameIntent(ctx, s.instances, id, "game")
+		intent, err := s.gameTaskIntent(ctx, id)
 		if err != nil {
 			return install.Receipt{}, err
 		}
@@ -308,7 +308,7 @@ func (s *InstallationService) execute(ctx context.Context, value instance.Instan
 // runtime. No game/account is launched and no heap budget is needed to install.
 func (s *InstallationService) RunAutomatic(ctx context.Context, id string, resolveJava JavaResolver, report func(install.Progress)) (install.Receipt, error) {
 	if s.Tasks != nil && taskScope(ctx) == nil {
-		intent, err := taskGameIntent(ctx, s.instances, id, "game")
+		intent, err := s.gameTaskIntent(ctx, id)
 		if err != nil {
 			return install.Receipt{}, err
 		}

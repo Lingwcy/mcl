@@ -26,6 +26,11 @@ var (
 		Duration: 180 * time.Millisecond, Ease: ui.EaseOut,
 		Enter: &ui.Motion{X: 8, Opacity: 0}, Exit: &ui.Motion{X: 6, Opacity: 0},
 	}
+	motionTaskCard   = ui.ElementTransition{Duration: 180 * time.Millisecond, Ease: ui.EaseOut, Position: true, Size: true}
+	motionTaskExpand = ui.ElementTransition{
+		Duration: 180 * time.Millisecond, Ease: ui.EaseOut,
+		Enter: &ui.Motion{Collapse: true, Opacity: 0}, Exit: &ui.Motion{Collapse: true, Opacity: 0},
+	}
 	motionReveal = ui.ElementTransition{
 		Duration: 180 * time.Millisecond, Ease: ui.EaseOut, Colors: true,
 		Enter: &ui.Motion{Y: 4, Opacity: 0},
@@ -263,13 +268,6 @@ func (s *Shell) contentIdentity() contentIdentity {
 	case serversPage:
 		id.screen = s.servers.filter
 		id.instance = s.servers.instanceFilter
-	case activityPage, settingsActivityPage:
-		if s.downloadJobs.showLegacy {
-			id.screen = "other-tasks"
-		} else if s.downloadJobs.selected != "" {
-			id.screen = "task-files"
-			id.instance = s.downloadJobs.selected
-		}
 	case directoryPage:
 		id.screen = s.directories.mode
 		if s.directories.mode != "tasks" {
