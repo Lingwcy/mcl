@@ -207,7 +207,7 @@ func (s *Shell) logView(c *ui.Context) {
 	ui.Column(c).Grow(1).FillWidth().MinHeight(0).Padding(8, 28, 20).Gap(10).Children(func() {
 		ui.Row(c).Gap(12).Children(func() {
 			ui.Text(c, title).FontSize(18).Grow(1).MaxLines(1).Ellipsis("…")
-			ui.Button(c.Key("back-tasks"), "返回任务").Height(26).OnClick(func() { s.page = activityPage })
+			ui.Button(c.Key("back-tasks"), "返回任务").Height(26).OnClick(func() { s.page = otherActivityPage })
 		})
 		ui.Row(c).Gap(10).Children(func() {
 			ui.Text(c, status).FontSize(11).TextColor(t.TextMuted).Grow(1)

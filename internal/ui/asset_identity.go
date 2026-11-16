@@ -31,7 +31,7 @@ func (s *Shell) startAssetIdentity(source market.Source) {
 		return
 	}
 	if a.identity != nil && a.identity.active {
-		s.page = activityPage
+		s.page = otherActivityPage
 		return
 	}
 	state := &assetIdentityState{instanceID: value.ID, name: value.Name, source: source, active: true}
@@ -90,7 +90,7 @@ func (s *Shell) assetIdentityButton(c *ui.Context) {
 	a, t := &s.assets, s.theme
 	button := ui.ButtonBase(c.Key("identify-assets")).Label("识别资产").Tooltip("按文件摘要识别来源；只发送摘要或指纹，不上传文件").Size(28, 28).Radius(6).Center().Children(func() { ui.Icon(c, iconScan).Size(17, 17).TextColor(colors(t).Icon) })
 	if a.identity != nil && a.identity.active {
-		button.OnClick(func() { s.page = activityPage })
+		button.OnClick(func() { s.page = otherActivityPage })
 		return
 	}
 	button.Disabled(a.busy || a.changing || s.diagnosingAssets(s.library.selectedID) || s.assetUpdateBlocked(s.library.selectedID) || a.actions.Identify == nil || len(a.snapshot.Files) == 0).Menu(func(menu *ui.Menu) {
@@ -137,7 +137,7 @@ func (s *Shell) assetIdentityStatus(c *ui.Context, id string) {
 		}
 		ui.Text(c, message).FontSize(11).TextColor(color).Grow(1).MinWidth(0).MaxLines(1).Ellipsis("…")
 		if state.active {
-			ui.Button(c.Key("identify-task"), "查看任务").Height(22).OnClick(func() { s.page = activityPage })
+			ui.Button(c.Key("identify-task"), "查看任务").Height(22).OnClick(func() { s.page = otherActivityPage })
 		} else {
 			ui.Button(c.Key("identify-dismiss"), "收起").Height(22).OnClick(func() {
 				if s.assets.identity == state {

@@ -530,7 +530,7 @@ func (s *Shell) showInstanceLogs() {
 		s.showLogs("")
 		return
 	}
-	s.page = activityPage
+	s.page = otherActivityPage
 }
 
 func (s *Shell) welcomeView(c *ui.Context) {

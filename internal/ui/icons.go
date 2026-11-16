@@ -31,6 +31,7 @@ var (
 	iconSwitch           = bundledIcon("arrow-left-right")
 	iconMarket           = bundledIcon("shopping-bag")
 	iconPlay             = bundledIcon("play")
+	iconPause            = bundledIcon("pause")
 	iconLog              = bundledIcon("terminal")
 	iconPuzzle           = bundledIcon("puzzle")
 	iconSparkles         = bundledIcon("sparkles")

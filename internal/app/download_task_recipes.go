@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -36,12 +37,30 @@ func taskGameIntent(ctx context.Context, instances InstanceReader, id, kind stri
 	if err != nil {
 		return tasks.Intent{}, err
 	}
-	prefix := "安装 / 修复"
+	prefix := "安装"
 	if kind == "preparation" {
 		prefix = "启动准备"
 	}
 	return tasks.Intent{Kind: kind, Name: prefix + " · " + value.Name, InstanceID: id, Fingerprint: taskInstanceFingerprint(value), Payload: taskPayload(struct{ ID string }{id})}, nil
 }
+
+// gameTaskIntent fixes the label at task creation so retries retain the
+// original operation even after an installation receipt has been written.
+func (s *InstallationService) gameTaskIntent(ctx context.Context, id string) (tasks.Intent, error) {
+	intent, err := taskGameIntent(ctx, s.instances, id, "game")
+	if err != nil {
+		return tasks.Intent{}, err
+	}
+	_, err = s.receipts.Load(ctx, id)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return tasks.Intent{}, fmt.Errorf("读取安装记录: %w", err)
+	}
+	if err == nil {
+		intent.Name = "修复" + strings.TrimPrefix(intent.Name, "安装")
+	}
+	return intent, nil
+}
+
 func checkTaskTarget(ctx context.Context, instances InstanceReader, intent tasks.Intent) error {
 	if intent.InstanceID == "" || intent.Fingerprint == "" {
 		return nil

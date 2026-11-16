@@ -217,6 +217,7 @@ func (s *Shell) settingsSidebar(c *ui.Context) {
 		s.settingsEntry(c, "settings-runtime", s.tr("Java 管理"), iconSettingsRuntime, settingsPage)
 		s.settingsEntry(c, "settings-accounts", s.tr("账户"), iconSettingsAccount, accountsPage)
 		s.settingsEntry(c, "settings-tasks", s.tr("下载与任务"), iconSettingsDownload, settingsActivityPage)
+		s.settingsEntry(c, "settings-other-activity", s.tr("活动与会话"), iconLog, otherActivityPage)
 		s.settingsEntry(c, "settings-about", s.tr("关于与更新"), iconInfo, aboutPage)
 		s.settingsEntry(c, "settings-credits", s.tr("鸣谢"), iconSparkles, creditsPage)
 	})
